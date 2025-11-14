@@ -1,26 +1,181 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ------------------------- */
+/* LIGHT THEME (Default)     */
+/* ------------------------- */
+:root,
+[data-theme="light"] {
+  /* Base Colors - Light, clean foundation */
+  --background: #F9FAFB;
+  --foreground: #020617; /* very dark blue/gray for text */
+
+  /* Primary Colors - Same brand indigo */
+  --primary: #22007C;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #3D1A99;
+  --primary-light: #E0E7FF;  /* soft indigo tint */
+  --primary-dark: #140152;
+
+  /* Secondary Colors - Purple accent */
+  --secondary: #3D1A99;
+  --secondary-foreground: #FFFFFF;
+  --secondary-hover: #2D1176;
+  --secondary-light: #E4D9FF;
+  --secondary-dark: #22007C;
+
+  /* Accent Colors - Still on-brand */
+  --accent: #5B35C0;
+  --accent-foreground: #FFFFFF;
+  --accent-hover: #442399;
+  --accent-light: #E7E0FF;
+  --accent-dark: #3D1A99;
+
+  /* Neutral Colors - Light UI surfaces */
+  --muted: #E5E7EB;
+  --muted-foreground: #6B7280;
+  --card: #FFFFFF;
+  --card-foreground: #020617;
+  --popover: #FFFFFF;
+  --popover-foreground: #020617;
+  --border: #D1D5DB;
+
+  /* Semantic Colors - Tuned for light backgrounds */
+  --success: #16A34A;
+  --success-foreground: #022C22;
+  --success-light: #BBF7D0;
+  --success-dark: #166534;
+
+  --warning: #EAB308;
+  --warning-foreground: #422006;
+  --warning-light: #FEF3C7;
+  --warning-dark: #A16207;
+
+  --error: #DC2626;
+  --error-foreground: #450A0A;
+  --error-light: #FECACA;
+  --error-dark: #991B1B;
+
+  --info: #2563EB;
+  --info-foreground: #0B1120;
+  --info-light: #DBEAFE;
+  --info-dark: #1D4ED8;
+
+  /* Interactive States */
+  --ring: #22007C;
+  --input: #E5E7EB;
+  --focus: #3D1A99;
+
+  /* Radius */
+  --radius: 0.5rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ------------------------- */
+/* DARK THEME                */
+/* ------------------------- */
+[data-theme="dark"] {
+  /* Base Colors - Smart, futuristic foundation */
+  --background: #0F1117;
+  --foreground: #F9FAFB; /* slightly off-white for softer contrast */
+
+  /* Primary Colors - Strong purple/indigo */
+  --primary: #22007C;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #1A0060;
+  --primary-light: #3D1A99;
+  --primary-dark: #140152;
+
+  /* Secondary Colors - Deep purple for depth (subtle contrast vs primary) */
+  --secondary: #140152;
+  --secondary-foreground: #FFFFFF;
+  --secondary-hover: #1E0066;
+  --secondary-light: #2A0A8F;
+  --secondary-dark: #0A0028;
+
+  /* Accent Colors - keep close to brand (no random yellows) */
+  --accent: #3D1A99;
+  --accent-foreground: #FFFFFF;
+  --accent-hover: #2D1176;
+  --accent-light: #5B35C0;
+  --accent-dark: #22007C;
+
+  /* Neutral Colors - Sleek dark grays */
+  --muted: #1A1C25;
+  --muted-foreground: #9CA3AF;
+  --card: #0B0B0F;
+  --card-foreground: #F9FAFB;
+  --popover: #0B0B0F;
+  --popover-foreground: #F9FAFB;
+  --border: #1F2933;
+
+  /* Semantic Colors - Functional for dark theme only */
+  --success: #2ECC71;
+  --success-foreground: #FFFFFF;
+  --success-light: #58D68D;
+  --success-dark: #27AE60;
+
+  --warning: #F1C40F; /* yellow only for warning, not brand */
+  --warning-foreground: #0B0B0F;
+  --warning-light: #F4D03F;
+  --warning-dark: #D4AC0D;
+
+  --error: #E74C3C;
+  --error-foreground: #FFFFFF;
+  --error-light: #EC7063;
+  --error-dark: #C0392B;
+
+  --info: #3498DB;
+  --info-foreground: #FFFFFF;
+  --info-light: #5DADE2;
+  --info-dark: #2E86C1;
+
+  /* Interactive States - Purple focus rings */
+  --ring: #3D1A99;
+  --input: #1A1C25;
+  --focus: #3D1A99;
+
+  /* Radius - Modern, sleek corners */
+  --radius: 0.5rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ------------------------- */
+/* Shared Base Styles        */
+/* ------------------------- */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility classes for easy color usage */
+.bg-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.bg-secondary {
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.bg-accent {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-secondary {
+  color: var(--secondary);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.border-primary {
+  border-color: var(--primary);
 }

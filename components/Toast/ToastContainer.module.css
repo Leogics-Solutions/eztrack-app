@@ -1,0 +1,50 @@
+.toastContainer {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toastContainer > * {
+  pointer-events: auto;
+}
+
+/* Position variants */
+.topLeft {
+  top: 20px;
+  left: 20px;
+}
+
+.topCenter {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.topRight {
+  top: 20px;
+  right: 20px;
+}
+
+.bottomLeft {
+  bottom: 20px;
+  left: 20px;
+}
+
+.bottomCenter {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bottomRight {
+  bottom: 20px;
+  right: 20px;
+}
+
+/* Ensure center positions maintain transform */
+.topCenter,
+.bottomCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
