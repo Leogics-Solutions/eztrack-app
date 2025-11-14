@@ -43,6 +43,21 @@ export function AppLayout({ children, pageName }: AppLayoutProps) {
           <main className="flex-1 overflow-y-auto p-6">
             {children}
           </main>
+
+          {/* Footer */}
+          <footer className="border-t border-gray-200 dark:border-gray-800 py-4 px-6">
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+              Powered By{' '}
+              <a
+                href="https://www.leogics.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Leogics Solutions (M) Sdn Bhd
+              </a>
+            </div>
+          </footer>
         </div>
       </div>
     // </ProtectedRoute>

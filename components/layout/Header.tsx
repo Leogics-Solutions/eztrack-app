@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/auth';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
 interface HeaderProps {
@@ -13,7 +14,7 @@ interface HeaderProps {
 export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: HeaderProps) {
   const { user, signOut } = useAuth();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
+  const router = useRouter();
   // Initialize theme from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
@@ -37,6 +38,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
   };
 
   const handleSignOut = async () => {
+    return router.push('/login');
     try {
       await signOut();
     } catch (error) {
