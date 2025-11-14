@@ -162,6 +162,9 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
           onMouseLeave={(e) => {
             e.currentTarget.style.opacity = '1';
           }}
+          onClick={()=>{
+            router.push("/documents/new")
+          }}
         >
           <Plus className="h-4 w-4" />
           Add Document
