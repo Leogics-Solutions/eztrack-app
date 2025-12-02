@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { Plus } from "lucide-react";
 import { useState, useEffect } from "react";
 
 // Types
@@ -9,6 +10,7 @@ interface Account {
     account_name: string;
     account_type: string;
     description?: string;
+    example_items?: string;
 }
 
 interface AccountGroups {
@@ -39,6 +41,7 @@ const ChartOfAccounts = () => {
         custom_account_type: '',
         account_name: '',
         description: '',
+        example_items: '',
     });
 
     // Load accounts data
@@ -289,6 +292,7 @@ const ChartOfAccounts = () => {
             custom_account_type: '',
             account_name: '',
             description: '',
+            example_items: '',
         });
         setIsCustomType(false);
         setIsModalOpen(true);
@@ -306,6 +310,7 @@ const ChartOfAccounts = () => {
             custom_account_type: isCustom ? account.account_type : '',
             account_name: account.account_name,
             description: account.description || '',
+            example_items: (account as any).example_items || '',
         });
         setIsModalOpen(true);
     };
@@ -402,7 +407,7 @@ const ChartOfAccounts = () => {
                         <div className="flex gap-3 flex-wrap">
                             <button
                                 onClick={importDefaultAccounts}
-                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                 title="Import 40+ pre-configured accounts"
                             >
                                 <span className="mr-2">📥</span>
@@ -410,18 +415,18 @@ const ChartOfAccounts = () => {
                             </button>
                             <button
                                 onClick={importCustomAccounts}
-                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                 title="Import custom chart of accounts"
                             >
                                 <span className="mr-2">📋</span>
                                 Import Custom COA
                             </button>
                             <button
-                                onClick={showAddAccountModal}
-                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
+                                onClick={() => showAddAccountModal()}
+                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
                             >
-                                <span className="mr-2">➕</span>
-                                Add Account
+                                <Plus className="h-4 w-4 mr-2" />
+                                New Invoice
                             </button>
                         </div>
                     </div>
@@ -473,7 +478,7 @@ const ChartOfAccounts = () => {
                                         {accountGroups[accountType].map(account => (
                                             <tr
                                                 key={account.id}
-                                                className="hover:bg-gray-800 hover:text-white dark:hover:bg-gray-900 transition-colors"
+                                                className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                             >
                                                 <td className="px-4 py-3">
                                                     <strong>{account.account_name}</strong>
@@ -663,6 +668,34 @@ const ChartOfAccounts = () => {
                                 </p>
                             </div>
 
+                            {/* Example Items */}
+                            <div className="mb-4">
+                                <label
+                                    className="block mb-2 text-sm font-semibold"
+                                    style={{ color: 'var(--foreground)' }}
+                                >
+                                    Example Items
+                                </label>
+                                <textarea
+                                    value={formData.example_items}
+                                    onChange={(e) => handleInputChange('example_items', e.target.value)}
+                                    placeholder="e.g. Microsoft Office 365, Adobe Creative Cloud, AWS Subscription, Github pro"
+                                    rows={3}
+                                    className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                                <p
+                                    className="mt-2 text-xs italic"
+                                    style={{ color: 'var(--muted-foreground)' }}
+                                >
+                                    Provide example items or product names that should match this account. These serve as reference examples for better matching accuracy.
+                                </p>
+                            </div>
+
                             {/* Modal Actions */}
                             <div
                                 className="flex gap-3 pt-5 mt-5 border-t"
@@ -677,7 +710,7 @@ const ChartOfAccounts = () => {
                                 <button
                                     type="button"
                                     onClick={closeAccountModal}
-                                    className="flex-1 px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                                    className="flex-1 px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                 >
                                     Cancel
                                 </button>

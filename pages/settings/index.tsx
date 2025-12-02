@@ -371,7 +371,7 @@ const SettingsPage = () => {
                         <div className="flex gap-3 flex-wrap">
                             <button
                                 onClick={openEditProfile}
-                                className="px-4 py-2 border rounded-md transition-colors hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-4 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', }}
                             >
                                 <span className="mr-2">✏️</span>
@@ -418,8 +418,8 @@ const SettingsPage = () => {
                         <div className="p-6">
                             <div className="space-y-4">
                                 {/* Full Name */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         Full Name
                                     </div>
                                     <div className="font-medium group-hover:text-white" >
@@ -428,8 +428,8 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Email */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         Email Address
                                     </div>
                                     <div className="font-medium group-hover:text-white">
@@ -438,20 +438,20 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Account Type */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         Account Type
                                     </div>
                                     <div>
-                                        <span className="inline-block px-3 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 group-hover:bg-gray-700 group-hover:text-gray-200">
+                                        <span className="inline-block px-3 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]">
                                             Business
                                         </span>
                                     </div>
                                 </div>
 
                                 {/* Industry */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         Industry (Org)
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -461,7 +461,7 @@ const SettingsPage = () => {
                                         {orgRole === 'admin' && (
                                             <button
                                                 onClick={editIndustry}
-                                                className="px-2 py-1 rounded hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
+                                                className="px-2 py-1 rounded hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] dark:hover:bg-[var(--hover-border)] dark:hover:text-[var(--hover-text)] transition-colors"
                                                 title="Edit Industry"
                                             >
                                                 <span className="text-sm">✏️</span>
@@ -471,8 +471,8 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* WhatsApp Phone */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         WhatsApp Phone
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -485,14 +485,14 @@ const SettingsPage = () => {
                                         </span>
                                         <span className={`inline-block px-2 py-1 text-xs rounded-md font-semibold ${
                                             user.whatsapp_verified
-                                                ? 'bg-green-100 text-green-700  group-hover:bg-gray-700 group-hover:text-gray-200'
-                                                : 'bg-yellow-100 text-yellow-700 group-hover:bg-gray-700 group-hover:text-gray-200'
+                                                ? 'bg-green-100 text-green-700  group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]'
+                                                : 'bg-yellow-100 text-yellow-700 group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]'
                                         }`}>
                                             {user.whatsapp_verified ? 'Verified' : 'Not Verified'}
                                         </span>
                                         <button
                                             onClick={promptSetPhone}
-                                            className="px-2 py-1 rounded hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
+                                            className="px-2 py-1 rounded hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] dark:hover:bg-[var(--hover-border)] dark:hover:text-[var(--hover-text)] transition-colors"
                                             title="Edit Phone Number"
                                         >
                                             <span className="text-sm">✏️</span>
@@ -501,8 +501,8 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Member Since */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                         Member Since
                                     </div>
                                     <div className="font-medium group-hover:text-white">
@@ -537,14 +537,14 @@ const SettingsPage = () => {
                         <div className="p-6">
                             <div className="grid grid-cols-2 gap-4 mb-6">
                                 {/* Pages Processed */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">📄</div>
                                         <div>
                                             <div className="text-2xl font-bold group-hover:text-white">
                                                 {usageStats.processed}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Pages Processed
                                             </div>
                                         </div>
@@ -552,14 +552,14 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Monthly Quota */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">🎯</div>
                                         <div>
                                             <div className="text-2xl font-bold group-hover:text-white">
                                                 {usageStats.quota !== null ? usageStats.quota : '∞'}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Monthly Page Quota
                                             </div>
                                         </div>
@@ -567,14 +567,14 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Pages Remaining */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">⏳</div>
                                         <div>
                                             <div className="text-2xl font-bold group-hover:text-white">
                                                 {usageStats.remaining !== null ? usageStats.remaining : '∞'}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Pages Remaining
                                             </div>
                                         </div>
@@ -582,14 +582,14 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Last Invoice */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">🕒</div>
                                         <div>
                                             <div className="text-xl font-bold group-hover:text-white">
                                                 {usageStats.last_invoice || 'Never'}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Last Invoice
                                             </div>
                                         </div>
@@ -650,7 +650,7 @@ const SettingsPage = () => {
                                 {/* Change Password */}
                                 <button
                                     onClick={openChangePassword}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
@@ -659,7 +659,7 @@ const SettingsPage = () => {
                                             <div className="font-semibold mb-1 group-hover:text-white">
                                                 Change Password
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Update your account security
                                             </div>
                                         </div>
@@ -669,7 +669,7 @@ const SettingsPage = () => {
                                 {/* Export Data */}
                                 <button
                                     onClick={downloadData}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
@@ -678,7 +678,7 @@ const SettingsPage = () => {
                                             <div className="font-semibold mb-1 group-hover:text-white">
                                                 Export Data
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Download your documents
                                             </div>
                                         </div>
@@ -688,7 +688,7 @@ const SettingsPage = () => {
                                 {/* Billing */}
                                 <button
                                     onClick={viewBilling}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
@@ -697,7 +697,7 @@ const SettingsPage = () => {
                                             <div className="font-semibold mb-1 group-hover:text-white">
                                                 Billing & Invoices
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Manage subscription
                                             </div>
                                         </div>
@@ -707,7 +707,7 @@ const SettingsPage = () => {
                                 {/* Contact Support */}
                                 <button
                                     onClick={contactSupport}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
@@ -716,7 +716,7 @@ const SettingsPage = () => {
                                             <div className="font-semibold mb-1 group-hover:text-white">
                                                 Contact Support
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 Get help from our team
                                             </div>
                                         </div>
@@ -759,7 +759,7 @@ const SettingsPage = () => {
                                     {teamMembers.map((member) => (
                                         <div
                                             key={member.membership_id}
-                                            className="group flex items-center justify-between p-3 border rounded-md hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white transition-colors"
+                                            className="group flex items-center justify-between p-3 border rounded-md hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] transition-colors"
                                             style={{ borderColor: 'var(--border)' }}
                                         >
                                             <div className="flex-1">
@@ -767,7 +767,7 @@ const SettingsPage = () => {
                                                     {member.full_name || member.email}
                                                 </div>
                                                 {member.full_name && (
-                                                    <div className="text-sm group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                                    <div className="text-sm group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                         {member.email}
                                                     </div>
                                                 )}
@@ -840,11 +840,11 @@ const SettingsPage = () => {
                                     <button
                                         key={industry.name}
                                         onClick={() => selectIndustry(industry.name)}
-                                        className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                        className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                         style={{ borderColor: 'var(--border)' }}
                                     >
                                         <div className="text-3xl mb-2">{industry.icon}</div>
-                                        <div className="font-semibold group-hover:text-white" style={{ color: 'var(--foreground)' }}>
+                                        <div className="font-semibold group-hover:text-white">
                                             {industry.name}
                                         </div>
                                     </button>
@@ -854,7 +854,7 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closeIndustryModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
                                 Cancel
@@ -910,7 +910,7 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closeProfileModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
                                 Cancel
@@ -994,7 +994,7 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closePasswordModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
                                 Cancel

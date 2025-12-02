@@ -394,7 +394,7 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
               </button>
               <button
                 onClick={() => onStatusChange('draft')}
-                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white"
+                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors hover:text-white"
               >
                 ↶ Revert to Draft
               </button>
@@ -403,7 +403,7 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
           {invoice.status === 'posted' && (
             <button
               onClick={() => onStatusChange('validated')}
-              className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
               ↶ Revert to Validated
             </button>
@@ -519,13 +519,13 @@ function LineItemsCard({ invoiceId, lineItems, onAutoClassify, isClassifying }: 
       )}
 
       <div className="flex gap-3">
-        <button className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white">
+        <button className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors hover:text-white">
           Add Line Item
         </button>
         <button
           onClick={onAutoClassify}
           disabled={isClassifying}
-          className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 hover:text-white"
+          className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 hover:text-white"
         >
           {isClassifying ? '🤖 AI is thinking...' : '🤖 AI Classify Account'}
         </button>

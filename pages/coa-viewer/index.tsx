@@ -142,11 +142,11 @@ const COAViewerList = () => {
     const getTypeBadgeClass = (type: string) => {
         // Default (unhovered) styles - colorful badges, hover shows muted gray
         const typeMap: Record<string, string> = {
-            'Asset': 'bg-blue-100 text-blue-900 group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400',
-            'Liability': 'bg-orange-100 text-orange-700  group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400',
-            'Equity': 'bg-pink-100 text-pink-700  group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400',
-            'Income': 'bg-green-100 text-green-700  group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400',
-            'Expense': 'bg-red-100 text-red-700 group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400',
+            'Asset': 'bg-blue-100 text-blue-900 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'Liability': 'bg-orange-100 text-orange-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'Equity': 'bg-pink-100 text-pink-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'Income': 'bg-green-100 text-green-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'Expense': 'bg-red-100 text-red-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
         };
         return typeMap[type] || 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300';
     };
@@ -167,7 +167,7 @@ const COAViewerList = () => {
                     <div className="flex gap-3 flex-wrap">
                         <button
                             onClick={() => window.location.href = '/chart-of-accounts'}
-                            className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                            className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                         >
                             <span className="mr-2">⚙️</span>
                             Manage Accounts
@@ -265,7 +265,7 @@ const COAViewerList = () => {
                     <div className="flex justify-end mt-4">
                         <button
                             onClick={clearFilters}
-                            className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors text-sm"
+                            className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors text-sm"
                         >
                             <span className="mr-2">🗑️</span>
                             Clear
@@ -359,7 +359,7 @@ const COAViewerList = () => {
                                 accounts.map((account) => (
                                     <tr
                                         key={account.id}
-                                        className="group hover:bg-gray-800 hover:text-white dark:hover:bg-gray-900 transition-colors cursor-pointer"
+                                        className="group hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors cursor-pointer"
                                     >
                                         <td className="px-4 py-3">
                                             <div className="font-semibold">{account.account_name}</div>
@@ -389,11 +389,11 @@ const COAViewerList = () => {
                                         </td>
                                         <td className="px-4 py-3">
                                             {account.is_active ? (
-                                                <span className="inline-block px-2 py-1 text-xs rounded-md font-semibold transition-colors bg-green-100 text-green-700 group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400">
+                                                <span className="inline-block px-2 py-1 text-xs rounded-md font-semibold transition-colors bg-green-100 text-green-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]">
                                                     Active
                                                 </span>
                                             ) : (
-                                                <span className="inline-block px-2 py-1 text-xs rounded-md font-semibold transition-colors bg-red-100 text-red-700 group-hover:bg-gray-100 group-hover:text-gray-600 dark:group-hover:bg-gray-800 dark:group-hover:text-gray-400">
+                                                <span className="inline-block px-2 py-1 text-xs rounded-md font-semibold transition-colors bg-red-100 text-red-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]">
                                                     Inactive
                                                 </span>
                                             )}

@@ -3,6 +3,7 @@
 import { AppLayout } from "@/components/layout";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
+import { Plus } from "lucide-react";
 
 // Types
 interface Vendor {
@@ -272,7 +273,7 @@ const DocumentsListing = () => {
           <h3 className="text-lg font-semibold m-0">🔍 Filters & Search</h3>
           <button
             type="button"
-            className="px-3 py-1.5 text-sm rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-white transition-colors"
+            className="px-3 py-1.5 text-sm rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] transition-colors"
             onClick={toggleFilters}
           >
             <span className="mr-1">⚙️</span>
@@ -307,7 +308,7 @@ const DocumentsListing = () => {
                     key={preset}
                     type="button"
                     onClick={() => setDateRange(preset)}
-                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                   >
                     {preset === 'today' && 'Today'}
                     {preset === 'week' && 'This Week'}
@@ -429,7 +430,7 @@ const DocumentsListing = () => {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
               >
                 <span className="mr-2">🔄</span>
                 Clear All
@@ -461,21 +462,21 @@ const DocumentsListing = () => {
           <div className="flex gap-3 flex-wrap">
             <button
               onClick={() => router.push('/documents/new')}
-              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
+              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
             >
-              <span className="mr-2">➕</span>
+              <Plus className="h-4 w-4 mr-2" />
               New Invoice
             </button>
             <button
               onClick={() => router.push('/documents/batch')}
-              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
               <span className="mr-2">📁</span>
               Batch Upload
             </button>
             <button
               onClick={recalcIndicators}
-              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
               <span className="mr-2">✓</span>
               Verify Subtotals
@@ -529,7 +530,7 @@ const DocumentsListing = () => {
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-gray-800 hover:text-white dark:hover:bg-gray-900 transition-colors">
+                <tr key={invoice.id} className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors">
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -608,7 +609,7 @@ const DocumentsListing = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => router.push(`/documents/${invoice.id}`)}
-                        className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                        className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                       >
                         Open
                       </button>
@@ -638,7 +639,7 @@ const DocumentsListing = () => {
               {pagination.has_prev ? (
                 <button
                   onClick={() => setFilters({ ...filters, page: pagination.prev_num! })}
-                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                 >
                   <span className="mr-1">←</span>
                   Previous
@@ -663,7 +664,7 @@ const DocumentsListing = () => {
                       className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                         page === pagination.page
                           ? 'bg-[var(--primary)] text-white'
-                          : 'border border-[var(--border)] hover:bg-gray-200 dark:hover:bg-gray-800'
+                          : 'border border-[var(--border)] hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)]'
                       }`}
                     >
                       {page}
@@ -680,7 +681,7 @@ const DocumentsListing = () => {
               {pagination.has_next ? (
                 <button
                   onClick={() => setFilters({ ...filters, page: pagination.next_num! })}
-                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                 >
                   Next
                   <span className="ml-1">→</span>
