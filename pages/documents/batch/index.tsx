@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
+import { FileUpload } from "@/components/FileUpload";
 
 interface ProgressData {
   status: 'not_found' | 'waiting' | 'processing' | 'completed' | 'error';
@@ -54,7 +55,7 @@ const BatchUpload = () => {
   const [resultSummary, setResultSummary] = useState<ProgressData['summary'] | null>(null);
   const [showResultActions, setShowResultActions] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
   const timingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -72,11 +73,14 @@ const BatchUpload = () => {
     };
   }, []);
 
+  const handleFilesSelect = (files: File[]) => {
+    setSelectedFiles(files);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const files = fileInputRef.current?.files;
-    if (!files || files.length === 0) {
+    if (!selectedFiles || selectedFiles.length === 0) {
       alert(t.documents.batchUploadPage.alerts.selectAtLeastOne);
       return;
     }
@@ -86,8 +90,8 @@ const BatchUpload = () => {
     formData.append('auto_classify', autoClassify ? 'on' : '');
     formData.append('batch_remark', batchRemark);
 
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i]);
+    for (let i = 0; i < selectedFiles.length; i++) {
+      formData.append('files', selectedFiles[i]);
     }
 
     setIsUploading(true);
@@ -247,21 +251,15 @@ const BatchUpload = () => {
             </label>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">
-              {t.documents.batchUploadPage.selectFiles} <span className="text-[var(--error)]">{t.documents.batchUploadPage.selectFilesRequired}</span>
-            </label>
-            <input
-              type="file"
-              ref={fileInputRef}
-              multiple
-              required
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[var(--primary)] file:text-white hover:file:bg-[var(--primary-hover)] file:cursor-pointer"
-            />
-            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              {t.documents.batchUploadPage.selectFilesHelp}
-            </small>
-          </div>
+          <FileUpload
+            onFilesSelect={handleFilesSelect}
+            multiple={true}
+            accept="image/*,.pdf"
+            required={true}
+            label={t.documents.batchUploadPage.selectFiles}
+            requiredText={t.documents.batchUploadPage.selectFilesRequired}
+            helpText={t.documents.batchUploadPage.selectFilesHelp}
+          />
 
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">

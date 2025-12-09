@@ -4,6 +4,8 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
+import { FileUpload } from "@/components/FileUpload";
+import { InvoiceScanner } from "@/components/InvoiceScanner";
 
 // Types
 interface Vendor {
@@ -22,6 +24,7 @@ const NewInvoice = () => {
   const [autoClassify, setAutoClassify] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
+  const [scannerSession, setScannerSession] = useState<any>(null);
 
   // Manual input fields
   const [invoiceNo, setInvoiceNo] = useState('');
@@ -97,8 +100,7 @@ const NewInvoice = () => {
   };
 
   // Handle file change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0] || null;
+  const handleFileSelect = (selectedFile: File | null) => {
     setFile(selectedFile);
 
     if (selectedFile && useOCR) {
@@ -124,6 +126,63 @@ const NewInvoice = () => {
         setIsProcessing(false);
       }
     }, 30000);
+  };
+
+  // Handle scanner session completion
+  const handleScannerComplete = async (session: any) => {
+    setScannerSession(session);
+
+    if (session.pages.length === 0) return;
+
+    startProcessingTimer();
+
+    const formData = new FormData();
+    formData.append('vendor_id', vendorId);
+    formData.append('use_ocr', useOCR.toString());
+    formData.append('auto_classify', autoClassify.toString());
+    formData.append('remark', remark);
+
+    // Add all pages as files
+    session.pages.forEach((page: any) => {
+      formData.append('files', page.file);
+    });
+
+    if (!isAIEnabled) {
+      formData.append('invoice_no', invoiceNo);
+      formData.append('invoice_date', invoiceDate);
+      formData.append('currency', currency);
+      formData.append('subtotal', subtotal);
+      formData.append('tax', tax);
+      formData.append('total', total);
+    }
+
+    try {
+      // TODO: Replace with actual API endpoint for batch upload
+      const response = await fetch('/api/invoices/upload-batch', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      setIsProcessing(false);
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(t.documents.newInvoicePage.alerts.createSuccess);
+        router.push('/documents');
+      } else {
+        alert(t.documents.newInvoicePage.alerts.createFailed);
+      }
+    } catch (error) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      setIsProcessing(false);
+      console.error('Error creating invoice:', error);
+      alert(t.documents.newInvoicePage.alerts.createError);
+    }
   };
 
   // Handle form submission
@@ -248,18 +307,15 @@ const NewInvoice = () => {
             </label>
           </div>
 
-          {/* File Upload */}
+          {/* File Upload / Scanner */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">
               {t.documents.newInvoicePage.uploadFile} <span className="text-[var(--error)]">{t.documents.newInvoicePage.uploadFileRequired}</span>
             </label>
-            <input
-              type="file"
-              onChange={handleFileChange}
-              required
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[var(--primary)] file:text-white hover:file:bg-[var(--primary-hover)] file:cursor-pointer"
+            <InvoiceScanner
+              onComplete={handleScannerComplete}
             />
-            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+            <small className="text-xs text-[var(--muted-foreground)] mt-2 block">
               {t.documents.newInvoicePage.uploadFileHelp}
             </small>
           </div>

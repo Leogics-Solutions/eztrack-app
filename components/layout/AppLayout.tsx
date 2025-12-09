@@ -3,7 +3,8 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { useState } from 'react';
+import { MobileAppLayout } from './MobileAppLayout';
+import { useState, useEffect } from 'react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -12,6 +13,7 @@ interface AppLayoutProps {
 
 /**
  * Main application layout with sidebar and header
+ * Automatically switches between desktop and mobile layouts based on screen size
  * Automatically includes ProtectedRoute wrapper
  *
  * Usage:
@@ -21,7 +23,31 @@ interface AppLayoutProps {
  */
 export function AppLayout({ children, pageName }: AppLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
+  useEffect(() => {
+    // Check if we're on mobile initially
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // 768px is the breakpoint (md in Tailwind)
+    };
+
+    // Check on mount
+    checkMobile();
+
+    // Listen for resize events
+    window.addEventListener('resize', checkMobile);
+
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+
+  // Render mobile layout for screens smaller than 768px
+  if (isMobile) {
+    return <MobileAppLayout pageName={pageName}>{children}</MobileAppLayout>;
+  }
+
+  // Desktop layout
   return (
     // <ProtectedRoute>
       <div className="flex h-screen overflow-hidden" style={{ background: 'var(--background)' }}>

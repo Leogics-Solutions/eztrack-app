@@ -141,27 +141,27 @@ const CreditorAccounts = () => {
         <AppLayout pageName={t.creditors.title}>
             <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
                 {/* Header */}
-                <div className="p-6 border-b border-[var(--border)]">
-                    <div className="flex flex-wrap justify-between items-center gap-4">
+                <div className="p-4 md:p-6 border-b border-[var(--border)]">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div className="flex-1 min-w-0 md:min-w-[300px]">
-                            <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+                            <h2 className="text-xl md:text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
                                 {t.creditors.title}
                             </h2>
                             <p className="text-sm break-words" style={{ color: 'var(--muted-foreground)' }}>
                                 {t.creditors.description}
                             </p>
                         </div>
-                        <div className="flex gap-3 flex-wrap flex-shrink-0">
+                        <div className="flex flex-col md:flex-row gap-2 md:gap-3 flex-shrink-0 w-full md:w-auto">
                             <button
                                 onClick={handleImportCSV}
-                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors flex items-center"
+                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors flex items-center justify-center text-sm"
                             >
                                 <Upload className="h-4 w-4 mr-2" />
                                 {t.creditors.importCSV}
                             </button>
                             <button
                                 onClick={showAddCreditorModal}
-                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
+                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center justify-center text-sm"
                             >
                                 <Plus className="h-4 w-4 mr-2" />
                                 {t.creditors.addCreditorAccount}
@@ -231,7 +231,7 @@ const CreditorAccounts = () => {
             {/* Add/Edit Creditor Modal */}
             {isModalOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center md:items-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
@@ -240,18 +240,19 @@ const CreditorAccounts = () => {
                     }}
                 >
                     <div
-                        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl"
+                        className="w-full h-full md:w-full md:max-w-2xl md:h-auto md:max-h-[90vh] overflow-y-auto md:rounded-xl shadow-2xl"
                         style={{
                             backgroundColor: 'var(--card)',
                             border: '1px solid var(--border)',
                         }}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         {/* Modal Header */}
                         <div
-                            className="flex justify-between items-center p-6 border-b"
+                            className="flex justify-between items-center p-4 md:p-6 border-b sticky top-0 bg-[var(--card)] z-10"
                             style={{ borderBottomColor: 'var(--border)' }}
                         >
-                            <h3 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
+                            <h3 className="text-lg md:text-xl font-bold" style={{ color: 'var(--foreground)' }}>
                                 {editingId ? t.creditors.editCreditorAccount : t.creditors.addCreditorAccount}
                             </h3>
                             <button
@@ -264,7 +265,7 @@ const CreditorAccounts = () => {
                         </div>
 
                         {/* Modal Form */}
-                        <form onSubmit={saveCreditor} className="p-6">
+                        <form onSubmit={saveCreditor} className="p-4 md:p-6">
                             {/* Account Name */}
                             <div className="mb-4">
                                 <label
@@ -295,7 +296,7 @@ const CreditorAccounts = () => {
                             </div>
 
                             {/* Account Code and Link to Vendor */}
-                            <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 {/* Account Code */}
                                 <div>
                                     <label
