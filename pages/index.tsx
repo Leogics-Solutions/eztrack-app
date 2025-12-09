@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
 import { useState } from "react";
 import { Line, Pie, Bar, Doughnut } from 'react-chartjs-2';
 import {
@@ -87,6 +88,7 @@ interface Filters {
 }
 
 export default function Home() {
+  const { t } = useLanguage();
   const [filters, setFilters] = useState<Filters>({
     date_from: '',
     date_to: '',
@@ -189,7 +191,7 @@ export default function Home() {
   const vendorChartData = {
     labels: DUMMY_VENDOR_DATA.map(item => item.vendor_name),
     datasets: [{
-      label: 'Total Spend (MYR)',
+      label: t.dashboard.charts.totalSpend,
       data: DUMMY_VENDOR_DATA.map(item => item.total),
       backgroundColor: 'rgba(106,166,255,0.6)',
       borderColor: '#6aa6ff',
@@ -201,7 +203,7 @@ export default function Home() {
   const monthlyChartData = {
     labels: DUMMY_MONTHLY_DATA.map(item => item.month),
     datasets: [{
-      label: 'Invoice Total (MYR)',
+      label: t.dashboard.charts.invoiceTotal,
       data: DUMMY_MONTHLY_DATA.map(item => item.total),
       borderColor: '#6aa6ff',
       backgroundColor: 'rgba(106,166,255,0.1)',
@@ -217,7 +219,12 @@ export default function Home() {
   };
 
   const statusChartData = {
-    labels: DUMMY_STATUS_DATA.map(item => item.status.charAt(0).toUpperCase() + item.status.slice(1)),
+    labels: DUMMY_STATUS_DATA.map(item => {
+      if (item.status === 'draft') return t.dashboard.status.draft;
+      if (item.status === 'validated') return t.dashboard.status.validated;
+      if (item.status === 'posted') return t.dashboard.status.posted;
+      return item.status;
+    }),
     datasets: [{
       data: DUMMY_STATUS_DATA.map(item => item.count),
       backgroundColor: chartColors.background.slice(0, DUMMY_STATUS_DATA.length),
@@ -242,22 +249,22 @@ export default function Home() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout pageName={t.dashboard.title}>
       <div className="space-y-6">
         {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-            Dashboard
+            {t.dashboard.title}
           </h1>
           <p style={{ color: 'var(--muted-foreground)' }}>
-            Track and analyze your invoice data with comprehensive insights
+            {t.dashboard.subtitle}
           </p>
         </div>
 
         {/* Filter Panel */}
         <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>📊 Dashboard Filters</h3>
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>📊 {t.dashboard.filters.title}</h3>
             <button
               onClick={resetFilters}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-all border"
@@ -267,7 +274,7 @@ export default function Home() {
                 borderColor: 'var(--border)',
               }}
             >
-              ↻ Reset
+              ↻ {t.dashboard.filters.reset}
             </button>
           </div>
 
@@ -275,7 +282,7 @@ export default function Home() {
             {/* Date From */}
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                📅 Date From
+                📅 {t.dashboard.filters.dateFrom}
               </label>
               <input
                 type="date"
@@ -293,7 +300,7 @@ export default function Home() {
             {/* Date To */}
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                📅 Date To
+                📅 {t.dashboard.filters.dateTo}
               </label>
               <input
                 type="date"
@@ -311,7 +318,7 @@ export default function Home() {
             {/* Vendor Filter */}
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                🏢 Vendor
+                🏢 {t.dashboard.filters.vendor}
               </label>
               <select
                 value={filters.vendor_id}
@@ -323,7 +330,7 @@ export default function Home() {
                   color: 'var(--foreground)',
                 }}
               >
-                <option value="">All Vendors</option>
+                <option value="">{t.dashboard.filters.allVendors}</option>
                 {DUMMY_VENDORS.map(vendor => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
@@ -333,7 +340,7 @@ export default function Home() {
             {/* Status Filter */}
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                📋 Status
+                📋 {t.dashboard.filters.status}
               </label>
               <div className="space-y-2">
                 {['draft', 'validated', 'posted'].map(status => (
@@ -345,7 +352,9 @@ export default function Home() {
                       className="rounded"
                     />
                     <span className="text-sm capitalize" style={{ color: 'var(--foreground)' }}>
-                      {status}
+                      {status === 'draft' ? t.dashboard.status.draft :
+                       status === 'validated' ? t.dashboard.status.validated :
+                       status === 'posted' ? t.dashboard.status.posted : status}
                     </span>
                   </label>
                 ))}
@@ -365,7 +374,11 @@ export default function Home() {
                   color: 'var(--accent-foreground)',
                 }}
               >
-                {preset === 'today' ? 'Today' : `This ${preset.charAt(0).toUpperCase() + preset.slice(1)}`}
+                {preset === 'today' ? t.dashboard.filters.today :
+                 preset === 'week' ? t.dashboard.filters.thisWeek :
+                 preset === 'month' ? t.dashboard.filters.thisMonth :
+                 preset === 'quarter' ? t.dashboard.filters.thisQuarter :
+                 preset === 'year' ? t.dashboard.filters.thisYear : preset}
               </button>
             ))}
           </div>
@@ -388,7 +401,7 @@ export default function Home() {
                   MYR {kpis.total_value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Total Invoice Value
+                  {t.dashboard.kpis.totalInvoiceValue}
                 </div>
               </div>
             </div>
@@ -409,7 +422,7 @@ export default function Home() {
                   {kpis.invoices_total}
                 </div>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Total Invoices
+                  {t.dashboard.kpis.totalInvoices}
                 </div>
               </div>
             </div>
@@ -430,10 +443,10 @@ export default function Home() {
                   MYR {kpis.outstanding.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Outstanding Amount
+                  {t.dashboard.kpis.outstandingAmount}
                 </div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {kpis.invoices_pending} invoices pending
+                  {kpis.invoices_pending} {t.dashboard.kpis.invoicesPending}
                 </div>
               </div>
             </div>
@@ -454,7 +467,7 @@ export default function Home() {
                   MYR {kpis.avg_value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Average Invoice Value
+                  {t.dashboard.kpis.averageInvoiceValue}
                 </div>
               </div>
             </div>
@@ -472,7 +485,7 @@ export default function Home() {
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-              💸 Expense Breakdown by Category
+              💸 {t.dashboard.charts.expenseBreakdown}
             </h3>
             <div className="h-64">
               <Pie data={categoryChartData} options={chartOptions} />
@@ -488,7 +501,7 @@ export default function Home() {
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-              🏢 Top Vendors by Spend
+              🏢 {t.dashboard.charts.topVendors}
             </h3>
             <div className="h-64">
               <Bar
@@ -513,7 +526,7 @@ export default function Home() {
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-              📈 Monthly Invoice Trend
+              📈 {t.dashboard.charts.monthlyTrend}
             </h3>
             <div className="h-64">
               <Line data={monthlyChartData} options={chartOptions} />
@@ -531,7 +544,7 @@ export default function Home() {
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-              📋 Invoice Status Distribution
+              📋 {t.dashboard.charts.statusDistribution}
             </h3>
             <div className="h-64">
               <Doughnut data={statusChartData} options={chartOptions} />
@@ -550,16 +563,16 @@ export default function Home() {
           }}
         >
           <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--foreground)' }}>
-            Recent Activity
+            {t.dashboard.recentActivity.title}
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>Time</th>
-                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>Entity</th>
-                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>Action</th>
-                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>Details</th>
+                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>{t.dashboard.recentActivity.time}</th>
+                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>{t.dashboard.recentActivity.entity}</th>
+                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>{t.dashboard.recentActivity.action}</th>
+                  <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>{t.dashboard.recentActivity.details}</th>
                 </tr>
               </thead>
               <tbody>

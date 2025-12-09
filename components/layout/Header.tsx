@@ -1,9 +1,11 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
+import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
   pageName?: string;
@@ -13,6 +15,7 @@ interface HeaderProps {
 
 export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: HeaderProps) {
   const { user, signOut } = useAuth();
+  const { t } = useLanguage();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const router = useRouter();
   // Initialize theme from localStorage
@@ -96,8 +99,11 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
         </h1>
       </div>
 
-      {/* Right side - Theme Toggle, Avatar, Username/Business, Logout */}
+      {/* Right side - Language Switcher, Theme Toggle, Avatar, Username/Business, Logout */}
       <div className="flex items-center gap-6">
+        {/* Language Switcher */}
+        <LanguageSwitcher />
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
@@ -167,7 +173,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
           }}
         >
           <Plus className="h-4 w-4" />
-          Add Document
+          {t.header.addDocument}
         </button>
 
         {/* Logout */}
@@ -182,7 +188,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
             e.currentTarget.style.color = 'var(--muted-foreground)';
           }}
         >
-          logout
+          {t.header.logout}
         </button>
       </div>
     </header>

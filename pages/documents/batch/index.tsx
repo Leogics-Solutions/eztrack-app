@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 
@@ -37,13 +38,14 @@ interface ProgressData {
 
 const BatchUpload = () => {
   const router = useRouter();
+  const { t } = useLanguage();
   const [useOcr, setUseOcr] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("Preparing upload...");
+  const [progressText, setProgressText] = useState("");
   const [progressDetails, setProgressDetails] = useState("");
   const [elapsedTime, setElapsedTime] = useState("0.0s");
   const [currentFileTime, setCurrentFileTime] = useState("0.0s");
@@ -75,7 +77,7 @@ const BatchUpload = () => {
 
     const files = fileInputRef.current?.files;
     if (!files || files.length === 0) {
-      alert('Please select at least one file to upload.');
+      alert(t.documents.batchUploadPage.alerts.selectAtLeastOne);
       return;
     }
 
@@ -129,18 +131,18 @@ const BatchUpload = () => {
         const progressData: ProgressData = JSON.parse(event.data);
 
         if (progressData.status === 'not_found') {
-          setProgressText('Upload not found');
-          setProgressDetails(progressData.message || 'Upload session expired');
+          setProgressText(t.documents.batchUploadPage.uploadNotFound);
+          setProgressDetails(progressData.message || t.documents.batchUploadPage.sessionExpired);
           eventSource.close();
           return;
         }
 
         if (progressData.status === 'waiting') {
-          setProgressText('Preparing upload...');
-          setProgressDetails(progressData.message || 'Starting upload...');
+          setProgressText(t.documents.batchUploadPage.preparingUpload);
+          setProgressDetails(progressData.message || t.documents.batchUploadPage.preparingUpload);
         } else if (progressData.status === 'processing') {
           setProgress(progressData.percentage || 0);
-          setProgressText(`Processing ${progressData.current} of ${progressData.total} files`);
+          setProgressText(`${t.documents.batchUploadPage.processing} ${progressData.current} of ${progressData.total} files`);
           setProgressDetails(progressData.message || '');
 
           // Reset file timing when processing a new file
@@ -151,7 +153,7 @@ const BatchUpload = () => {
         } else if (progressData.status === 'completed') {
           setProgress(100);
           setProgressStatus('completed');
-          setProgressText('Upload completed successfully!');
+          setProgressText(t.documents.batchUploadPage.uploadCompleted);
           setProgressDetails(progressData.message || '');
           setResultSummary(progressData.summary || null);
           setShowResultActions(true);
@@ -163,7 +165,7 @@ const BatchUpload = () => {
         } else if (progressData.status === 'error') {
           setProgress(100);
           setProgressStatus('error');
-          setProgressText('Upload failed');
+          setProgressText(t.documents.batchUploadPage.uploadFailed);
           setProgressDetails(progressData.message || '');
           eventSource.close();
 
@@ -176,8 +178,8 @@ const BatchUpload = () => {
       };
 
       eventSource.onerror = () => {
-        setProgressText('Connection error');
-        setProgressDetails('Lost connection to server');
+        setProgressText(t.documents.batchUploadPage.connectionError);
+        setProgressDetails(t.documents.batchUploadPage.connectionErrorDetails);
         eventSource.close();
 
         if (timingIntervalRef.current) {
@@ -188,7 +190,7 @@ const BatchUpload = () => {
       };
 
     } catch (error) {
-      setProgressText('Upload failed');
+      setProgressText(t.documents.batchUploadPage.uploadFailed);
       setProgressDetails(error instanceof Error ? error.message : 'Unknown error');
       setProgressStatus('error');
 
@@ -204,9 +206,9 @@ const BatchUpload = () => {
   const errors = resultSummary?.failed_files?.filter(ff => !ff || ff.type !== 'duplicate') || [];
 
   return (
-    <AppLayout pageName="Batch Upload Invoices">
+    <AppLayout pageName={t.documents.batchUploadPage.title}>
       <div className="">
-        <h1 className="text-3xl font-bold mb-6">Batch Upload Invoices</h1>
+        <h1 className="text-3xl font-bold mb-6">{t.documents.batchUploadPage.title}</h1>
 
         <form onSubmit={handleSubmit} className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
           <div className="mb-6">
@@ -218,9 +220,9 @@ const BatchUpload = () => {
                 className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] mt-0.5"
               />
               <div>
-                <span className="text-sm font-medium">Use OCR (image/PDF via AI)</span>
+                <span className="text-sm font-medium">{t.documents.batchUploadPage.useOCR}</span>
                 <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  Automatically extract vendor and invoice details from uploaded files
+                  {t.documents.batchUploadPage.useOCRDescription}
                 </div>
               </div>
             </label>
@@ -236,10 +238,10 @@ const BatchUpload = () => {
               />
               <div>
                 <span className="text-sm font-medium">
-                  Auto-classify Line Items <span className="text-[var(--muted-foreground)]">(AI)</span>
+                  {t.documents.batchUploadPage.autoClassify} <span className="text-[var(--muted-foreground)]">(AI)</span>
                 </span>
                 <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  Automatically classify line items to chart of accounts when processing
+                  {t.documents.batchUploadPage.autoClassifyDescription}
                 </div>
               </div>
             </label>
@@ -247,7 +249,7 @@ const BatchUpload = () => {
 
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">
-              Select files (multiple) <span className="text-[var(--error)]">*</span>
+              {t.documents.batchUploadPage.selectFiles} <span className="text-[var(--error)]">{t.documents.batchUploadPage.selectFilesRequired}</span>
             </label>
             <input
               type="file"
@@ -257,23 +259,23 @@ const BatchUpload = () => {
               className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[var(--primary)] file:text-white hover:file:bg-[var(--primary-hover)] file:cursor-pointer"
             />
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              Images (JPG/PNG/WebP), PDFs, or demo .txt files
+              {t.documents.batchUploadPage.selectFilesHelp}
             </small>
           </div>
 
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">
-              Remark / Tag <span className="text-[var(--muted-foreground)]">(optional - applies to all invoices)</span>
+              {t.documents.batchUploadPage.remarkTag} <span className="text-[var(--muted-foreground)]">{t.documents.batchUploadPage.remarkTagOptional}</span>
             </label>
             <input
               type="text"
               value={batchRemark}
               onChange={(e) => setBatchRemark(e.target.value)}
-              placeholder="e.g., Project A, Q1 2025, Supplier Review"
+              placeholder={t.documents.batchUploadPage.remarkTagPlaceholder}
               className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
             />
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              This remark will be applied to all invoices in this batch
+              {t.documents.batchUploadPage.remarkTagHelp}
             </small>
           </div>
 
@@ -282,14 +284,14 @@ const BatchUpload = () => {
             disabled={isUploading}
             className="w-full px-4 py-3 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isUploading ? 'Uploading...' : 'Start Upload'}
+            {isUploading ? t.documents.batchUploadPage.uploading : t.documents.batchUploadPage.startUpload}
           </button>
         </form>
 
         {/* Progress Bar */}
         {showProgress && (
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-3">Upload Progress</h3>
+            <h3 className="text-lg font-semibold mb-3">{t.documents.batchUploadPage.uploadProgress}</h3>
 
             <div className="w-full h-5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
               <div
@@ -308,24 +310,24 @@ const BatchUpload = () => {
             {resultSummary && (
               <div className="mt-4">
                 <div className="mb-2 text-sm">
-                  Created: {resultSummary.created ?? 0} • Failed: {resultSummary.failed ?? 0}
+                  {t.documents.batchUploadPage.created}: {resultSummary.created ?? 0} • {t.documents.batchUploadPage.failed}: {resultSummary.failed ?? 0}
                 </div>
 
                 {/* Duplicate Invoices */}
                 {duplicates.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="font-semibold mb-2 text-sm">Duplicate Invoices</h4>
+                    <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.duplicateInvoices}</h4>
                     <div className="overflow-x-auto">
                       <table className="min-w-full border border-[var(--border)]">
                         <thead className="bg-gray-100 dark:bg-gray-800">
                           <tr>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">File</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Vendor</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Invoice No</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Date</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Total</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Existing</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">Action</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.file}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.vendor}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.invoiceNo}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.date}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.total}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.existing}</th>
+                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.action}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -357,7 +359,7 @@ const BatchUpload = () => {
                                       rel="noopener noreferrer"
                                       className="text-[var(--primary)] hover:underline"
                                     >
-                                      Open
+                                      {t.documents.batchUploadPage.open}
                                     </a>
                                   )}
                                 </td>
@@ -373,7 +375,7 @@ const BatchUpload = () => {
                 {/* Other Errors */}
                 {errors.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="font-semibold mb-2 text-sm">Other Errors</h4>
+                    <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.otherErrors}</h4>
                     <div className="max-h-44 overflow-auto border border-[var(--border)] rounded-lg p-2 whitespace-pre-wrap text-xs text-[var(--muted-foreground)]">
                       {errors.map((ff, idx) => {
                         const name = ff && ff.file ? ff.file : '<unknown>';
@@ -393,24 +395,24 @@ const BatchUpload = () => {
                   onClick={() => router.push('/ap/invoices')}
                   className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium text-sm"
                 >
-                  Go to Documents
+                  {t.documents.batchUploadPage.goToDocuments}
                 </button>
                 <button
                   onClick={() => {}}
                   className="px-4 py-2 bg-[var(--hover-bg-lighter)] hover:bg-[var(--hover-bg-light)] dark:bg-[var(--hover-border)] dark:hover:bg-[var(--hover-bg-light)] rounded-md transition-colors font-medium text-sm"
                 >
-                  Stay Here
+                  {t.documents.batchUploadPage.stayHere}
                 </button>
               </div>
             )}
 
             {/* Timing Information */}
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-              <h4 className="font-semibold mb-2 text-sm">Processing Time</h4>
+              <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.processingTime}</h4>
               <div className="text-sm">
-                <div>Elapsed: <span className="font-mono font-bold">{elapsedTime}</span></div>
+                <div>{t.documents.batchUploadPage.elapsed}: <span className="font-mono font-bold">{elapsedTime}</span></div>
                 {showFileTiming && (
-                  <div>Current file: <span className="font-mono font-bold">{currentFileTime}</span></div>
+                  <div>{t.documents.batchUploadPage.currentFile}: <span className="font-mono font-bold">{currentFileTime}</span></div>
                 )}
               </div>
             </div>
@@ -418,10 +420,10 @@ const BatchUpload = () => {
         )}
 
         <p className="mt-6 text-sm text-[var(--muted-foreground)]">
-          <strong>Tips:</strong>
-          <br />- With OCR enabled, vendor and invoice fields will be auto-extracted when possible.
-          <br />- With auto-classify enabled, line items will be automatically assigned to chart of accounts.
-          <br />- Without OCR, invoices will be created as draft with minimal details and source file stored.
+          <strong>{t.documents.batchUploadPage.tips}</strong>
+          <br />- {t.documents.batchUploadPage.tip1}
+          <br />- {t.documents.batchUploadPage.tip2}
+          <br />- {t.documents.batchUploadPage.tip3}
         </p>
       </div>
     </AppLayout>

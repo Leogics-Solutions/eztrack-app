@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 import { Plus, Upload, Edit, Trash2, FileText } from "lucide-react";
 
@@ -21,6 +22,7 @@ interface CreditorAccount {
 }
 
 const CreditorAccounts = () => {
+    const { t } = useLanguage();
     // State
     const [creditors, setCreditors] = useState<CreditorAccount[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -114,39 +116,39 @@ const CreditorAccounts = () => {
         console.log('Saving creditor:', formData);
 
         // Mock success
-        alert(editingId ? 'Creditor account updated successfully!' : 'Creditor account created successfully!');
+        alert(editingId ? t.creditors.accountUpdated : t.creditors.accountCreated);
         closeCreditorModal();
         // loadCreditors(); // Uncomment when API is ready
     };
 
     const deleteCreditor = async (id: number, name: string) => {
-        if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+        if (!confirm(t.creditors.deleteConfirm.replace('{name}', name))) {
             return;
         }
 
         // TODO: Replace with actual API call
         console.log('Deleting creditor:', id);
-        alert('Creditor account deleted successfully!');
+        alert(t.creditors.accountDeleted);
         // loadCreditors(); // Uncomment when API is ready
     };
 
     const handleImportCSV = async () => {
         // TODO: Implement CSV import functionality
-        alert('CSV import functionality will be implemented here');
+        alert(t.creditors.csvImportMessage);
     };
 
     return (
-        <AppLayout pageName="Creditor Accounts">
+        <AppLayout pageName={t.creditors.title}>
             <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
                 {/* Header */}
                 <div className="p-6 border-b border-[var(--border)]">
                     <div className="flex flex-wrap justify-between items-center gap-4">
                         <div className="flex-1 min-w-0 md:min-w-[300px]">
                             <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-                                Creditor Accounts
+                                {t.creditors.title}
                             </h2>
                             <p className="text-sm break-words" style={{ color: 'var(--muted-foreground)' }}>
-                                Manage creditor accounts for invoice tracking. Each invoice is automatically assigned to a creditor account based on the vendor name.
+                                {t.creditors.description}
                             </p>
                         </div>
                         <div className="flex gap-3 flex-wrap flex-shrink-0">
@@ -155,14 +157,14 @@ const CreditorAccounts = () => {
                                 className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors flex items-center"
                             >
                                 <Upload className="h-4 w-4 mr-2" />
-                                Import CSV
+                                {t.creditors.importCSV}
                             </button>
                             <button
                                 onClick={showAddCreditorModal}
                                 className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
                             >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Add Creditor Account
+                                {t.creditors.addCreditorAccount}
                             </button>
                         </div>
                     </div>
@@ -178,16 +180,16 @@ const CreditorAccounts = () => {
                                     className="p-4 border border-[var(--border)] rounded-lg hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors group"
                                 >
                                     <div>
-                                        <h3 className="text-lg font-semibold mb-2 group-hover:text-white" >
+                                        <h3 className="text-lg font-semibold mb-2" >
                                             {creditor.name}
                                         </h3>
                                         <div className="space-y-1 mb-3">
-                                            <p className="text-sm group-hover:text-white" >
-                                                Vendor: {creditor.vendor_name}
+                                            <p className="text-sm" >
+                                                {t.creditors.vendor} {creditor.vendor_name}
                                             </p>
-                                            <div className="flex items-center gap-2 text-sm group-hover:text-white">
+                                            <div className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span>{creditor.invoice_count} {creditor.invoice_count === 1 ? 'Invoice' : 'Invoices'}</span>
+                                                <span>{creditor.invoice_count} {creditor.invoice_count === 1 ? t.creditors.invoice : t.creditors.invoices}</span>
                                             </div>
                                         </div>
                                         <div className="border-t pt-3 mt-5 group-hover:border-[var(--hover-border)]" style={{ borderTopColor: 'var(--border)' }}>
@@ -197,14 +199,14 @@ const CreditorAccounts = () => {
                                                     className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
                                                 >
                                                     <Edit className="h-4 w-4 mr-2" />
-                                                    Edit
+                                                    {t.creditors.edit}
                                                 </button>
                                                 <button
                                                     onClick={() => deleteCreditor(creditor.id, creditor.name)}
                                                     className="px-4 py-2 bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors flex items-center"
                                                 >
                                                     <Trash2 className="h-4 w-4 mr-2" />
-                                                    Delete
+                                                    {t.creditors.delete}
                                                 </button>
                                             </div>
                                         </div>
@@ -220,7 +222,7 @@ const CreditorAccounts = () => {
                                 backgroundColor: 'rgba(255,255,255,0.03)',
                             }}
                         >
-                            <p className="text-sm italic">No creditor accounts found. Click "Add Creditor Account" to create one.</p>
+                            <p className="text-sm italic">{t.creditors.noCreditorAccounts}</p>
                         </div>
                     )}
                 </div>
@@ -250,7 +252,7 @@ const CreditorAccounts = () => {
                             style={{ borderBottomColor: 'var(--border)' }}
                         >
                             <h3 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
-                                {editingId ? 'Edit Creditor Account' : 'Add Creditor Account'}
+                                {editingId ? t.creditors.editCreditorAccount : t.creditors.addCreditorAccount}
                             </h3>
                             <button
                                 onClick={closeCreditorModal}
@@ -269,13 +271,13 @@ const CreditorAccounts = () => {
                                     className="block mb-2 text-sm font-semibold"
                                     style={{ color: 'var(--foreground)' }}
                                 >
-                                    Account Name *
+                                    {t.creditors.accountName} *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.account_name}
                                     onChange={(e) => handleInputChange('account_name', e.target.value)}
-                                    placeholder="ABC Sdn Bhd"
+                                    placeholder={t.creditors.accountNamePlaceholder}
                                     required
                                     className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                     style={{
@@ -288,7 +290,7 @@ const CreditorAccounts = () => {
                                     className="mt-2 text-xs italic"
                                     style={{ color: 'var(--muted-foreground)' }}
                                 >
-                                    This should match the vendor company name
+                                    {t.creditors.accountNameComment}
                                 </p>
                             </div>
 
@@ -300,13 +302,13 @@ const CreditorAccounts = () => {
                                         className="block mb-2 text-sm font-semibold"
                                         style={{ color: 'var(--foreground)' }}
                                     >
-                                        Account Code
+                                        {t.creditors.accountCode}
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.account_code}
                                         onChange={(e) => handleInputChange('account_code', e.target.value)}
-                                        placeholder="CR001"
+                                        placeholder={t.creditors.accountCodePlaceholder}
                                         className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                         style={{
                                             backgroundColor: 'var(--background)',
@@ -322,7 +324,7 @@ const CreditorAccounts = () => {
                                         className="block mb-2 text-sm font-semibold"
                                         style={{ color: 'var(--foreground)' }}
                                     >
-                                        Link to Vendor
+                                        {t.creditors.linkToVendor}
                                     </label>
                                     <select
                                         value={formData.vendor_link}
@@ -334,7 +336,7 @@ const CreditorAccounts = () => {
                                             color: 'var(--foreground)',
                                         }}
                                     >
-                                        <option value="">--No Vendor link--</option>
+                                        <option value="">{t.creditors.noVendorLink}</option>
                                         {vendors.map((vendor) => (
                                             <option key={vendor.id} value={vendor.id}>
                                                 {vendor.name}
@@ -350,12 +352,12 @@ const CreditorAccounts = () => {
                                     className="block mb-2 text-sm font-semibold"
                                     style={{ color: 'var(--foreground)' }}
                                 >
-                                    Description
+                                    {t.creditors.descriptionLabel}
                                 </label>
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => handleInputChange('description', e.target.value)}
-                                    placeholder="Optional Description or notes"
+                                    placeholder={t.creditors.descriptionPlaceholder}
                                     rows={3}
                                     className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                     style={{
@@ -375,14 +377,14 @@ const CreditorAccounts = () => {
                                     type="submit"
                                     className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium"
                                 >
-                                    {editingId ? 'Update Account' : 'Create Account'}
+                                    {editingId ? t.creditors.updateAccount : t.creditors.createAccount}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={closeCreditorModal}
                                     className="flex-1 px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                 >
-                                    Cancel
+                                    {t.creditors.cancel}
                                 </button>
                             </div>
                         </form>

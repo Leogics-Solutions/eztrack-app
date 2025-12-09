@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
+import { useLanguage } from '@/lib/i18n';
 import {
   FileCheck,
   LayoutDashboard,
@@ -17,23 +18,18 @@ interface SidebarProps {
   isCollapsed: boolean;
 }
 
-/**
- * =====================================================
- * 🔧 CUSTOMIZE YOUR NAVIGATION HERE
- * =====================================================
- * Edit the navItems array below to add/remove menu items
- */
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/documents', label: 'Documents', icon: FileCheck },
-  { href: '/coa-viewer', label: 'COA Viewer', icon: FileText },
-  { href: '/chart-of-accounts', label: 'Accounts', icon: Users },
-  { href: '/creditor-accounts', label: 'Creditors', icon: Menu },
-  { href: '/settings', label: 'Settings', icon: Settings },
-];
-
 export function Sidebar({ isCollapsed }: SidebarProps) {
   const router = useRouter();
+  const { t } = useLanguage();
+
+  const navItems = [
+    { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
+    { href: '/documents', label: t.nav.documents, icon: FileCheck },
+    { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
+    { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
+    { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
+    { href: '/settings', label: t.nav.settings, icon: Settings },
+  ];
 
   return (
     <aside
