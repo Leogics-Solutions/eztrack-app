@@ -2,22 +2,22 @@
 
 import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/i18n';
-import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Moon, Sun, Menu, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
-interface HeaderProps {
+interface MobileHeaderProps {
   pageName?: string;
-  isCollapsed: boolean;
-  onToggle: () => void;
+  onMenuClick: () => void;
 }
 
-export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: HeaderProps) {
-  const { user, signOut } = useAuth();
+export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHeaderProps) {
+  const { user } = useAuth();
   const { t } = useLanguage();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const router = useRouter();
+
   // Initialize theme from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
@@ -40,15 +40,6 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
     document.documentElement.setAttribute('data-theme', newTheme);
   };
 
-  const handleSignOut = async () => {
-    return router.push('/login');
-    try {
-      await signOut();
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
-  };
-
   // Get user initials for avatar
   const getInitials = () => {
     if (user?.name) {
@@ -64,19 +55,18 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
 
   return (
     <header
-      className="flex h-16 items-center justify-between px-6 gap-4"
+      className="flex h-14 items-center justify-between px-4 gap-2"
       style={{
         background: 'var(--card)',
         borderBottom: '1px solid var(--border)',
         color: 'var(--card-foreground)'
       }}
     >
-      {/* Left side - Collapse Button + Page Name */}
-      <div className="flex items-center gap-4">
-        {/* Collapse Button */}
+      {/* Left side - Menu Button + Page Name */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
-          onClick={onToggle}
-          className="flex items-center justify-center rounded-lg p-2 transition-colors"
+          onClick={onMenuClick}
+          className="flex items-center justify-center rounded-lg p-2 transition-colors flex-shrink-0"
           style={{ color: 'var(--muted-foreground)' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--muted)';
@@ -84,25 +74,39 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'transparent';
           }}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label="Open menu"
         >
-          {isCollapsed ? (
-            <ChevronRight className="h-5 w-5" />
-          ) : (
-            <ChevronLeft className="h-5 w-5" />
-          )}
+          <Menu className="h-5 w-5" />
         </button>
 
         {/* Page Name */}
-        <h1 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+        <h1 className="text-lg font-semibold truncate" style={{ color: 'var(--foreground)' }}>
           {pageName}
         </h1>
       </div>
 
-      {/* Right side - Language Switcher, Theme Toggle, Avatar, Username/Business, Logout */}
-      <div className="flex items-center gap-6">
-        {/* Language Switcher */}
-        <LanguageSwitcher />
+      {/* Right side - Compact controls */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Add Document Button - Icon only */}
+        <button
+          className="flex items-center justify-center rounded-lg p-2 transition-colors"
+          style={{
+            background: 'var(--primary)',
+            color: 'var(--primary-foreground)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '0.9';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '1';
+          }}
+          onClick={() => {
+            router.push("/documents/new");
+          }}
+          aria-label={t.header.addDocument}
+        >
+          <Plus className="h-5 w-5" />
+        </button>
 
         {/* Theme Toggle */}
         <button
@@ -129,12 +133,12 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
           <img
             src={user.avatar}
             alt={user.name || 'User'}
-            className="h-10 w-10 rounded-full object-cover"
+            className="h-8 w-8 rounded-full object-cover"
             style={{ border: '2px solid var(--border)' }}
           />
         ) : (
           <div
-            className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
             style={{
               background: 'var(--accent)',
               color: 'var(--accent-foreground)',
@@ -144,53 +148,8 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
             {getInitials()}
           </div>
         )}
-
-        {/* Username and Business */}
-        <div className="flex flex-col">
-          <span className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
-            {user?.name || user?.email || 'User'}
-          </span>
-          <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-            business
-          </span>
-        </div>
-
-        {/* Add Document Button */}
-        <button
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-          style={{
-            background: 'var(--primary)',
-            color: 'var(--primary-foreground)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = '0.9';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = '1';
-          }}
-          onClick={()=>{
-            router.push("/documents/new")
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          {t.header.addDocument}
-        </button>
-
-        {/* Logout */}
-        <button
-          onClick={handleSignOut}
-          className="text-sm underline transition-colors"
-          style={{ color: 'var(--muted-foreground)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--foreground)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--muted-foreground)';
-          }}
-        >
-          {t.header.logout}
-        </button>
       </div>
     </header>
   );
 }
+

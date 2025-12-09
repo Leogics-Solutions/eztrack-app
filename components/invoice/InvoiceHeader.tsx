@@ -1,3 +1,5 @@
+import { useLanguage } from "@/lib/i18n";
+
 interface InvoiceHeaderProps {
   invoice: {
     id: number;
@@ -13,6 +15,7 @@ interface InvoiceHeaderProps {
 }
 
 export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHeaderProps) {
+  const { t } = useLanguage();
   const getStatusColor = (status?: string) => {
     switch (status) {
       case 'posted':
@@ -29,9 +32,9 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
       {/* Header Top */}
       <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
         <div>
-          <div className="text-2xl font-bold">Invoice #{invoice.id}</div>
+          <div className="text-2xl font-bold">{t.documents.invoiceHeader.invoice}{invoice.id}</div>
           <div className="text-sm text-[var(--muted-foreground)] mt-1">
-            {invoice.invoice_no || '(no invoice number)'}
+            {invoice.invoice_no || t.documents.invoiceHeader.noInvoiceNumber}
           </div>
           <span className={`inline-block px-3 py-1 text-xs rounded-md mt-2 ${getStatusColor(invoice.status)}`}>
             {invoice.status || 'draft'}
@@ -42,26 +45,26 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
           className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white"
         >
           <span className="mr-2">{isEditMode ? '✖️' : '✏️'}</span>
-          {isEditMode ? 'Cancel' : 'Edit'}
+          {isEditMode ? t.documents.invoiceHeader.cancel : t.documents.invoiceHeader.edit}
         </button>
       </div>
 
       {/* Financial Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-4 bg-[var(--muted)] rounded-md">
-          <div className="text-sm text-[var(--muted-foreground)] mb-1">Subtotal</div>
+          <div className="text-sm text-[var(--muted-foreground)] mb-1">{t.documents.invoiceHeader.subtotal}</div>
           <div className="text-xl font-semibold text-[var(--foreground)]">
             {invoice.currency || 'MYR'} {(invoice.subtotal || 0).toFixed(2)}
           </div>
         </div>
         <div className="p-4 bg-[var(--muted)] rounded-md">
-          <div className="text-sm text-[var(--muted-foreground)] mb-1">Tax</div>
+          <div className="text-sm text-[var(--muted-foreground)] mb-1">{t.documents.invoiceHeader.tax}</div>
           <div className="text-xl font-semibold text-[var(--foreground)]">
             {invoice.currency || 'MYR'} {(invoice.tax || 0).toFixed(2)}
           </div>
         </div>
         <div className="p-4 bg-[var(--primary)] rounded-md">
-          <div className="text-sm font-medium mb-1 text-[var(--primary-foreground)]">Total Amount</div>
+          <div className="text-sm font-medium mb-1 text-[var(--primary-foreground)]">{t.documents.invoiceHeader.totalAmount}</div>
           <div className="text-2xl font-bold text-[var(--primary-foreground)]">
             {invoice.currency || 'MYR'} {(invoice.total || 0).toFixed(2)}
           </div>

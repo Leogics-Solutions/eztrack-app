@@ -6,38 +6,38 @@
 :root,
 [data-theme="light"] {
   /* Base Colors - Light, clean foundation */
-  --background: #F9FAFB;
-  --foreground: #020617; /* very dark blue/gray for text */
+  --background: #F9FAFA;
+  --foreground: #0F172A; /* deep blue/gray for text */
 
-  /* Primary Colors - Same brand indigo */
-  --primary: #22007C;
+  /* Primary Colors - Brand blue */
+  --primary: #2471A2;
   --primary-foreground: #FFFFFF;
-  --primary-hover: #3D1A99;
-  --primary-light: #E0E7FF;  /* soft indigo tint */
-  --primary-dark: #140152;
+  --primary-hover: #2C809D;
+  --primary-light: #458EBB;
+  --primary-dark: #1B587D;
 
-  /* Secondary Colors - Purple accent */
-  --secondary: #3D1A99;
+  /* Secondary Colors - Mint/Aqua accent */
+  --secondary: #7ECEAD;
   --secondary-foreground: #FFFFFF;
-  --secondary-hover: #2D1176;
-  --secondary-light: #E4D9FF;
-  --secondary-dark: #22007C;
+  --secondary-hover: #6ABF9E;
+  --secondary-light: #A1D3C8;
+  --secondary-dark: #5AA68E;
 
-  /* Accent Colors - Still on-brand */
-  --accent: #5B35C0;
+  /* Accent Colors - Supporting blue */
+  --accent: #458EBB;
   --accent-foreground: #FFFFFF;
-  --accent-hover: #442399;
-  --accent-light: #E7E0FF;
-  --accent-dark: #3D1A99;
+  --accent-hover: #3A7AA1;
+  --accent-light: #A1D3C8;
+  --accent-dark: #2C688B;
 
   /* Neutral Colors - Light UI surfaces */
-  --muted: #E5E7EB;
+  --muted: #E6ECEC;
   --muted-foreground: #6B7280;
   --card: #FFFFFF;
-  --card-foreground: #020617;
+  --card-foreground: #0F172A;
   --popover: #FFFFFF;
-  --popover-foreground: #020617;
-  --border: #D1D5DB;
+  --popover-foreground: #0F172A;
+  --border: #D3D8DA;
 
   /* Semantic Colors - Tuned for light backgrounds */
   --success: #16A34A;
@@ -61,9 +61,16 @@
   --info-dark: #1D4ED8;
 
   /* Interactive States */
-  --ring: #22007C;
-  --input: #E5E7EB;
-  --focus: #3D1A99;
+  --ring: #2471A2;
+  --input: #E6ECEC;
+  --focus: #2C809D;
+
+  /* Hover States - Light theme (on-brand neutrals & borders) */
+  --hover-bg: #F3F5F5;        /* slightly darker than background */
+  --hover-bg-light: #E6ECEC;  /* muted */
+  --hover-bg-lighter: #D3D8DA;/* border tone */
+  --hover-text: #0F172A;
+  --hover-border: #2C809D;    /* branded blue border */
 
   /* Radius */
   --radius: 0.5rem;
@@ -73,47 +80,47 @@
 /* DARK THEME                */
 /* ------------------------- */
 [data-theme="dark"] {
-  /* Base Colors - Smart, futuristic foundation */
-  --background: #0F1117;
-  --foreground: #F9FAFB; /* slightly off-white for softer contrast */
+  /* Base Colors - Deep, calm foundation */
+  --background: #0D1114;
+  --foreground: #F4F7F7; /* slightly off-white for softer contrast */
 
-  /* Primary Colors - Strong purple/indigo */
-  --primary: #22007C;
+  /* Primary Colors - Strong teal blue */
+  --primary: #2C809D;
   --primary-foreground: #FFFFFF;
-  --primary-hover: #1A0060;
-  --primary-light: #3D1A99;
-  --primary-dark: #140152;
+  --primary-hover: #2471A2;
+  --primary-light: #3D9BBB;
+  --primary-dark: #1B587D;
 
-  /* Secondary Colors - Deep purple for depth (subtle contrast vs primary) */
-  --secondary: #140152;
+  /* Secondary Colors - Mint contrast */
+  --secondary: #7ECEAD;
   --secondary-foreground: #FFFFFF;
-  --secondary-hover: #1E0066;
-  --secondary-light: #2A0A8F;
-  --secondary-dark: #0A0028;
+  --secondary-hover: #6ABF9E;
+  --secondary-light: #A1D3C8;
+  --secondary-dark: #5AA68E;
 
-  /* Accent Colors - keep close to brand (no random yellows) */
-  --accent: #3D1A99;
+  /* Accent Colors - Ocean blue highlight */
+  --accent: #458EBB;
   --accent-foreground: #FFFFFF;
-  --accent-hover: #2D1176;
-  --accent-light: #5B35C0;
-  --accent-dark: #22007C;
+  --accent-hover: #3A7AA1;
+  --accent-light: #A1D3C8;
+  --accent-dark: #2C688B;
 
   /* Neutral Colors - Sleek dark grays */
-  --muted: #1A1C25;
+  --muted: #1A242A;
   --muted-foreground: #9CA3AF;
-  --card: #0B0B0F;
-  --card-foreground: #F9FAFB;
-  --popover: #0B0B0F;
-  --popover-foreground: #F9FAFB;
-  --border: #1F2933;
+  --card: #12181C;
+  --card-foreground: #F4F7F7;
+  --popover: #12181C;
+  --popover-foreground: #F4F7F7;
+  --border: #1F2A30;
 
-  /* Semantic Colors - Functional for dark theme only */
+  /* Semantic Colors - Functional for dark theme */
   --success: #2ECC71;
   --success-foreground: #FFFFFF;
   --success-light: #58D68D;
   --success-dark: #27AE60;
 
-  --warning: #F1C40F; /* yellow only for warning, not brand */
+  --warning: #F1C40F;
   --warning-foreground: #0B0B0F;
   --warning-light: #F4D03F;
   --warning-dark: #D4AC0D;
@@ -128,12 +135,19 @@
   --info-light: #5DADE2;
   --info-dark: #2E86C1;
 
-  /* Interactive States - Purple focus rings */
-  --ring: #3D1A99;
-  --input: #1A1C25;
-  --focus: #3D1A99;
+  /* Interactive States - Brand-colored focus */
+  --ring: #2C809D;
+  --input: #1A242A;
+  --focus: #2471A2;
 
-  /* Radius - Modern, sleek corners */
+  /* Hover States - Dark theme (aligned with card/muted/border + brand) */
+  --hover-bg: #12181C;        /* card color */
+  --hover-bg-light: #1A242A;  /* muted */
+  --hover-bg-lighter: #1F2A30;/* border tone */
+  --hover-text: #F4F7F7;
+  --hover-border: #2C809D;    /* branded blue border */
+
+  /* Radius */
   --radius: 0.5rem;
 }
 

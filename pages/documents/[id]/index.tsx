@@ -2,6 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { InvoiceHeader } from "@/components/invoice/InvoiceHeader";
+import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
@@ -69,6 +70,7 @@ interface Payment {
 const InvoiceDetail = () => {
   const router = useRouter();
   const { id } = router.query;
+  const { t } = useLanguage();
 
   // State
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -129,7 +131,7 @@ const InvoiceDetail = () => {
   };
 
   const handleStatusChange = async (newStatus: string) => {
-    if (!confirm(`Change status to ${newStatus}?`)) return;
+    if (!confirm(t.documents.invoiceDetailPage.changeStatusConfirm.replace('{status}', newStatus))) return;
     // TODO: Implement API call
     console.log('Changing status to:', newStatus);
     await loadInvoiceData();
@@ -155,10 +157,10 @@ const InvoiceDetail = () => {
 
   if (!invoice) {
     return (
-      <AppLayout pageName="Invoice Detail">
+      <AppLayout pageName={t.documents.invoiceDetailPage.title}>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="text-lg">Loading invoice...</div>
+            <div className="text-lg">{t.documents.invoiceDetailPage.loading}</div>
           </div>
         </div>
       </AppLayout>
@@ -166,7 +168,7 @@ const InvoiceDetail = () => {
   }
 
   return (
-    <AppLayout pageName={`Invoice #${invoice.id}`}>
+    <AppLayout pageName={`${t.documents.invoiceDetailPage.title} #${invoice.id}`}>
       {/* Invoice Header */}
       <InvoiceHeader
         invoice={invoice}
@@ -176,7 +178,7 @@ const InvoiceDetail = () => {
 
       {/* Payment Recorder */}
       <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4">💰 Record Payment</h3>
+        <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.recordPayment}</h3>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -192,7 +194,7 @@ const InvoiceDetail = () => {
           className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4"
         >
           <div>
-            <label className="block text-sm font-medium mb-1">Amount</label>
+            <label className="block text-sm font-medium mb-1">{t.documents.invoiceDetailPage.amount}</label>
             <input
               name="amount"
               type="number"
@@ -202,7 +204,7 @@ const InvoiceDetail = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Date</label>
+            <label className="block text-sm font-medium mb-1">{t.documents.invoiceDetailPage.date}</label>
             <input
               name="date"
               type="date"
@@ -211,7 +213,7 @@ const InvoiceDetail = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Method</label>
+            <label className="block text-sm font-medium mb-1">{t.documents.invoiceDetailPage.method}</label>
             <input
               name="method"
               defaultValue="bank"
@@ -219,18 +221,18 @@ const InvoiceDetail = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Reference</label>
+            <label className="block text-sm font-medium mb-1">{t.documents.invoiceDetailPage.reference}</label>
             <div className="flex gap-2">
               <input
                 name="reference"
-                placeholder="BANK-REF"
+                placeholder={t.documents.invoiceDetailPage.referencePlaceholder}
                 className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
               />
               <button
                 type="submit"
                 className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors whitespace-nowrap"
               >
-                Add
+                {t.documents.invoiceDetailPage.add}
               </button>
             </div>
           </div>
@@ -241,10 +243,10 @@ const InvoiceDetail = () => {
             <table className="w-full">
               <thead className="bg-[var(--muted)]">
                 <tr>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">Date</th>
-                  <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">Amount</th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">Method</th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">Reference</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.paymentTable.date}</th>
+                  <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.paymentTable.amount}</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.paymentTable.method}</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.paymentTable.reference}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -260,7 +262,7 @@ const InvoiceDetail = () => {
             </table>
           </div>
         ) : (
-          <div className="text-sm text-[var(--muted-foreground)]">No payments recorded.</div>
+          <div className="text-sm text-[var(--muted-foreground)]">{t.documents.invoiceDetailPage.noPayments}</div>
         )}
       </div>
 
@@ -269,7 +271,7 @@ const InvoiceDetail = () => {
         {/* Document Preview - Left Column */}
         <div className="lg:col-span-1">
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 sticky top-6">
-            <h3 className="text-lg font-semibold mb-4">📄 Document Preview</h3>
+            <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.documentPreview}</h3>
             {invoice.source_file ? (
               <>
                 {invoice.source_file.toLowerCase().endsWith('.pdf') ? (
@@ -280,14 +282,14 @@ const InvoiceDetail = () => {
                 ) : invoice.source_file.toLowerCase().match(/\.(png|jpg|jpeg)$/) ? (
                   <img
                     src={`/${invoice.source_file}`}
-                    alt="Source document"
+                    alt={t.documents.invoiceDetailPage.sourceDocument}
                     className="w-full border border-[var(--border)] rounded-md"
                   />
                 ) : (
                   <div className="text-sm text-[var(--muted-foreground)]">
-                    Preview not available.{' '}
+                    {t.documents.invoiceDetailPage.previewNotAvailable}{' '}
                     <a href={`/${invoice.source_file}`} target="_blank" className="text-[var(--primary)] hover:underline">
-                      Open file
+                      {t.documents.invoiceDetailPage.openFile}
                     </a>
                   </div>
                 )}
@@ -296,11 +298,11 @@ const InvoiceDetail = () => {
                   target="_blank"
                   className="block mt-4 text-sm text-[var(--primary)] hover:underline"
                 >
-                  📥 Open in new tab
+                  {t.documents.invoiceDetailPage.openInNewTab}
                 </a>
               </>
             ) : (
-              <div className="text-sm text-[var(--muted-foreground)]">No source document available.</div>
+              <div className="text-sm text-[var(--muted-foreground)]">{t.documents.invoiceDetailPage.noSourceDocument}</div>
             )}
           </div>
         </div>
@@ -308,19 +310,19 @@ const InvoiceDetail = () => {
         {/* Invoice Data - Right Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Invoice Information */}
-          <InvoiceInformationCard invoice={invoice} isEditMode={isEditMode} onSave={handleSaveInvoice} onStatusChange={handleStatusChange} />
+          <InvoiceInformationCard invoice={invoice} isEditMode={isEditMode} onSave={handleSaveInvoice} onStatusChange={handleStatusChange} t={t} />
 
           {/* Vendor Details */}
-          <VendorDetailsCard invoice={invoice} isEditMode={isEditMode} />
+          <VendorDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} />
 
           {/* Customer Details */}
-          <CustomerDetailsCard invoice={invoice} isEditMode={isEditMode} />
+          <CustomerDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} />
 
           {/* Banking Details */}
-          <BankingDetailsCard invoice={invoice} isEditMode={isEditMode} />
+          <BankingDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} />
 
           {/* Remarks */}
-          <RemarksCard invoice={invoice} isEditMode={isEditMode} />
+          <RemarksCard invoice={invoice} isEditMode={isEditMode} t={t} />
 
           {/* Line Items */}
           <LineItemsCard
@@ -328,6 +330,7 @@ const InvoiceDetail = () => {
             lineItems={lineItems}
             onAutoClassify={handleAutoClassify}
             isClassifying={isClassifying}
+            t={t}
           />
         </div>
       </div>
@@ -337,16 +340,16 @@ const InvoiceDetail = () => {
 
 // Sub-components (keeping them in the same file for now for simplicity)
 
-function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }: any) {
+function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange, t }: any) {
   const [formData, setFormData] = useState(invoice);
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">📋 Invoice Information</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.invoiceInformation}</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div>
-          <span className="text-sm font-medium">Vendor:</span>{' '}
+          <span className="text-sm font-medium">{t.documents.invoiceDetailPage.vendor}</span>{' '}
           {isEditMode ? (
             <input
               type="text"
@@ -359,7 +362,7 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
           )}
         </div>
         <div>
-          <span className="text-sm font-medium">Date:</span>{' '}
+          <span className="text-sm font-medium">{t.documents.invoiceDetailPage.invoiceDate}</span>{' '}
           {isEditMode ? (
             <input
               type="date"
@@ -381,7 +384,7 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
               onClick={() => onStatusChange('validated')}
               className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
             >
-              ✓ Validate
+              {t.documents.invoiceDetailPage.validate}
             </button>
           )}
           {invoice.status === 'validated' && (
@@ -390,22 +393,22 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
                 onClick={() => onStatusChange('posted')}
                 className="px-4 py-2 bg-[var(--success)] text-white rounded-md hover:bg-[var(--success-dark)] transition-colors"
               >
-                📝 Post to Accounting
+                {t.documents.invoiceDetailPage.postToAccounting}
               </button>
               <button
                 onClick={() => onStatusChange('draft')}
-                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white"
+                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors hover:text-white"
               >
-                ↶ Revert to Draft
+                {t.documents.invoiceDetailPage.revertToDraft}
               </button>
             </>
           )}
           {invoice.status === 'posted' && (
             <button
               onClick={() => onStatusChange('validated')}
-              className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
-              ↶ Revert to Validated
+              {t.documents.invoiceDetailPage.revertToValidated}
             </button>
           )}
         </div>
@@ -417,7 +420,7 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
             onClick={() => onSave(formData)}
             className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors mr-2"
           >
-            Save Changes
+            {t.documents.invoiceDetailPage.saveChanges}
           </button>
         </div>
       )}
@@ -425,77 +428,77 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange }:
   );
 }
 
-function VendorDetailsCard({ invoice, isEditMode }: any) {
+function VendorDetailsCard({ invoice, isEditMode, t }: any) {
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">🏢 Vendor Details</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.vendorDetails}</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><b>SST Number:</b> {invoice.tax_id || '-'}</div>
-        <div><b>TIN Number:</b> {invoice.tin_number || '-'}</div>
-        <div><b>Registration No (New):</b> {invoice.vendor_registration_no_new || '-'}</div>
-        <div><b>Registration No (Old):</b> {invoice.vendor_registration_no_old || '-'}</div>
-        <div><b>Phone:</b> {invoice.phone || '-'}</div>
-        <div><b>Email:</b> {invoice.email || '-'}</div>
-        <div className="md:col-span-2"><b>Address:</b><br/>{invoice.address || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.sstNumber}</b> {invoice.tax_id || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.tinNumber}</b> {invoice.tin_number || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.registrationNoNew}</b> {invoice.vendor_registration_no_new || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.registrationNoOld}</b> {invoice.vendor_registration_no_old || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.phone}</b> {invoice.phone || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.email}</b> {invoice.email || '-'}</div>
+        <div className="md:col-span-2"><b>{t.documents.invoiceDetailPage.address}</b><br/>{invoice.address || '-'}</div>
       </div>
     </div>
   );
 }
 
-function CustomerDetailsCard({ invoice, isEditMode }: any) {
+function CustomerDetailsCard({ invoice, isEditMode, t }: any) {
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">👤 Customer Details</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.customerDetails}</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><b>Customer Name:</b> {invoice.customer_name || '-'}</div>
-        <div><b>Registration No:</b> {invoice.customer_registration_no || '-'}</div>
-        <div><b>SST Number:</b> {invoice.customer_sst_number || '-'}</div>
-        <div className="md:col-span-2"><b>Address:</b><br/>{invoice.customer_address || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.customerName}</b> {invoice.customer_name || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.customerRegistrationNo}</b> {invoice.customer_registration_no || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.customerSstNumber}</b> {invoice.customer_sst_number || '-'}</div>
+        <div className="md:col-span-2"><b>{t.documents.invoiceDetailPage.customerAddress}</b><br/>{invoice.customer_address || '-'}</div>
       </div>
     </div>
   );
 }
 
-function BankingDetailsCard({ invoice, isEditMode }: any) {
+function BankingDetailsCard({ invoice, isEditMode, t }: any) {
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">🏦 Banking & Payment Details</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.bankingDetails}</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><b>Bank Name:</b> {invoice.bank_name || '-'}</div>
-        <div><b>Account No:</b> {invoice.bank_account_no || '-'}</div>
-        <div><b>Beneficiary:</b> {invoice.bank_beneficiary_name || '-'}</div>
-        <div><b>SWIFT Code:</b> {invoice.bank_swift_code || '-'}</div>
-        <div className="md:col-span-2"><b>Payment Methods:</b> {invoice.accepted_payment_methods || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.bankName}</b> {invoice.bank_name || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.accountNo}</b> {invoice.bank_account_no || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.beneficiary}</b> {invoice.bank_beneficiary_name || '-'}</div>
+        <div><b>{t.documents.invoiceDetailPage.swiftCode}</b> {invoice.bank_swift_code || '-'}</div>
+        <div className="md:col-span-2"><b>{t.documents.invoiceDetailPage.paymentMethods}</b> {invoice.accepted_payment_methods || '-'}</div>
       </div>
     </div>
   );
 }
 
-function RemarksCard({ invoice, isEditMode }: any) {
+function RemarksCard({ invoice, isEditMode, t }: any) {
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">📝 Remarks</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.remarks}</h3>
       <div>{invoice.remarks || '-'}</div>
     </div>
   );
 }
 
-function LineItemsCard({ invoiceId, lineItems, onAutoClassify, isClassifying }: any) {
+function LineItemsCard({ invoiceId, lineItems, onAutoClassify, isClassifying, t }: any) {
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <h3 className="text-lg font-semibold mb-4">📊 Line Items</h3>
+      <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.lineItems}</h3>
 
       {lineItems.length > 0 ? (
         <div className="overflow-x-auto mb-4">
           <table className="w-full">
             <thead className="bg-[var(--muted)]">
               <tr>
-                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">Description</th>
-                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">Qty</th>
-                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">UOM</th>
-                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">Unit Price</th>
-                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">Line Total</th>
-                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">Account</th>
+                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.description}</th>
+                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.qty}</th>
+                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.uom}</th>
+                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.unitPrice}</th>
+                <th className="px-4 py-2 text-right text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.lineTotal}</th>
+                <th className="px-4 py-2 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.account}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -515,19 +518,19 @@ function LineItemsCard({ invoiceId, lineItems, onAutoClassify, isClassifying }: 
           </table>
         </div>
       ) : (
-        <div className="text-sm text-[var(--muted-foreground)] mb-4">No line items captured.</div>
+        <div className="text-sm text-[var(--muted-foreground)] mb-4">{t.documents.invoiceDetailPage.noLineItems}</div>
       )}
 
       <div className="flex gap-3">
-        <button className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white">
-          Add Line Item
+        <button className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors hover:text-white">
+          {t.documents.invoiceDetailPage.addLineItem}
         </button>
         <button
           onClick={onAutoClassify}
           disabled={isClassifying}
-          className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 hover:text-white"
+          className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 hover:text-white"
         >
-          {isClassifying ? '🤖 AI is thinking...' : '🤖 AI Classify Account'}
+          {isClassifying ? t.documents.invoiceDetailPage.aiThinking : t.documents.invoiceDetailPage.aiClassifyAccount}
         </button>
       </div>
     </div>

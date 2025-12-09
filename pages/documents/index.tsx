@@ -1,8 +1,10 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
+import { Plus } from "lucide-react";
 
 // Types
 interface Vendor {
@@ -50,6 +52,7 @@ interface Pagination {
 
 const DocumentsListing = () => {
   const router = useRouter();
+  const { t } = useLanguage();
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -233,10 +236,11 @@ const DocumentsListing = () => {
   // Bulk actions
   const bulkDelete = async () => {
     if (selectedInvoices.size === 0) {
-      alert('Please select at least one invoice.');
+      alert(t.documents.alerts.selectAtLeastOne);
       return;
     }
-    if (!confirm(`Are you sure you want to delete ${selectedInvoices.size} invoice(s)? This action cannot be undone.`)) {
+    const message = t.documents.alerts.deleteConfirm.replace('{count}', selectedInvoices.size.toString());
+    if (!confirm(message)) {
       return;
     }
     // TODO: Implement bulk delete API call
@@ -245,7 +249,7 @@ const DocumentsListing = () => {
 
   const exportSelected = async () => {
     if (selectedInvoices.size === 0) {
-      alert('Please select at least one invoice to export.');
+      alert(t.documents.alerts.exportSelectAtLeastOne);
       return;
     }
     // TODO: Implement export API call
@@ -253,7 +257,8 @@ const DocumentsListing = () => {
   };
 
   const deleteInvoice = async (invoiceId: number) => {
-    if (!confirm(`Delete invoice #${invoiceId}? This action cannot be undone.`)) {
+    const message = t.documents.alerts.deleteConfirmSingle.replace('{id}', invoiceId.toString());
+    if (!confirm(message)) {
       return;
     }
     // TODO: Implement delete API call
@@ -261,22 +266,22 @@ const DocumentsListing = () => {
   };
 
   const recalcIndicators = () => {
-    alert('Verification indicators are shown per invoice. Open invoice to inspect mismatches.');
+    alert(t.documents.alerts.verifyIndicators);
   };
 
   return (
-    <AppLayout pageName="Documents">
+    <AppLayout pageName={t.documents.title}>
       {/* Filter Panel */}
       <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] mb-6">
         <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
-          <h3 className="text-lg font-semibold m-0">🔍 Filters & Search</h3>
+          <h3 className="text-lg font-semibold m-0">🔍 {t.documents.filters.title}</h3>
           <button
             type="button"
-            className="px-3 py-1.5 text-sm rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-white transition-colors"
+            className="px-3 py-1.5 text-sm rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] transition-colors"
             onClick={toggleFilters}
           >
             <span className="mr-1">⚙️</span>
-            Toggle Filters
+            {t.documents.filters.toggleFilters}
           </button>
         </div>
 
@@ -284,21 +289,21 @@ const DocumentsListing = () => {
           <form onSubmit={applyFilters} className="p-6">
             {/* Date Range */}
             <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Date Range</label>
+              <label className="block text-sm font-medium mb-2">{t.documents.filters.dateRange}</label>
               <div className="flex gap-2 max-w-md mb-3">
                 <input
                   type="date"
                   value={filters.start_date}
                   onChange={(e) => handleFilterChange('start_date', e.target.value)}
                   className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  placeholder="Start Date"
+                  placeholder={t.documents.filters.startDate}
                 />
                 <input
                   type="date"
                   value={filters.end_date}
                   onChange={(e) => handleFilterChange('end_date', e.target.value)}
                   className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  placeholder="End Date"
+                  placeholder={t.documents.filters.endDate}
                 />
               </div>
               <div className="flex gap-2 flex-wrap">
@@ -307,13 +312,13 @@ const DocumentsListing = () => {
                     key={preset}
                     type="button"
                     onClick={() => setDateRange(preset)}
-                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                   >
-                    {preset === 'today' && 'Today'}
-                    {preset === 'week' && 'This Week'}
-                    {preset === 'month' && 'This Month'}
-                    {preset === 'quarter' && 'This Quarter'}
-                    {preset === 'year' && 'This Year'}
+                    {preset === 'today' && t.dashboard.filters.today}
+                    {preset === 'week' && t.dashboard.filters.thisWeek}
+                    {preset === 'month' && t.dashboard.filters.thisMonth}
+                    {preset === 'quarter' && t.dashboard.filters.thisQuarter}
+                    {preset === 'year' && t.dashboard.filters.thisYear}
                   </button>
                 ))}
               </div>
@@ -321,25 +326,25 @@ const DocumentsListing = () => {
 
             {/* Search */}
             <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Search</label>
+              <label className="block text-sm font-medium mb-2">{t.documents.filters.search}</label>
               <input
                 type="text"
                 value={filters.search}
                 onChange={(e) => handleFilterChange('search', e.target.value)}
-                placeholder="Invoice number, vendor name..."
+                placeholder={t.documents.filters.searchPlaceholder}
                 className="w-full max-w-lg px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
               />
             </div>
 
             {/* Remark/Tag */}
             <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">Remark / Tag</label>
+              <label className="block text-sm font-medium mb-2">{t.documents.filters.remarkTag}</label>
               <select
                 value={filters.remark}
                 onChange={(e) => handleFilterChange('remark', e.target.value)}
                 className="w-full max-w-lg px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
               >
-                <option value="">All Tags</option>
+                <option value="">{t.documents.filters.allTags}</option>
                 {remarks.map((remark, idx) => (
                   <option key={idx} value={remark.remarks}>
                     {remark.remarks}
@@ -352,13 +357,13 @@ const DocumentsListing = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {/* Vendor */}
               <div>
-                <label className="block text-sm font-medium mb-2">Vendor</label>
+                <label className="block text-sm font-medium mb-2">{t.documents.filters.vendor}</label>
                 <select
                   value={filters.vendor_id}
                   onChange={(e) => handleFilterChange('vendor_id', e.target.value)}
                   className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                 >
-                  <option value="">All Vendors</option>
+                  <option value="">{t.documents.filters.allVendors}</option>
                   {vendors.map((vendor) => (
                     <option key={vendor.id} value={vendor.id}>
                       {vendor.name}
@@ -369,13 +374,13 @@ const DocumentsListing = () => {
 
               {/* Currency */}
               <div>
-                <label className="block text-sm font-medium mb-2">Currency</label>
+                <label className="block text-sm font-medium mb-2">{t.documents.filters.currency}</label>
                 <select
                   value={filters.currency}
                   onChange={(e) => handleFilterChange('currency', e.target.value)}
                   className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                 >
-                  <option value="">All Currencies</option>
+                  <option value="">{t.documents.filters.allCurrencies}</option>
                   <option value="MYR">MYR</option>
                   <option value="USD">USD</option>
                   <option value="SGD">SGD</option>
@@ -384,7 +389,7 @@ const DocumentsListing = () => {
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium mb-2">Status</label>
+                <label className="block text-sm font-medium mb-2">{t.documents.filters.status}</label>
                 <div className="space-y-2">
                   {['draft', 'validated', 'posted'].map((status) => (
                     <label key={status} className="flex items-center space-x-2">
@@ -394,7 +399,11 @@ const DocumentsListing = () => {
                         onChange={(e) => handleStatusChange(status, e.target.checked)}
                         className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                       />
-                      <span className="text-sm capitalize">{status}</span>
+                      <span className="text-sm capitalize">
+                        {status === 'draft' ? t.dashboard.status.draft :
+                         status === 'validated' ? t.dashboard.status.validated :
+                         status === 'posted' ? t.dashboard.status.posted : status}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -402,13 +411,13 @@ const DocumentsListing = () => {
 
               {/* Amount Range */}
               <div>
-                <label className="block text-sm font-medium mb-2">Amount Range</label>
+                <label className="block text-sm font-medium mb-2">{t.documents.filters.amountRange}</label>
                 <div className="flex gap-2 w-full">
                   <input
                     type="number"
                     value={filters.min_amount}
                     onChange={(e) => handleFilterChange('min_amount', e.target.value)}
-                    placeholder="Min"
+                    placeholder={t.documents.filters.min}
                     step="0.01"
                     className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                   />
@@ -416,7 +425,7 @@ const DocumentsListing = () => {
                     type="number"
                     value={filters.max_amount}
                     onChange={(e) => handleFilterChange('max_amount', e.target.value)}
-                    placeholder="Max"
+                    placeholder={t.documents.filters.max}
                     step="0.01"
                     className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                   />
@@ -429,17 +438,17 @@ const DocumentsListing = () => {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
               >
                 <span className="mr-2">🔄</span>
-                Clear All
+                {t.documents.filters.clearAll}
               </button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
               >
                 <span className="mr-2">🔍</span>
-                Apply Filters
+                {t.documents.filters.applyFilters}
               </button>
             </div>
           </form>
@@ -451,34 +460,34 @@ const DocumentsListing = () => {
         {/* Header */}
         <div className="p-6 border-b border-[var(--border)] flex flex-wrap justify-between items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold m-0">AP Invoices</h2>
+            <h2 className="text-2xl font-bold m-0">{t.documents.title}</h2>
             {totalCount > 0 && (
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Showing {invoices.length} of {totalCount} invoices
+                {t.documents.table.showing} {invoices.length} {t.documents.table.of} {totalCount} {t.documents.table.invoices}
               </p>
             )}
           </div>
           <div className="flex gap-3 flex-wrap">
             <button
               onClick={() => router.push('/documents/new')}
-              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
+              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
             >
-              <span className="mr-2">➕</span>
-              New Invoice
+              <Plus className="h-4 w-4 mr-2" />
+              {t.documents.newInvoice}
             </button>
             <button
               onClick={() => router.push('/documents/batch')}
-              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
               <span className="mr-2">📁</span>
-              Batch Upload
+              {t.documents.batchUpload}
             </button>
             <button
               onClick={recalcIndicators}
-              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
             >
               <span className="mr-2">✓</span>
-              Verify Subtotals
+              {t.documents.verifySubtotals}
             </button>
             <button
               onClick={exportSelected}
@@ -486,7 +495,7 @@ const DocumentsListing = () => {
               className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="mr-2">📤</span>
-              Export Selected {selectedInvoices.size > 0 && `(${selectedInvoices.size})`}
+              {t.documents.exportSelected} {selectedInvoices.size > 0 && `(${selectedInvoices.size})`}
             </button>
             <button
               onClick={bulkDelete}
@@ -494,7 +503,7 @@ const DocumentsListing = () => {
               className="px-4 py-2 bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="mr-2">🗑️</span>
-              Delete Selected {selectedInvoices.size > 0 && `(${selectedInvoices.size})`}
+              {t.documents.deleteSelected} {selectedInvoices.size > 0 && `(${selectedInvoices.size})`}
             </button>
           </div>
         </div>
@@ -512,24 +521,24 @@ const DocumentsListing = () => {
                     className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">ID</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Vendor</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Invoice No</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Currency</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Total</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Remark/Tag</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.vendor}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.date}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.remarkTag}</th>
                 {orgRole === 'admin' && (
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Uploaded By</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
                 )}
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Verify</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Actions</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-gray-800 hover:text-white dark:hover:bg-gray-900 transition-colors">
+                <tr key={invoice.id} className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors">
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -544,11 +553,11 @@ const DocumentsListing = () => {
                       <div className="font-medium">{invoice.vendor_name || '-'}</div>
                       {(invoice.vendor_tax_id || invoice.vendor_tin_number || invoice.vendor_reg_no || invoice.vendor_reg_no_new || invoice.vendor_reg_no_old) && (
                         <div className="text-xs text-[var(--muted-foreground)] space-y-0.5 mt-1">
-                          {invoice.vendor_tax_id && <div>SST: {invoice.vendor_tax_id}</div>}
-                          {invoice.vendor_tin_number && <div>TIN: {invoice.vendor_tin_number}</div>}
-                          {invoice.vendor_reg_no_new && <div>Reg (New): {invoice.vendor_reg_no_new}</div>}
-                          {invoice.vendor_reg_no && !invoice.vendor_reg_no_new && <div>Reg: {invoice.vendor_reg_no}</div>}
-                          {invoice.vendor_reg_no_old && <div>Reg (Old): {invoice.vendor_reg_no_old}</div>}
+                          {invoice.vendor_tax_id && <div>{t.documents.vendorInfo.sst}: {invoice.vendor_tax_id}</div>}
+                          {invoice.vendor_tin_number && <div>{t.documents.vendorInfo.tin}: {invoice.vendor_tin_number}</div>}
+                          {invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.regNew}: {invoice.vendor_reg_no_new}</div>}
+                          {invoice.vendor_reg_no && !invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.reg}: {invoice.vendor_reg_no}</div>}
+                          {invoice.vendor_reg_no_old && <div>{t.documents.vendorInfo.regOld}: {invoice.vendor_reg_no_old}</div>}
                         </div>
                       )}
                     </div>
@@ -585,7 +594,7 @@ const DocumentsListing = () => {
                             : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                         }`}
                       >
-                        {verifyMap[invoice.id].status === 'ok' ? 'OK' : verifyMap[invoice.id].status === 'mismatch' ? 'Check' : '-'}
+                        {verifyMap[invoice.id].status === 'ok' ? t.documents.verify.ok : verifyMap[invoice.id].status === 'mismatch' ? t.documents.verify.check : t.documents.verify.unknown}
                       </span>
                     ) : (
                       <span className="inline-block px-2 py-1 text-xs rounded-md bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">-</span>
@@ -601,22 +610,24 @@ const DocumentsListing = () => {
                           : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                       }`}
                     >
-                      {invoice.status || 'draft'}
+                      {invoice.status === 'draft' ? t.dashboard.status.draft :
+                       invoice.status === 'validated' ? t.dashboard.status.validated :
+                       invoice.status === 'posted' ? t.dashboard.status.posted : invoice.status || t.dashboard.status.draft}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button
                         onClick={() => router.push(`/documents/${invoice.id}`)}
-                        className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                        className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                       >
-                        Open
+                        {t.documents.table.open}
                       </button>
                       <button
                         onClick={() => deleteInvoice(invoice.id)}
                         className="px-3 py-1 text-sm bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors"
                       >
-                        Delete
+                        {t.documents.table.delete}
                       </button>
                     </div>
                   </td>
@@ -630,7 +641,7 @@ const DocumentsListing = () => {
         {pagination && (
           <div className="p-4 border-t border-[var(--border)] flex flex-wrap justify-between items-center gap-4">
             <div className="text-sm text-[var(--muted-foreground)]">
-              Showing {pagination.start} to {pagination.end} of {pagination.total} invoices
+              {t.documents.table.showing} {pagination.start} {t.documents.table.to} {pagination.end} {t.documents.table.of} {pagination.total} {t.documents.table.invoices}
             </div>
 
             <div className="flex gap-2 items-center">
@@ -638,10 +649,10 @@ const DocumentsListing = () => {
               {pagination.has_prev ? (
                 <button
                   onClick={() => setFilters({ ...filters, page: pagination.prev_num! })}
-                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                 >
                   <span className="mr-1">←</span>
-                  Previous
+                  {t.documents.pagination.previous}
                 </button>
               ) : (
                 <button
@@ -649,7 +660,7 @@ const DocumentsListing = () => {
                   className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md opacity-50 cursor-not-allowed"
                 >
                   <span className="mr-1">←</span>
-                  Previous
+                  {t.documents.pagination.previous}
                 </button>
               )}
 
@@ -663,7 +674,7 @@ const DocumentsListing = () => {
                       className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                         page === pagination.page
                           ? 'bg-[var(--primary)] text-white'
-                          : 'border border-[var(--border)] hover:bg-gray-200 dark:hover:bg-gray-800'
+                          : 'border border-[var(--border)] hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)]'
                       }`}
                     >
                       {page}
@@ -680,9 +691,9 @@ const DocumentsListing = () => {
               {pagination.has_next ? (
                 <button
                   onClick={() => setFilters({ ...filters, page: pagination.next_num! })}
-                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                 >
-                  Next
+                  {t.documents.pagination.next}
                   <span className="ml-1">→</span>
                 </button>
               ) : (
@@ -690,7 +701,7 @@ const DocumentsListing = () => {
                   disabled
                   className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md opacity-50 cursor-not-allowed"
                 >
-                  Next
+                  {t.documents.pagination.next}
                   <span className="ml-1">→</span>
                 </button>
               )}
@@ -698,7 +709,7 @@ const DocumentsListing = () => {
 
             {/* Items per page */}
             <div className="flex items-center gap-2">
-              <label className="text-sm text-[var(--muted-foreground)]">Items per page:</label>
+              <label className="text-sm text-[var(--muted-foreground)]">{t.documents.pagination.itemsPerPage}</label>
               <select
                 value={filters.per_page}
                 onChange={(e) => changePageSize(Number(e.target.value))}

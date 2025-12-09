@@ -1,6 +1,8 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 // Types
@@ -9,6 +11,7 @@ interface Account {
     account_name: string;
     account_type: string;
     description?: string;
+    example_items?: string;
 }
 
 interface AccountGroups {
@@ -25,6 +28,7 @@ const PREDEFINED_ACCOUNT_TYPES = [
 ];
 
 const ChartOfAccounts = () => {
+    const { t } = useLanguage();
     // State
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [accountTypes] = useState<string[]>(PREDEFINED_ACCOUNT_TYPES);
@@ -39,6 +43,7 @@ const ChartOfAccounts = () => {
         custom_account_type: '',
         account_name: '',
         description: '',
+        example_items: '',
     });
 
     // Load accounts data
@@ -289,6 +294,7 @@ const ChartOfAccounts = () => {
             custom_account_type: '',
             account_name: '',
             description: '',
+            example_items: '',
         });
         setIsCustomType(false);
         setIsModalOpen(true);
@@ -306,6 +312,7 @@ const ChartOfAccounts = () => {
             custom_account_type: isCustom ? account.account_type : '',
             account_name: account.account_name,
             description: account.description || '',
+            example_items: (account as any).example_items || '',
         });
         setIsModalOpen(true);
     };
@@ -330,7 +337,7 @@ const ChartOfAccounts = () => {
         // Validate custom account type
         if (formData.account_type === '__CUSTOM__') {
             if (!formData.custom_account_type.trim()) {
-                alert('Please enter a custom account type');
+                alert(t.accounts.customTypeRequired);
                 return;
             }
         }
@@ -347,163 +354,240 @@ const ChartOfAccounts = () => {
         console.log('Saving account:', { ...formData, account_type: accountType });
 
         // Mock success - in real implementation, make API call
-        alert(editingId ? 'Account updated successfully!' : 'Account created successfully!');
+        alert(editingId ? t.accounts.accountUpdated : t.accounts.accountCreated);
         closeAccountModal();
         // loadAccounts(); // Uncomment when API is ready
     };
 
     const deleteAccount = async (id: number, name: string) => {
-        if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+        if (!confirm(t.accounts.deleteConfirm.replace('{name}', name))) {
             return;
         }
 
         // TODO: Replace with actual API call
         console.log('Deleting account:', id);
-        alert('Account deleted successfully!');
+        alert(t.accounts.accountDeleted);
         // loadAccounts(); // Uncomment when API is ready
     };
 
     const importDefaultAccounts = async () => {
-        if (!confirm('This will import 40+ default accounts covering common business expenses, income, and assets.\n\nExisting accounts will not be affected.\n\nProceed?')) {
+        if (!confirm(t.accounts.importDefaultsConfirm)) {
             return;
         }
 
         // TODO: Replace with actual API call
         console.log('Importing default accounts');
-        alert('Default accounts imported successfully!');
+        alert(t.accounts.importDefaultsSuccess);
         // loadAccounts(); // Uncomment when API is ready
     };
 
     const importCustomAccounts = async () => {
-        if (!confirm('This will import a comprehensive chart of accounts including:\n\n• EQUITY accounts (Retained Earning, Share Capital, Profit/Loss)\n• CURRENT LIABILITIES (Accruals, Deposits, Loans, etc.)\n• CURRENT ASSETS (Bank Balance, Petty Cash, Debtors, etc.)\n• FIXED ASSETS (Fixed Asset, Accumulated Depreciation)\n• INCOME accounts (Revenue, Other Income)\n• COST OF SALES\n• ADMIN EXPENSES (30+ detailed expense accounts)\n• FINANCE COST (Bank charges, Interest, etc.)\n• OTHER EXPENSES (20+ miscellaneous expenses)\n• TAX EXPENSES\n\nExisting accounts will not be affected.\n\nProceed?')) {
+        if (!confirm(t.accounts.importCustomCOAConfirm)) {
             return;
         }
 
         // TODO: Replace with actual API call
         console.log('Importing custom accounts');
-        alert('Custom accounts imported successfully!');
+        alert(t.accounts.importCustomCOASuccess);
         // loadAccounts(); // Uncomment when API is ready
     };
 
+    // Map account types to translations
+    const getAccountTypeLabel = (type: string) => {
+        const typeMap: { [key: string]: string } = {
+            'Assets': t.accounts.accountTypes.assets,
+            'Liabilities': t.accounts.accountTypes.liabilities,
+            'Equity': t.accounts.accountTypes.equity,
+            'Income': t.accounts.accountTypes.income,
+            'Expenses': t.accounts.accountTypes.expenses,
+            'Cost of Goods Sold': t.accounts.accountTypes.costOfGoodsSold,
+        };
+        return typeMap[type] || type;
+    };
+
     return (
-        <AppLayout pageName="Chart of Accounts">
+        <AppLayout pageName={t.accounts.title}>
             <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
                 {/* Header */}
-                <div className="p-6 border-b border-[var(--border)]">
-                    <div className="flex flex-wrap justify-between items-start gap-4">
+                <div className="p-4 md:p-6 border-b border-[var(--border)]">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-                                Chart of Accounts
+                            <h2 className="text-xl md:text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+                                {t.accounts.title}
                             </h2>
                             <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                Define your custom accounts with descriptions for AI-powered classification
+                                {t.accounts.description}
                             </p>
                         </div>
-                        <div className="flex gap-3 flex-wrap">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                             <button
                                 onClick={importDefaultAccounts}
-                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
-                                title="Import 40+ pre-configured accounts"
+                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors text-sm"
+                                title={t.accounts.importDefaultsTitle}
                             >
                                 <span className="mr-2">📥</span>
-                                Import Defaults
+                                {t.accounts.importDefaults}
                             </button>
                             <button
                                 onClick={importCustomAccounts}
-                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
-                                title="Import custom chart of accounts"
+                                className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors text-sm"
+                                title={t.accounts.importCustomCOATitle}
                             >
                                 <span className="mr-2">📋</span>
-                                Import Custom COA
+                                {t.accounts.importCustomCOA}
                             </button>
                             <button
-                                onClick={showAddAccountModal}
-                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
+                                onClick={() => showAddAccountModal()}
+                                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center justify-center text-sm"
                             >
-                                <span className="mr-2">➕</span>
-                                Add Account
+                                <Plus className="h-4 w-4 mr-2" />
+                                {t.accounts.newAccount}
                             </button>
                         </div>
                     </div>
                 </div>
 
                 {/* Account Groups */}
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                     {accountTypes.map(accountType => (
                         <div
                             key={accountType}
-                            className="mb-8 pb-6 border-b border-[var(--border)] last:border-b-0"
+                            className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0"
                         >
                             <h3
-                                className="text-base font-bold mb-4 px-3 py-2 rounded border-l-4"
+                                className="text-sm md:text-base font-bold mb-3 md:mb-4 px-3 py-2 rounded border-l-4"
                                 style={{
                                     color: 'var(--accent)',
                                     backgroundColor: 'rgba(106,166,255,0.1)',
                                     borderLeftColor: 'var(--primary)',
                                 }}
                             >
-                                {accountType}
+                                {getAccountTypeLabel(accountType)}
                             </h3>
 
                             {accountGroups[accountType] && accountGroups[accountType].length > 0 ? (
-                                <table className="w-full">
-                                    <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
-                                        <tr>
-                                            <th
-                                                className="px-4 py-3 text-left text-sm font-semibold"
-                                                style={{ width: '30%', color: 'var(--foreground)' }}
-                                            >
-                                                Account Name
-                                            </th>
-                                            <th
-                                                className="px-4 py-3 text-left text-sm font-semibold"
-                                                style={{ width: '50%', color: 'var(--foreground)' }}
-                                            >
-                                                Description
-                                            </th>
-                                            <th
-                                                className="px-4 py-3 text-left text-sm font-semibold"
-                                                style={{ width: '20%', color: 'var(--foreground)' }}
-                                            >
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-[var(--border)]">
+                                <>
+                                    {/* Mobile Card Layout */}
+                                    <div className="md:hidden space-y-3">
                                         {accountGroups[accountType].map(account => (
-                                            <tr
+                                            <div
                                                 key={account.id}
-                                                className="hover:bg-gray-800 hover:text-white dark:hover:bg-gray-900 transition-colors"
+                                                className="border border-[var(--border)] rounded-lg overflow-hidden"
+                                                style={{ backgroundColor: 'var(--card)' }}
                                             >
-                                                <td className="px-4 py-3">
-                                                    <strong>{account.account_name}</strong>
-                                                </td>
-                                                <td
-                                                    className="px-4 py-3 text-sm"
-                                                    style={{ color: 'var(--muted-foreground)' }}
-                                                >
-                                                    {account.description || '-'}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => editAccount(account)}
-                                                            className="px-3 py-1 text-sm border border-[var(--border)] rounded hover:bg-[var(--primary)] hover:text-white hover:border-[var(--primary)] transition-colors"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            onClick={() => deleteAccount(account.id, account.account_name)}
-                                                            className="px-3 py-1 text-sm border border-red-500 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                <div className="p-4">
+                                                    <h4 className="font-semibold text-base mb-1" style={{ color: 'var(--foreground)' }}>
+                                                        {account.account_name}
+                                                    </h4>
+                                                    {account.description && (
+                                                        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                            {account.description}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="flex w-full border-t" style={{ borderTopColor: 'var(--border)' }}>
+                                                    <button
+                                                        onClick={() => editAccount(account)}
+                                                        className="flex-1 flex items-center justify-center py-3 border-r transition-colors"
+                                                        style={{ 
+                                                            borderRightColor: 'var(--border)',
+                                                            color: 'var(--foreground)'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.background = 'var(--primary)';
+                                                            e.currentTarget.style.color = 'var(--primary-foreground)';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.style.background = 'transparent';
+                                                            e.currentTarget.style.color = 'var(--foreground)';
+                                                        }}
+                                                        aria-label={t.accounts.edit}
+                                                    >
+                                                        <Edit className="h-5 w-5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteAccount(account.id, account.account_name)}
+                                                        className="flex-1 flex items-center justify-center py-3 transition-colors"
+                                                        style={{ color: 'var(--error)' }}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.background = 'var(--error)';
+                                                            e.currentTarget.style.color = 'white';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.style.background = 'transparent';
+                                                            e.currentTarget.style.color = 'var(--error)';
+                                                        }}
+                                                        aria-label={t.accounts.delete}
+                                                    >
+                                                        <Trash2 className="h-5 w-5" />
+                                                    </button>
+                                                </div>
+                                            </div>
                                         ))}
-                                    </tbody>
-                                </table>
+                                    </div>
+
+                                    {/* Desktop Table Layout */}
+                                    <div className="hidden md:block overflow-x-auto">
+                                        <table className="w-full min-w-[600px]">
+                                            <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
+                                                <tr>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-sm font-semibold"
+                                                        style={{ width: '30%', color: 'var(--foreground)' }}
+                                                    >
+                                                        {t.accounts.accountNameHeader}
+                                                    </th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-sm font-semibold"
+                                                        style={{ width: '50%', color: 'var(--foreground)' }}
+                                                    >
+                                                        {t.accounts.descriptionHeader}
+                                                    </th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-sm font-semibold"
+                                                        style={{ width: '20%', color: 'var(--foreground)' }}
+                                                    >
+                                                        {t.accounts.actionsHeader}
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-[var(--border)]">
+                                                {accountGroups[accountType].map(account => (
+                                                    <tr
+                                                        key={account.id}
+                                                        className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                                                    >
+                                                        <td className="px-4 py-3">
+                                                            <strong className="text-base">{account.account_name}</strong>
+                                                        </td>
+                                                        <td
+                                                            className="px-4 py-3 text-sm"
+                                                            style={{ color: 'var(--muted-foreground)' }}
+                                                        >
+                                                            {account.description || '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => editAccount(account)}
+                                                                    className="px-3 py-1 text-sm border border-[var(--border)] rounded hover:bg-[var(--primary)] hover:text-white hover:border-[var(--primary)] transition-colors whitespace-nowrap"
+                                                                >
+                                                                    {t.accounts.edit}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => deleteAccount(account.id, account.account_name)}
+                                                                    className="px-3 py-1 text-sm border border-red-500 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors whitespace-nowrap"
+                                                                >
+                                                                    {t.accounts.delete}
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
                             ) : (
                                 <div
                                     className="py-5 px-4 text-center text-sm italic rounded-lg"
@@ -512,7 +596,7 @@ const ChartOfAccounts = () => {
                                         backgroundColor: 'rgba(255,255,255,0.03)',
                                     }}
                                 >
-                                    No accounts defined for this type yet.
+                                    {t.accounts.noAccounts}
                                 </div>
                             )}
                         </div>
@@ -523,7 +607,7 @@ const ChartOfAccounts = () => {
             {/* Add/Edit Account Modal */}
             {isModalOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center md:items-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
@@ -532,19 +616,20 @@ const ChartOfAccounts = () => {
                     }}
                 >
                     <div
-                        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl"
+                        className="w-full h-full md:w-full md:max-w-2xl md:h-auto md:max-h-[90vh] overflow-y-auto md:rounded-xl shadow-2xl"
                         style={{
                             backgroundColor: 'var(--card)',
                             border: '1px solid var(--border)',
                         }}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         {/* Modal Header */}
                         <div
-                            className="flex justify-between items-center p-6 border-b"
+                            className="flex justify-between items-center p-4 md:p-6 border-b sticky top-0 bg-[var(--card)] z-10"
                             style={{ borderBottomColor: 'var(--border)' }}
                         >
-                            <h3 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
-                                {editingId ? 'Edit Account' : 'Add Account'}
+                            <h3 className="text-lg md:text-xl font-bold" style={{ color: 'var(--foreground)' }}>
+                                {editingId ? t.accounts.editAccount : t.accounts.addAccount}
                             </h3>
                             <button
                                 onClick={closeAccountModal}
@@ -556,14 +641,14 @@ const ChartOfAccounts = () => {
                         </div>
 
                         {/* Modal Form */}
-                        <form onSubmit={saveAccount} className="p-6">
+                        <form onSubmit={saveAccount} className="p-4 md:p-6">
                             {/* Account Type */}
                             <div className="mb-4">
                                 <label
                                     className="block mb-2 text-sm font-semibold"
                                     style={{ color: 'var(--foreground)' }}
                                 >
-                                    Account Type *
+                                    {t.accounts.accountType} *
                                 </label>
                                 <select
                                     value={formData.account_type}
@@ -579,11 +664,11 @@ const ChartOfAccounts = () => {
                                         color: 'var(--foreground)',
                                     }}
                                 >
-                                    <option value="">-- Select Type --</option>
+                                    <option value="">{t.accounts.selectType}</option>
                                     {PREDEFINED_ACCOUNT_TYPES.map(type => (
-                                        <option key={type} value={type}>{type}</option>
+                                        <option key={type} value={type}>{getAccountTypeLabel(type)}</option>
                                     ))}
-                                    <option value="__CUSTOM__">Other (Custom Type)</option>
+                                    <option value="__CUSTOM__">{t.accounts.customType}</option>
                                 </select>
                             </div>
 
@@ -594,13 +679,13 @@ const ChartOfAccounts = () => {
                                         className="block mb-2 text-sm font-semibold"
                                         style={{ color: 'var(--foreground)' }}
                                     >
-                                        Custom Account Type *
+                                        {t.accounts.customAccountType} *
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.custom_account_type}
                                         onChange={(e) => handleInputChange('custom_account_type', e.target.value)}
-                                        placeholder="Enter custom account type"
+                                        placeholder={t.accounts.customAccountTypePlaceholder}
                                         required={isCustomType}
                                         className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                         style={{
@@ -618,13 +703,13 @@ const ChartOfAccounts = () => {
                                     className="block mb-2 text-sm font-semibold"
                                     style={{ color: 'var(--foreground)' }}
                                 >
-                                    Account Name *
+                                    {t.accounts.accountName} *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.account_name}
                                     onChange={(e) => handleInputChange('account_name', e.target.value)}
-                                    placeholder="e.g., Software Subscriptions"
+                                    placeholder={t.accounts.accountNamePlaceholder}
                                     required
                                     className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                     style={{
@@ -641,12 +726,12 @@ const ChartOfAccounts = () => {
                                     className="block mb-2 text-sm font-semibold"
                                     style={{ color: 'var(--foreground)' }}
                                 >
-                                    Description (for AI matching)
+                                    {t.accounts.descriptionLabel}
                                 </label>
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => handleInputChange('description', e.target.value)}
-                                    placeholder="Keywords: software, saas, subscription, license, cloud service"
+                                    placeholder={t.accounts.descriptionPlaceholder}
                                     rows={3}
                                     className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
                                     style={{
@@ -659,7 +744,35 @@ const ChartOfAccounts = () => {
                                     className="mt-2 text-xs italic"
                                     style={{ color: 'var(--muted-foreground)' }}
                                 >
-                                    Add keywords that commonly appear in invoice line descriptions. The AI will use these to classify expenses.
+                                    {t.accounts.descriptionHelp}
+                                </p>
+                            </div>
+
+                            {/* Example Items */}
+                            <div className="mb-4">
+                                <label
+                                    className="block mb-2 text-sm font-semibold"
+                                    style={{ color: 'var(--foreground)' }}
+                                >
+                                    {t.accounts.exampleItems}
+                                </label>
+                                <textarea
+                                    value={formData.example_items}
+                                    onChange={(e) => handleInputChange('example_items', e.target.value)}
+                                    placeholder={t.accounts.exampleItemsPlaceholder}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                                <p
+                                    className="mt-2 text-xs italic"
+                                    style={{ color: 'var(--muted-foreground)' }}
+                                >
+                                    {t.accounts.exampleItemsHelp}
                                 </p>
                             </div>
 
@@ -672,14 +785,14 @@ const ChartOfAccounts = () => {
                                     type="submit"
                                     className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium"
                                 >
-                                    Save Account
+                                    {t.accounts.saveAccount}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={closeAccountModal}
-                                    className="flex-1 px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 transition-colors"
+                                    className="flex-1 px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                 >
-                                    Cancel
+                                    {t.accounts.cancel}
                                 </button>
                             </div>
                         </form>

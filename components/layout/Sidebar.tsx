@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
+import { useLanguage } from '@/lib/i18n';
 import {
   FileCheck,
   LayoutDashboard,
@@ -9,28 +11,25 @@ import {
   Users,
   BarChart3,
   FileText,
+  Menu,
 } from 'lucide-react';
 
 interface SidebarProps {
   isCollapsed: boolean;
 }
 
-/**
- * =====================================================
- * 🔧 CUSTOMIZE YOUR NAVIGATION HERE
- * =====================================================
- * Edit the navItems array below to add/remove menu items
- */
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/documents', label: 'Documents', icon: FileCheck },
-  { href: '/coa-viewer', label: 'COA Viewer', icon: FileText },
-  { href: '/chart-of-accounts', label: 'Accounts', icon: Users },
-  { href: '/settings', label: 'Settings', icon: Settings },
-];
-
 export function Sidebar({ isCollapsed }: SidebarProps) {
   const router = useRouter();
+  const { t } = useLanguage();
+
+  const navItems = [
+    { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
+    { href: '/documents', label: t.nav.documents, icon: FileCheck },
+    { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
+    { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
+    { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
+    { href: '/settings', label: t.nav.settings, icon: Settings },
+  ];
 
   return (
     <aside
@@ -46,29 +45,32 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
     >
       {/* Logo / Brand */}
       <div
-        className="flex h-16 items-center justify-between px-4"
-        style={{ borderBottom: '1px solid var(--border)' }}
+        className="flex items-center justify-between px-4"
       >
         {!isCollapsed && (
-          <Link href="/" className="flex items-center gap-2">
-            <div
-              className="h-8 w-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--accent)' }}
-            >
-              <span className="font-bold text-sm" style={{ color: 'var(--accent-foreground)' }}>EZ</span>
+          <Link href="/" className="flex items-center gap-2 py-3">
+            <div className="h-24 w-24 relative flex-shrink-0">
+              <Image
+                src="/smartdok.png"
+                alt="Smartdok.ai"
+                fill
+                className="object-contain"
+              />
             </div>
             <span className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>
-              EZTrack
+              Smartdok.ai
             </span>
           </Link>
         )}
         {isCollapsed && (
           <Link href="/" className="flex items-center justify-center w-full">
-            <div
-              className="h-8 w-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--accent)' }}
-            >
-              <span className="font-bold text-sm" style={{ color: 'var(--accent-foreground)' }}>EZ</span>
+            <div className="h-20 w-20 relative">
+              <Image
+                src="/smartdok.png"
+                alt="Smartdok.ai"
+                fill
+                className="object-contain"
+              />
             </div>
           </Link>
         )}

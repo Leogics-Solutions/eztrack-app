@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 
 // Types
@@ -30,6 +31,7 @@ interface UsageStats {
 }
 
 const SettingsPage = () => {
+    const { t } = useLanguage();
     // State
     const [user, setUser] = useState<User>({
         full_name: 'John Doe',
@@ -97,7 +99,7 @@ const SettingsPage = () => {
 
     const saveProfile = async () => {
         if (!profileFullName.trim()) {
-            showNotification('Full name is required', 'error');
+            showNotification(t.settings.fullName + ' is required', 'error');
             return;
         }
 
@@ -111,10 +113,10 @@ const SettingsPage = () => {
             // const data = await resp.json();
 
             setUser({ ...user, full_name: profileFullName });
-            showNotification('Profile updated successfully', 'success');
+            showNotification(t.settings.profileUpdated, 'success');
             closeProfileModal();
         } catch (error) {
-            showNotification('Failed to update profile', 'error');
+            showNotification(t.settings.profileUpdateFailed, 'error');
         }
     };
 
@@ -131,7 +133,7 @@ const SettingsPage = () => {
 
     const savePassword = async () => {
         if (!currentPassword || !newPassword) {
-            showNotification('Please fill in all fields', 'error');
+            showNotification(t.settings.fillAllFields, 'error');
             return;
         }
 
@@ -144,10 +146,10 @@ const SettingsPage = () => {
             // });
             // const data = await resp.json();
 
-            showNotification('Password updated successfully', 'success');
+            showNotification(t.settings.passwordUpdated, 'success');
             closePasswordModal();
         } catch (error) {
-            showNotification('Failed to update password', 'error');
+            showNotification(t.settings.passwordUpdateFailed, 'error');
         }
     };
 
@@ -171,19 +173,19 @@ const SettingsPage = () => {
             // const data = await resp.json();
 
             setOrg({ ...org, industry });
-            showNotification('Industry updated successfully', 'success');
+            showNotification(t.settings.industryUpdated, 'success');
             closeIndustryModal();
         } catch (error) {
-            showNotification('Failed to update industry', 'error');
+            showNotification(t.settings.industryUpdateFailed, 'error');
         }
     };
 
     // Phone functions
     const promptSetPhone = () => {
-        const phone = prompt('Enter phone in E.164 format (e.g., +60123456789):', user.phone_e164 || '+60');
+        const phone = prompt(t.settings.enterPhoneE164, user.phone_e164 || '+60');
         if (!phone || phone.trim() === '') return;
 
-        const skipVerif = confirm('Skip WhatsApp verification? (For testing only)\n\nClick OK to skip verification.\nClick Cancel to send OTP via WhatsApp.');
+        const skipVerif = confirm(t.settings.skipVerification);
 
         setPhoneNumber(phone, skipVerif);
     };
@@ -201,18 +203,18 @@ const SettingsPage = () => {
             setUser({ ...user, phone_e164: phone, whatsapp_verified: skipVerification });
 
             if (skipVerification) {
-                showNotification('Phone number set and marked as verified (verification skipped).', 'success');
+                showNotification(t.settings.phoneSetVerified, 'success');
             } else {
-                showNotification('OTP sent to WhatsApp. Please enter the code to verify.', 'success');
+                showNotification(t.settings.otpSent, 'success');
                 promptVerifyCode();
             }
         } catch (error) {
-            showNotification('Failed to set phone', 'error');
+            showNotification(t.settings.phoneSetFailed, 'error');
         }
     };
 
     const promptVerifyCode = () => {
-        const code = prompt('Enter the 6-digit verification code:');
+        const code = prompt(t.settings.enterVerificationCode);
         if (!code) return;
 
         verifyCode(code);
@@ -229,9 +231,9 @@ const SettingsPage = () => {
             // const data = await resp.json();
 
             setUser({ ...user, whatsapp_verified: true });
-            showNotification('Phone verified for WhatsApp uploads.', 'success');
+            showNotification(t.settings.phoneVerified, 'success');
         } catch (error) {
-            showNotification('Verification failed', 'error');
+            showNotification(t.settings.verificationFailed, 'error');
         }
     };
 
@@ -249,14 +251,14 @@ const SettingsPage = () => {
             setTeamMembers(teamMembers.map(m =>
                 m.membership_id === membershipId ? { ...m, role } : m
             ));
-            showNotification('Role updated successfully', 'success');
+            showNotification(t.settings.roleUpdated, 'success');
         } catch (error) {
-            showNotification('Failed to update role', 'error');
+            showNotification(t.settings.roleUpdateFailed, 'error');
         }
     };
 
     const removeMember = async (membershipId: string) => {
-        if (!confirm('Are you sure you want to remove this member?')) return;
+        if (!confirm(t.settings.removeMemberConfirm)) return;
 
         // TODO: Replace with actual API call
         try {
@@ -266,18 +268,18 @@ const SettingsPage = () => {
             // const data = await resp.json();
 
             setTeamMembers(teamMembers.filter(m => m.membership_id !== membershipId));
-            showNotification('Member removed successfully', 'success');
+            showNotification(t.settings.memberRemoved, 'success');
         } catch (error) {
-            showNotification('Failed to remove member', 'error');
+            showNotification(t.settings.memberRemoveFailed, 'error');
         }
     };
 
     const showAddMember = () => {
-        const email = prompt('Enter email of member to add:');
+        const email = prompt(t.settings.enterMemberEmail);
         if (!email) return;
 
-        const full_name = prompt('Enter full name (optional):') || '';
-        const roleInput = prompt("Role? ('operator' default) [admin|uploader|operator]", 'operator') || 'operator';
+        const full_name = prompt(t.settings.enterFullName) || '';
+        const roleInput = prompt(t.settings.enterRole, 'operator') || 'operator';
         const role = roleInput as 'admin' | 'uploader' | 'operator';
 
         addMember(email, full_name, role);
@@ -301,31 +303,31 @@ const SettingsPage = () => {
             };
 
             setTeamMembers([...teamMembers, newMember]);
-            showNotification('Member added successfully', 'success');
+            showNotification(t.settings.memberAdded, 'success');
             // If temp password is provided, show it
             // if (data.temp_password) {
             //     alert(`Temporary password for ${email}: ${data.temp_password}`);
             // }
         } catch (error) {
-            showNotification('Failed to add member', 'error');
+            showNotification(t.settings.memberAddFailed, 'error');
         }
     };
 
     // Quick action functions
     const upgradePlan = () => {
-        alert('Upgrade Plan functionality would be implemented here');
+        alert(t.settings.upgradePlanMessage);
     };
 
     const downloadData = () => {
-        alert('Download Data functionality would be implemented here');
+        alert(t.settings.downloadDataMessage);
     };
 
     const viewBilling = () => {
-        alert('View Billing functionality would be implemented here');
+        alert(t.settings.viewBillingMessage);
     };
 
     const contactSupport = () => {
-        alert('Contact Support functionality would be implemented here');
+        alert(t.settings.contactSupportMessage);
     };
 
     // Calculate usage percentage
@@ -334,22 +336,22 @@ const SettingsPage = () => {
         : 0;
 
     const industries = [
-        { name: 'Technology & Software', icon: '💻' },
-        { name: 'Healthcare & Medical', icon: '🏥' },
-        { name: 'Retail & E-commerce', icon: '🛒' },
-        { name: 'Manufacturing', icon: '🏭' },
-        { name: 'Construction & Real Estate', icon: '🏗️' },
-        { name: 'Professional Services', icon: '💼' },
-        { name: 'Food & Beverage', icon: '🍽️' },
-        { name: 'Education & Training', icon: '🎓' },
-        { name: 'Financial Services', icon: '💰' },
-        { name: 'Transportation & Logistics', icon: '🚚' },
-        { name: 'Entertainment & Media', icon: '🎬' },
-        { name: 'Other', icon: '🏢' },
+        { name: t.settings.industries.technologySoftware, icon: '💻' },
+        { name: t.settings.industries.healthcareMedical, icon: '🏥' },
+        { name: t.settings.industries.retailEcommerce, icon: '🛒' },
+        { name: t.settings.industries.manufacturing, icon: '🏭' },
+        { name: t.settings.industries.constructionRealEstate, icon: '🏗️' },
+        { name: t.settings.industries.professionalServices, icon: '💼' },
+        { name: t.settings.industries.foodBeverage, icon: '🍽️' },
+        { name: t.settings.industries.educationTraining, icon: '🎓' },
+        { name: t.settings.industries.financialServices, icon: '💰' },
+        { name: t.settings.industries.transportationLogistics, icon: '🚚' },
+        { name: t.settings.industries.entertainmentMedia, icon: '🎬' },
+        { name: t.settings.industries.other, icon: '🏢' },
     ];
 
     return (
-        <AppLayout pageName="Settings">
+        <AppLayout pageName={t.settings.title}>
             <div className="space-y-6">
                 {/* Settings Header */}
                 <div
@@ -362,20 +364,20 @@ const SettingsPage = () => {
                     <div className="flex flex-wrap justify-between items-start gap-4">
                         <div>
                             <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-                                Account Settings
+                                {t.settings.accountSettings}
                             </h1>
                             <p style={{ color: 'var(--muted-foreground)' }}>
-                                Manage your account preferences and view usage statistics
+                                {t.settings.accountSettingsDescription}
                             </p>
                         </div>
                         <div className="flex gap-3 flex-wrap">
                             <button
                                 onClick={openEditProfile}
-                                className="px-4 py-2 border rounded-md transition-colors hover:bg-gray-800 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-4 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', }}
                             >
                                 <span className="mr-2">✏️</span>
-                                Edit Profile
+                                {t.settings.editProfile}
                             </button>
                             <button
                                 onClick={upgradePlan}
@@ -386,7 +388,7 @@ const SettingsPage = () => {
                                 }}
                             >
                                 <span className="mr-2">⬆️</span>
-                                Upgrade Plan
+                                {t.settings.upgradePlan}
                             </button>
                         </div>
                     </div>
@@ -407,10 +409,10 @@ const SettingsPage = () => {
                                 <div className="text-3xl">👤</div>
                                 <div>
                                     <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        Account Information
+                                        {t.settings.accountInformation}
                                     </h3>
                                     <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        Your personal account details
+                                        {t.settings.accountInformationDescription}
                                     </p>
                                 </div>
                             </div>
@@ -418,51 +420,51 @@ const SettingsPage = () => {
                         <div className="p-6">
                             <div className="space-y-4">
                                 {/* Full Name */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        Full Name
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.fullName}
                                     </div>
-                                    <div className="font-medium group-hover:text-white" >
-                                        {user.full_name || 'Not set'}
+                                    <div className="font-medium" >
+                                        {user.full_name || t.settings.notSet}
                                     </div>
                                 </div>
 
                                 {/* Email */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        Email Address
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.emailAddress}
                                     </div>
-                                    <div className="font-medium group-hover:text-white">
+                                    <div className="font-medium">
                                         {user.email}
                                     </div>
                                 </div>
 
                                 {/* Account Type */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        Account Type
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.accountType}
                                     </div>
                                     <div>
-                                        <span className="inline-block px-3 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 group-hover:bg-gray-700 group-hover:text-gray-200">
-                                            Business
+                                        <span className="inline-block px-3 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]">
+                                            {t.settings.business}
                                         </span>
                                     </div>
                                 </div>
 
                                 {/* Industry */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        Industry (Org)
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.industryOrg}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="font-medium group-hover:text-white">
-                                            {org.industry || 'Not set'}
+                                        <span className="font-medium">
+                                            {org.industry || t.settings.notSet}
                                         </span>
                                         {orgRole === 'admin' && (
                                             <button
                                                 onClick={editIndustry}
-                                                className="px-2 py-1 rounded hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
-                                                title="Edit Industry"
+                                                className="px-2 py-1 rounded hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] dark:hover:bg-[var(--hover-border)] dark:hover:text-[var(--hover-text)] transition-colors"
+                                                title={t.settings.editIndustry}
                                             >
                                                 <span className="text-sm">✏️</span>
                                             </button>
@@ -471,29 +473,29 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* WhatsApp Phone */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        WhatsApp Phone
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.whatsappPhone}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span
-                                            className="font-medium cursor-pointer group-hover:text-white"
+                                            className="font-medium cursor-pointer"
                                             onClick={promptSetPhone}
-                                            title="Click to edit phone number"
+                                            title={t.settings.clickToEditPhone}
                                         >
-                                            {user.phone_e164 || 'Not set'}
+                                            {user.phone_e164 || t.settings.notSet}
                                         </span>
                                         <span className={`inline-block px-2 py-1 text-xs rounded-md font-semibold ${
                                             user.whatsapp_verified
-                                                ? 'bg-green-100 text-green-700  group-hover:bg-gray-700 group-hover:text-gray-200'
-                                                : 'bg-yellow-100 text-yellow-700 group-hover:bg-gray-700 group-hover:text-gray-200'
+                                                ? 'bg-green-100 text-green-700  group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]'
+                                                : 'bg-yellow-100 text-yellow-700 group-hover:bg-[var(--hover-border)] group-hover:text-[var(--hover-text)]'
                                         }`}>
-                                            {user.whatsapp_verified ? 'Verified' : 'Not Verified'}
+                                            {user.whatsapp_verified ? t.settings.verified : t.settings.notVerified}
                                         </span>
                                         <button
                                             onClick={promptSetPhone}
-                                            className="px-2 py-1 rounded hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
-                                            title="Edit Phone Number"
+                                            className="px-2 py-1 rounded hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] dark:hover:bg-[var(--hover-border)] dark:hover:text-[var(--hover-text)] transition-colors"
+                                            title={t.settings.clickToEditPhone}
                                         >
                                             <span className="text-sm">✏️</span>
                                         </button>
@@ -501,11 +503,11 @@ const SettingsPage = () => {
                                 </div>
 
                                 {/* Member Since */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                        Member Since
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
+                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.memberSince}
                                     </div>
-                                    <div className="font-medium group-hover:text-white">
+                                    <div className="font-medium">
                                         January 2024
                                     </div>
                                 </div>
@@ -526,10 +528,10 @@ const SettingsPage = () => {
                                 <div className="text-3xl">📊</div>
                                 <div>
                                     <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        Usage Statistics
+                                        {t.settings.usageStatistics}
                                     </h3>
                                     <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        Your page processing activity
+                                        {t.settings.usageStatisticsDescription}
                                     </p>
                                 </div>
                             </div>
@@ -537,60 +539,60 @@ const SettingsPage = () => {
                         <div className="p-6">
                             <div className="grid grid-cols-2 gap-4 mb-6">
                                 {/* Pages Processed */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">📄</div>
                                         <div>
-                                            <div className="text-2xl font-bold group-hover:text-white">
+                                            <div className="text-2xl font-bold">
                                                 {usageStats.processed}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Pages Processed
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.pagesProcessed}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Monthly Quota */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">🎯</div>
                                         <div>
-                                            <div className="text-2xl font-bold group-hover:text-white">
+                                            <div className="text-2xl font-bold">
                                                 {usageStats.quota !== null ? usageStats.quota : '∞'}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Monthly Page Quota
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.monthlyPageQuota}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Pages Remaining */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">⏳</div>
                                         <div>
-                                            <div className="text-2xl font-bold group-hover:text-white">
+                                            <div className="text-2xl font-bold">
                                                 {usageStats.remaining !== null ? usageStats.remaining : '∞'}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Pages Remaining
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.pagesRemaining}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Last Invoice */}
-                                <div className="group hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white p-3 rounded-md transition-colors">
+                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="text-2xl">🕒</div>
                                         <div>
-                                            <div className="text-xl font-bold group-hover:text-white">
-                                                {usageStats.last_invoice || 'Never'}
+                                            <div className="text-xl font-bold">
+                                                {usageStats.last_invoice || t.settings.never}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Last Invoice
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.lastInvoice}
                                             </div>
                                         </div>
                                     </div>
@@ -602,7 +604,7 @@ const SettingsPage = () => {
                                 <div className="mt-6">
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            Monthly Usage
+                                            {t.settings.monthlyUsage}
                                         </span>
                                         <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
                                             {usagePercentage.toFixed(1)}%
@@ -617,7 +619,7 @@ const SettingsPage = () => {
                                         />
                                     </div>
                                     <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                                        {usageStats.quota - usageStats.remaining} of {usageStats.quota} pages used
+                                        {t.settings.pagesUsed.replace('{used}', (usageStats.quota - usageStats.remaining).toString()).replace('{quota}', usageStats.quota.toString())}
                                     </div>
                                 </div>
                             )}
@@ -637,10 +639,10 @@ const SettingsPage = () => {
                                 <div className="text-3xl">⚡</div>
                                 <div>
                                     <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        Quick Actions
+                                        {t.settings.quickActions}
                                     </h3>
                                     <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        Common account management tasks
+                                        {t.settings.quickActionsDescription}
                                     </p>
                                 </div>
                             </div>
@@ -650,17 +652,17 @@ const SettingsPage = () => {
                                 {/* Change Password */}
                                 <button
                                     onClick={openChangePassword}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="text-3xl">🔒</div>
                                         <div>
-                                            <div className="font-semibold mb-1 group-hover:text-white">
-                                                Change Password
+                                            <div className="font-semibold mb-1">
+                                                {t.settings.changePassword}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Update your account security
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.changePasswordDescription}
                                             </div>
                                         </div>
                                     </div>
@@ -669,17 +671,17 @@ const SettingsPage = () => {
                                 {/* Export Data */}
                                 <button
                                     onClick={downloadData}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="text-3xl">📥</div>
                                         <div>
-                                            <div className="font-semibold mb-1 group-hover:text-white">
-                                                Export Data
+                                            <div className="font-semibold mb-1">
+                                                {t.settings.exportData}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Download your documents
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.exportDataDescription}
                                             </div>
                                         </div>
                                     </div>
@@ -688,17 +690,17 @@ const SettingsPage = () => {
                                 {/* Billing */}
                                 <button
                                     onClick={viewBilling}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="text-3xl">💳</div>
                                         <div>
-                                            <div className="font-semibold mb-1 group-hover:text-white">
-                                                Billing & Invoices
+                                            <div className="font-semibold mb-1">
+                                                {t.settings.billingInvoices}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Manage subscription
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.billingInvoicesDescription}
                                             </div>
                                         </div>
                                     </div>
@@ -707,17 +709,17 @@ const SettingsPage = () => {
                                 {/* Contact Support */}
                                 <button
                                     onClick={contactSupport}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                     style={{ borderColor: 'var(--border)' }}
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="text-3xl">💬</div>
                                         <div>
-                                            <div className="font-semibold mb-1 group-hover:text-white">
-                                                Contact Support
+                                            <div className="font-semibold mb-1">
+                                                {t.settings.contactSupport}
                                             </div>
-                                            <div className="text-xs group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
-                                                Get help from our team
+                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.contactSupportDescription}
                                             </div>
                                         </div>
                                     </div>
@@ -740,10 +742,10 @@ const SettingsPage = () => {
                                     <div className="text-3xl">👥</div>
                                     <div>
                                         <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                            Team Members
+                                            {t.settings.teamMembers}
                                         </h3>
                                         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                            Manage users in your organization
+                                            {t.settings.teamMembersDescription}
                                         </p>
                                     </div>
                                 </div>
@@ -751,7 +753,7 @@ const SettingsPage = () => {
                                     onClick={showAddMember}
                                     className="px-4 py-2 rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700"
                                 >
-                                    Add Member
+                                    {t.settings.addMember}
                                 </button>
                             </div>
                             <div className="p-6">
@@ -759,15 +761,15 @@ const SettingsPage = () => {
                                     {teamMembers.map((member) => (
                                         <div
                                             key={member.membership_id}
-                                            className="group flex items-center justify-between p-3 border rounded-md hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white transition-colors"
+                                            className="group flex items-center justify-between p-3 border rounded-md hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] transition-colors"
                                             style={{ borderColor: 'var(--border)' }}
                                         >
                                             <div className="flex-1">
-                                                <div className="font-semibold group-hover:text-white">
+                                                <div className="font-semibold">
                                                     {member.full_name || member.email}
                                                 </div>
                                                 {member.full_name && (
-                                                    <div className="text-sm group-hover:text-gray-300" style={{ color: 'var(--muted-foreground)' }}>
+                                                    <div className="text-sm group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                         {member.email}
                                                     </div>
                                                 )}
@@ -783,16 +785,16 @@ const SettingsPage = () => {
                                                         color: 'var(--foreground)'
                                                     }}
                                                 >
-                                                    <option value="admin">Admin</option>
-                                                    <option value="uploader">Uploader</option>
-                                                    <option value="operator">Operator</option>
+                                                    <option value="admin">{t.settings.admin}</option>
+                                                    <option value="uploader">{t.settings.uploader}</option>
+                                                    <option value="operator">{t.settings.operator}</option>
                                                 </select>
                                                 <button
                                                     onClick={() => removeMember(member.membership_id)}
                                                     className="px-4 py-2 border rounded-md transition-colors hover:bg-red-600 hover:text-white hover:border-red-600"
                                                     style={{ borderColor: 'var(--border)' }}
                                                 >
-                                                    Remove
+                                                    {t.settings.remove}
                                                 </button>
                                             </div>
                                         </div>
@@ -821,7 +823,7 @@ const SettingsPage = () => {
                     >
                         <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
                             <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
-                                Select Your Industry
+                                {t.settings.selectIndustry}
                             </h3>
                             <button
                                 onClick={closeIndustryModal}
@@ -833,18 +835,18 @@ const SettingsPage = () => {
                         </div>
                         <div className="p-6">
                             <p className="mb-6" style={{ color: 'var(--muted-foreground)' }}>
-                                Choose the industry that best describes your business. This helps us provide more accurate account classifications.
+                                {t.settings.selectIndustryDescription}
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {industries.map((industry) => (
                                     <button
                                         key={industry.name}
                                         onClick={() => selectIndustry(industry.name)}
-                                        className="group p-4 border rounded-lg transition-all hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white text-left"
+                                        className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
                                         style={{ borderColor: 'var(--border)' }}
                                     >
                                         <div className="text-3xl mb-2">{industry.icon}</div>
-                                        <div className="font-semibold group-hover:text-white" style={{ color: 'var(--foreground)' }}>
+                                        <div className="font-semibold">
                                             {industry.name}
                                         </div>
                                     </button>
@@ -854,10 +856,10 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closeIndustryModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
-                                Cancel
+                                {t.settings.cancel}
                             </button>
                         </div>
                     </div>
@@ -881,7 +883,7 @@ const SettingsPage = () => {
                     >
                         <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
                             <h3 className="text-xl font-semibold">
-                                Edit Profile
+                                {t.settings.editProfile}
                             </h3>
                             <button
                                 onClick={closeProfileModal}
@@ -893,7 +895,7 @@ const SettingsPage = () => {
                         </div>
                         <div className="p-6">
                             <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                                Full Name
+                                {t.settings.fullName}
                             </label>
                             <input
                                 type="text"
@@ -910,10 +912,10 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closeProfileModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
-                                Cancel
+                                {t.settings.cancel}
                             </button>
                             <button
                                 onClick={saveProfile}
@@ -923,7 +925,7 @@ const SettingsPage = () => {
                                     color: 'white',
                                 }}
                             >
-                                Save
+                                {t.settings.save}
                             </button>
                         </div>
                     </div>
@@ -947,7 +949,7 @@ const SettingsPage = () => {
                     >
                         <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
                             <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
-                                Change Password
+                                {t.settings.changePassword}
                             </h3>
                             <button
                                 onClick={closePasswordModal}
@@ -960,7 +962,7 @@ const SettingsPage = () => {
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                                    Current Password
+                                    {t.settings.currentPassword}
                                 </label>
                                 <input
                                     type="password"
@@ -976,7 +978,7 @@ const SettingsPage = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-                                    New Password
+                                    {t.settings.newPassword}
                                 </label>
                                 <input
                                     type="password"
@@ -994,10 +996,10 @@ const SettingsPage = () => {
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
                             <button
                                 onClick={closePasswordModal}
-                                className="px-6 py-2 border rounded-md transition-colors hover:bg-gray-100 hover:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
-                                Cancel
+                                {t.settings.cancel}
                             </button>
                             <button
                                 onClick={savePassword}
@@ -1007,7 +1009,7 @@ const SettingsPage = () => {
                                     color: 'white',
                                 }}
                             >
-                                Update
+                                {t.settings.update}
                             </button>
                         </div>
                     </div>
