@@ -3,7 +3,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Plus, Check, ArrowLeft, ArrowUp, ArrowDown, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
-import { uploadToGroup, completeGroup, cancelGroup, getGroupStatus, type GroupStatusData } from '@/services/InvoiceService';
+import { 
+  uploadToGroup, 
+  completeGroup, 
+  cancelGroup, 
+  getGroupStatus, 
+  type GroupStatusData,
+  isAsyncCompleteResponse,
+  getBatchJobStatus
+} from '@/services/InvoiceService';
 
 interface InvoicePage {
   id: string;
@@ -365,30 +373,114 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     setUploadError(null);
     
     try {
-      // Complete the group
+      // Complete the group asynchronously - returns immediately with job_id
       const response = await completeGroup(currentSession.groupId, {
         auto_classify: shouldAutoClassify,
+        async_process: true, // Enable async processing so user can start next group immediately
       });
       
-      // Create a session object compatible with onComplete
-      const completedSession: InvoiceSession = {
-        ...currentSession,
-        pages: currentSession.pages.map((page, index) => ({
-          ...page,
-          pageNumber: index + 1,
-        })),
-      };
-      
-      // Call the onComplete callback with the session
-      onComplete(completedSession);
-      
-      setShowSuccess(true);
+      // Check if response is async (returns job_id) or sync (returns invoice)
+      if (isAsyncCompleteResponse(response)) {
+        // Async mode: processing started in background
+        const jobId = response.data.job_id;
+        console.log('Invoice processing started in background. Job ID:', jobId);
+        
+        // Create a session object compatible with onComplete
+        const completedSession: InvoiceSession = {
+          ...currentSession,
+          pages: currentSession.pages.map((page, index) => ({
+            ...page,
+            pageNumber: index + 1,
+          })),
+        };
+        
+        // Call the onComplete callback with the session
+        // The invoice will be created in the background
+        onComplete(completedSession);
+        
+        // Show success message
+        alert('OK created task');
+        
+        // Reset scanner immediately so user can start next scan
+        resetScanner();
+        
+        // Optionally poll for job completion in the background (non-blocking)
+        // This is just for logging/debugging - UI doesn't wait
+        pollJobStatus(jobId).catch(err => {
+          console.error('Error polling job status:', err);
+          // Don't show error to user - processing continues in background
+        });
+      } else {
+        // Sync mode (shouldn't happen with async_process: true, but handle it)
+        const completedSession: InvoiceSession = {
+          ...currentSession,
+          pages: currentSession.pages.map((page, index) => ({
+            ...page,
+            pageNumber: index + 1,
+          })),
+        };
+        
+        onComplete(completedSession);
+        alert('OK created task');
+        resetScanner();
+      }
     } catch (error: any) {
       console.error('Error completing invoice:', error);
       setUploadError(error.message || 'Failed to complete invoice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Reset scanner to initial state
+  const resetScanner = () => {
+    // Set to null to show initial screen with "Scan with Camera" button
+    setCurrentSession(null);
+    setCurrentPage(null);
+    setShowReview(false);
+    setShowSuccess(false);
+    setGroupStatus(null);
+    setUploadError(null);
+    setIsSubmitting(false);
+    setIsUploading(false);
+  };
+
+  // Helper function to poll job status in the background (non-blocking)
+  const pollJobStatus = async (jobId: string) => {
+    const maxAttempts = 60; // Poll for up to 5 minutes (5s intervals)
+    let attempts = 0;
+    
+    const poll = async (): Promise<void> => {
+      if (attempts >= maxAttempts) {
+        console.log('Job status polling timeout. Job may still be processing.');
+        return;
+      }
+      
+      attempts++;
+      
+      try {
+        const statusResponse = await getBatchJobStatus(jobId);
+        const status = statusResponse.data.status;
+        
+        if (status === 'SUCCESS') {
+          console.log('Invoice processing completed successfully. Invoice ID:', statusResponse.data.invoice_id);
+          return;
+        } else if (status === 'FAILED') {
+          console.error('Invoice processing failed:', statusResponse.data.error_message);
+          return;
+        } else {
+          // Still processing, poll again after 5 seconds
+          setTimeout(poll, 5000);
+        }
+      } catch (error) {
+        console.error('Error checking job status:', error);
+        // Continue polling despite errors
+        setTimeout(poll, 5000);
+      }
+    };
+    
+    // Start polling after a short delay
+    setTimeout(poll, 2000);
   };
 
   const handleScanNext = () => {
@@ -903,10 +995,13 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         </div>
         <div>
           <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--foreground)' }}>
-            Invoice #{currentSession.number} uploaded
+            Invoice #{currentSession.number} Processing Started
           </h3>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'}
+            {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'} uploaded
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
+            Processing in background. You can start scanning the next invoice now.
           </p>
         </div>
         <div className="flex flex-col gap-3">

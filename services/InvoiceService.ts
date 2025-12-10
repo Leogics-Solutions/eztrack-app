@@ -1328,6 +1328,46 @@ export interface CompleteGroupResponse {
   message: string;
 }
 
+// Async processing response types
+export interface AsyncMultiPageJobResponse {
+  success: boolean;
+  data: {
+    job_id: string;
+    group_id: string;
+    total_files: number;
+    page_numbers: number[];
+  };
+  message: string;
+}
+
+/**
+ * Type guard to check if a response is an async job response
+ */
+export function isAsyncJobResponse(
+  response: UploadInvoiceResponse | AsyncMultiPageJobResponse
+): response is AsyncMultiPageJobResponse {
+  return (
+    'data' in response &&
+    typeof response.data === 'object' &&
+    response.data !== null &&
+    'job_id' in response.data
+  );
+}
+
+/**
+ * Type guard to check if a complete group response is async
+ */
+export function isAsyncCompleteResponse(
+  response: CompleteGroupResponse | AsyncMultiPageJobResponse
+): response is AsyncMultiPageJobResponse {
+  return (
+    'data' in response &&
+    typeof response.data === 'object' &&
+    response.data !== null &&
+    'job_id' in response.data
+  );
+}
+
 export interface CancelGroupResponse {
   success: boolean;
   data: {
@@ -1339,14 +1379,22 @@ export interface CancelGroupResponse {
 /**
  * Upload multiple images for a single invoice in one request
  * POST /invoices/upload-multi
+ * 
+ * @param files - Array of image files to upload (at least 2 required)
+ * @param options - Upload options
+ * @param options.page_numbers - Optional array of page numbers for each file
+ * @param options.auto_classify - If true, classify invoice lines against chart of accounts
+ * @param options.async_process - If true, process asynchronously and return job_id immediately
+ * @returns UploadInvoiceResponse (sync) or AsyncMultiPageJobResponse (async)
  */
 export async function uploadMultiPageInvoice(
   files: File[],
   options?: {
     page_numbers?: number[];
     auto_classify?: boolean;
+    async_process?: boolean;
   }
-): Promise<UploadInvoiceResponse> {
+): Promise<UploadInvoiceResponse | AsyncMultiPageJobResponse> {
   const token = getAccessToken();
 
   if (!token) {
@@ -1368,6 +1416,9 @@ export async function uploadMultiPageInvoice(
   }
   if (options?.auto_classify !== undefined) {
     queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.async_process !== undefined) {
+    queryParams.append('async_process', String(options.async_process));
   }
 
   const url = `${BASE_URL}/invoices/upload-multi${
@@ -1470,13 +1521,20 @@ export async function getGroupStatus(groupId: string): Promise<GetGroupStatusRes
 /**
  * Complete a multi-page invoice upload group
  * POST /invoices/group/{group_id}/complete
+ * 
+ * @param groupId - The group ID to complete
+ * @param options - Completion options
+ * @param options.auto_classify - If true, classify invoice lines against chart of accounts
+ * @param options.async_process - If true, process asynchronously and return job_id immediately
+ * @returns CompleteGroupResponse (sync) or AsyncMultiPageJobResponse (async)
  */
 export async function completeGroup(
   groupId: string,
   options?: {
     auto_classify?: boolean;
+    async_process?: boolean;
   }
-): Promise<CompleteGroupResponse> {
+): Promise<CompleteGroupResponse | AsyncMultiPageJobResponse> {
   const token = getAccessToken();
 
   if (!token) {
@@ -1486,6 +1544,9 @@ export async function completeGroup(
   const queryParams = new URLSearchParams();
   if (options?.auto_classify !== undefined) {
     queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.async_process !== undefined) {
+    queryParams.append('async_process', String(options.async_process));
   }
 
   const url = `${BASE_URL}/invoices/group/${groupId}/complete${

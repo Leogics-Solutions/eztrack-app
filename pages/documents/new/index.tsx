@@ -131,7 +131,8 @@ const NewInvoice = () => {
 
   // Handle scanner session completion
   // Note: The InvoiceScanner now handles the completeGroup API call internally
-  // This callback is called after the invoice is successfully created
+  // This callback is called after async processing starts (not when invoice is created)
+  // We stay on the page so user can immediately scan the next invoice
   const handleScannerComplete = async (session: any) => {
     setScannerSession(session);
 
@@ -140,10 +141,10 @@ const NewInvoice = () => {
     }
     setIsProcessing(false);
 
-    // The invoice has already been created by the scanner component
-    // Just show success and redirect
-    alert(t.documents.newInvoicePage.alerts.createSuccess);
-    router.push('/documents');
+    // Invoice is processing in the background asynchronously
+    // Don't redirect - let user continue scanning next invoice
+    // The InvoiceScanner component will show success message and allow "Scan Next Invoice"
+    console.log('Invoice processing started in background for session:', session);
   };
 
   // Handle form submission
