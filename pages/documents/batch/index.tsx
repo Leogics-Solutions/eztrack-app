@@ -186,11 +186,11 @@ const BatchUpload = () => {
           setProgressDetails(`Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
           
           // Build result summary
-          const failedFiles = updatedProgresses
+          const failedFiles: ResultSummary['failed_files'] = updatedProgresses
             .filter(jp => jp.status === 'FAILED')
             .map(jp => ({
               file: jp.filename,
-              type: 'error',
+              type: 'error' as const,
               reason: jp.errorMessage || 'Processing failed',
             }));
           
