@@ -633,9 +633,10 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   };
 
   const handleCancelGroup = async () => {
-    if (!currentSession?.groupId) {
+    const latestSession = sessionRef.current;
+    if (!latestSession?.groupId) {
       // Just reset if no group exists
-      setCurrentSession(null);
+      updateSession(null);
       setCurrentPage(null);
       setShowReview(false);
       setGroupStatus(null);
@@ -645,8 +646,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     }
 
     try {
-      await cancelGroup(currentSession.groupId);
-      setCurrentSession(null);
+      await cancelGroup(latestSession.groupId);
+      updateSession(null);
       setCurrentPage(null);
       setShowReview(false);
       setGroupStatus(null);
@@ -659,10 +660,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   };
 
   const refreshGroupStatus = async () => {
-    if (!currentSession?.groupId) return;
+    const latestSession = sessionRef.current;
+    if (!latestSession?.groupId) return;
 
     try {
-      const statusResponse = await getGroupStatus(currentSession.groupId);
+      const statusResponse = await getGroupStatus(latestSession.groupId);
       setGroupStatus(statusResponse.data);
     } catch (error: any) {
       console.error('Error refreshing group status:', error);
@@ -1103,7 +1105,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           <button
             type="button"
             onClick={() => handleSubmit()}
-            disabled={isSubmitting || isUploading || currentSession.pages.length === 0 || !currentSession.groupId}
+            disabled={isSubmitting || isUploading || uniquePages.length === 0 || !reviewSession.groupId}
             className="flex-1 px-4 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
@@ -1112,7 +1114,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
                 Processing...
               </>
             ) : (
-              `Complete Invoice #${currentSession.number}`
+              `Complete Invoice #${reviewSession.number}`
             )}
           </button>
         </div>
@@ -1140,7 +1142,10 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   }
 
   // Success Screen
-  if (showSuccess && currentSession) {
+  if (showSuccess) {
+    const successSession = sessionRef.current || currentSession;
+    if (!successSession) return null;
+    
     return (
       <div className="text-center space-y-6 py-8">
         <div className="flex justify-center">
@@ -1150,10 +1155,10 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         </div>
         <div>
           <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--foreground)' }}>
-            Invoice #{currentSession.number} Processing Started
+            Invoice #{successSession.number} Processing Started
           </h3>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'} uploaded
+            {successSession.pages.length} {successSession.pages.length === 1 ? 'page' : 'pages'} uploaded
           </p>
           <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
             Processing in background. You can start scanning the next invoice now.
