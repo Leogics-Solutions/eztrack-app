@@ -93,8 +93,30 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     };
   };
 
+  // Helper to deduplicate pages by file reference
+  const deduplicatePages = (pages: InvoicePage[]): InvoicePage[] => {
+    const seen = new Set<string>();
+    return pages.filter(page => {
+      const key = `${page.file.name}-${page.file.size}-${page.file.lastModified}`;
+      if (seen.has(key)) {
+        console.warn('Removing duplicate page:', page.file.name);
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  };
+
   // Helper to update both session state and ref together
   const updateSession = (session: InvoiceSession | null) => {
+    if (session && session.pages) {
+      // Deduplicate pages before updating
+      const deduplicatedPages = deduplicatePages(session.pages);
+      if (deduplicatedPages.length !== session.pages.length) {
+        console.log(`Deduplicated pages: ${session.pages.length} -> ${deduplicatedPages.length}`);
+        session = { ...session, pages: deduplicatedPages };
+      }
+    }
     sessionRef.current = session;
     setCurrentSession(session);
   };
@@ -193,11 +215,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       const reader = new FileReader();
       reader.onloadend = () => {
         try {
-          // Use session from ref to ensure it's always available
-          const currentSession = sessionRef.current || session;
-          const pageNumber = currentSession.pages.length + 1;
+          // Use session from ref to ensure it's always available and up-to-date
+          const latestSession = sessionRef.current || session;
+          const pageNumber = latestSession.pages.length + 1;
           const preview = reader.result as string;
-          console.log('Preview created, length:', preview?.length, 'Session ID:', currentSession.id);
+          console.log('Preview created, length:', preview?.length, 'Session ID:', latestSession.id);
           
           if (!preview) {
             console.error('Preview is empty');
@@ -215,16 +237,48 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           };
           
           console.log('Setting current page:', page.id, 'Preview exists:', !!page.preview);
-          console.log('Current session:', currentSession.id);
+          console.log('Current session:', latestSession.id, 'Current pages:', latestSession.pages.length);
+          
+          // Check if page already exists by file object reference (more reliable than ID)
+          const pageExists = latestSession.pages.some(p => 
+            p.file === file || 
+            (p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)
+          );
+          if (pageExists) {
+            console.warn('Page already exists in session, skipping add. File:', file.name);
+            // Find existing page and set it as current
+            const existingPage = latestSession.pages.find(p => 
+              p.file === file || 
+              (p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)
+            );
+            if (existingPage) {
+              setCurrentPage(existingPage);
+            }
+            setIsUploading(false);
+            setShowReview(false);
+            return;
+          }
+          
+          // Add page to session immediately so it's available when reviewing
+          const updatedSession: InvoiceSession = {
+            ...latestSession,
+            pages: [
+              ...latestSession.pages,
+              page
+            ],
+          };
+          
+          // Update ref and state with session that includes the new page
+          sessionRef.current = updatedSession;
           
           // Set all state updates together - React will batch them
           // Ensure session is set first, then page, so preview screen condition is met
-          updateSession(currentSession);
+          updateSession(updatedSession);
           setCurrentPage(page);
           setIsUploading(false);
           setShowReview(false);
           
-          console.log('State updates queued - session:', currentSession.id, 'page:', page.id);
+          console.log('State updates queued - session:', updatedSession.id, 'page:', page.id, 'total pages:', updatedSession.pages.length);
         } catch (error) {
           console.error('Error processing file preview:', error);
           setUploadError('Failed to process image. Please try again.');
@@ -257,7 +311,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   }, [handleFileSelect]);
 
   const handleAddPage = async () => {
-    if (!currentPage || !currentSession) return;
+    if (!currentPage) return;
+    
+    // Get latest session from ref to avoid stale state
+    const latestSession = sessionRef.current;
+    if (!latestSession) return;
     
     setIsUploading(true);
     setUploadError(null);
@@ -267,20 +325,29 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       const response = await uploadToGroup(
         currentPage.file,
         currentPage.pageNumber,
-        currentSession.groupId ? { group_id: currentSession.groupId } : undefined
+        latestSession.groupId ? { group_id: latestSession.groupId } : undefined
       );
 
       // Update session with group ID if this is the first page
       const groupId = response.data.group_id;
+      
+      // Update the page in the session to mark it as uploaded (page should already be in session from handleFileSelect)
+      // Use latest session from ref to avoid duplicates
+      const pageExists = latestSession.pages.some(p => p.id === currentPage.id);
+      const updatedPages = pageExists
+        ? latestSession.pages.map(p => 
+            p.id === currentPage.id ? { ...p, uploaded: true } : p
+          )
+        : [...latestSession.pages, { ...currentPage, uploaded: true }];
+      
       const updatedSession: InvoiceSession = {
-        ...currentSession,
+        ...latestSession,
         groupId,
-        pages: [
-          ...currentSession.pages,
-          { ...currentPage, uploaded: true }
-        ],
+        pages: updatedPages,
       };
-      setCurrentSession(updatedSession);
+      
+      sessionRef.current = updatedSession;
+      updateSession(updatedSession);
 
       // Fetch updated group status
       const statusResponse = await getGroupStatus(groupId);
@@ -316,7 +383,9 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   };
 
   const handleReviewPages = async () => {
-    if (!currentSession) return;
+    // Get latest session from ref to avoid stale state
+    const latestSession = sessionRef.current;
+    if (!latestSession) return;
 
     // If there's a current page, upload it first
     if (currentPage) {
@@ -327,19 +396,28 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         const response = await uploadToGroup(
           currentPage.file,
           currentPage.pageNumber,
-          currentSession.groupId ? { group_id: currentSession.groupId } : undefined
+          latestSession.groupId ? { group_id: latestSession.groupId } : undefined
         );
 
         const groupId = response.data.group_id;
+        
+        // Update the page in the session to mark it as uploaded (page should already be in session from handleFileSelect)
+        // Use latest session from ref to avoid duplicates
+        const pageExists = latestSession.pages.some(p => p.id === currentPage.id);
+        const updatedPages = pageExists
+          ? latestSession.pages.map(p => 
+              p.id === currentPage.id ? { ...p, uploaded: true } : p
+            )
+          : [...latestSession.pages, { ...currentPage, uploaded: true }];
+        
         const updatedSession: InvoiceSession = {
-          ...currentSession,
+          ...latestSession,
           groupId,
-          pages: [
-            ...currentSession.pages,
-            { ...currentPage, uploaded: true }
-          ],
+          pages: updatedPages,
         };
-        setCurrentSession(updatedSession);
+        
+        sessionRef.current = updatedSession;
+        updateSession(updatedSession);
 
         // Fetch updated group status
         const statusResponse = await getGroupStatus(groupId);
@@ -356,10 +434,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       }
     }
 
-    // Refresh group status if we have a group
-    if (currentSession.groupId) {
+    // Refresh group status if we have a group (use latest session from ref)
+    const finalSession = sessionRef.current || latestSession;
+    if (finalSession?.groupId) {
       try {
-        const statusResponse = await getGroupStatus(currentSession.groupId);
+        const statusResponse = await getGroupStatus(finalSession.groupId);
         setGroupStatus(statusResponse.data);
       } catch (error) {
         console.error('Error fetching group status:', error);
@@ -856,17 +935,36 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   }
 
   // Review Screen
-  if (showReview && currentSession) {
+  if (showReview) {
+    // Use ref session to get latest data and deduplicate pages
+    const reviewSession = sessionRef.current || currentSession;
+    if (!reviewSession) return null;
+    
+    // Deduplicate pages by file reference to prevent showing duplicates
+    const uniquePages = reviewSession.pages.filter((page, index, self) => 
+      index === self.findIndex(p => 
+        p.id === page.id || 
+        (p.file.name === page.file.name && 
+         p.file.size === page.file.size && 
+         p.file.lastModified === page.file.lastModified)
+      )
+    );
+    
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-              Invoice #{currentSession.number} — Review Pages
+              Invoice #{reviewSession.number} — Review Pages
             </h3>
             <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-              {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'} uploaded
-              {groupStatus && groupStatus.total_files !== currentSession.pages.length && (
+              {uniquePages.length} {uniquePages.length === 1 ? 'page' : 'pages'} uploaded
+              {uniquePages.length !== reviewSession.pages.length && (
+                <span className="text-yellow-600 dark:text-yellow-400 ml-2">
+                  ({reviewSession.pages.length} total, {reviewSession.pages.length - uniquePages.length} duplicates removed)
+                </span>
+              )}
+              {groupStatus && groupStatus.total_files !== uniquePages.length && (
                 <span className="text-yellow-600 dark:text-yellow-400 ml-2">
                   ({groupStatus.total_files} on server)
                 </span>
@@ -887,7 +985,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             <button
               type="button"
               onClick={refreshGroupStatus}
-              disabled={isUploading || !currentSession.groupId}
+              disabled={isUploading || !reviewSession.groupId}
               className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ color: 'var(--foreground)' }}
               title="Refresh group status"
@@ -914,7 +1012,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {currentSession.pages.map((page, index) => (
+          {uniquePages.map((page, index) => (
             <div
               key={page.id}
               draggable
