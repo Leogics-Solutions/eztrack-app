@@ -40,7 +40,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleFileSelectRef = useRef<(e: React.ChangeEvent<HTMLInputElement>) => void>();
+  const handleFileSelectRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | undefined>(undefined);
 
   // Ensure camera input is properly set up and accessible
   useEffect(() => {
