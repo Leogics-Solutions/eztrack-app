@@ -23,6 +23,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize language from localStorage or browser preference
   useEffect(() => {
+    // Ensure we're in the browser environment
+    if (typeof window === 'undefined') return;
+    
     const savedLanguage = localStorage.getItem('language') as Language | null;
     if (savedLanguage && (savedLanguage === 'en' || savedLanguage === 'zh')) {
       setLanguageState(savedLanguage);
@@ -39,14 +42,18 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('language', lang);
-    // Update HTML lang attribute
-    document.documentElement.setAttribute('lang', lang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('language', lang);
+      // Update HTML lang attribute
+      document.documentElement.setAttribute('lang', lang);
+    }
   };
 
   // Update HTML lang attribute when language changes
   useEffect(() => {
-    document.documentElement.setAttribute('lang', language);
+    if (typeof window !== 'undefined') {
+      document.documentElement.setAttribute('lang', language);
+    }
   }, [language]);
 
   const value: LanguageContextType = {
