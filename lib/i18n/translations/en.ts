@@ -101,6 +101,7 @@ export const en: Translations = {
       deleteConfirm: 'Are you sure you want to delete {count} invoice(s)? This action cannot be undone.',
       deleteConfirmSingle: 'Delete invoice #{id}? This action cannot be undone.',
       exportSelectAtLeastOne: 'Please select at least one invoice to export.',
+      deleteFailed: 'Failed to delete invoice(s). Please try again.',
       verifyIndicators: 'Verification indicators are shown per invoice. Open invoice to inspect mismatches.',
     },
     newInvoicePage: {
