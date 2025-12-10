@@ -489,6 +489,7 @@ export const zh: Translations = {
     otpSent: 'OTP已发送到WhatsApp。请输入代码进行验证。',
     phoneSetFailed: '设置电话失败',
     enterVerificationCode: '输入6位验证码：',
+    verify: '验证',
     phoneVerified: '电话已验证，可用于WhatsApp上传。',
     verificationFailed: '验证失败',
     roleUpdated: '角色更新成功',

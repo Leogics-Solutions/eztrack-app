@@ -504,6 +504,7 @@ export interface Translations {
     otpSent: string;
     phoneSetFailed: string;
     enterVerificationCode: string;
+    verify: string;
     phoneVerified: string;
     verificationFailed: string;
     roleUpdated: string;
