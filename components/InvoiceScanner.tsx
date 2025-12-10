@@ -49,6 +49,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleFileSelectRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | undefined>(undefined);
+  const sessionRef = useRef<InvoiceSession | null>(null);
 
   // Ensure camera input is properly set up and accessible
   useEffect(() => {
@@ -92,38 +93,46 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     };
   };
 
+  // Helper to update both session state and ref together
+  const updateSession = (session: InvoiceSession | null) => {
+    sessionRef.current = session;
+    setCurrentSession(session);
+  };
+
   const startScanSession = (e?: React.MouseEvent | React.TouchEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
     
     const sessionNumber = 1; // In a real app, this would come from state/context
     const session = createNewSession(sessionNumber);
-    setCurrentSession(session);
+    
+    // Reset all states first
     setCurrentPage(null);
     setShowReview(false);
     setUploadError(null);
+    setIsUploading(false);
     
-    // Trigger camera directly from user interaction (no setTimeout for mobile)
-    // Use immediate click for better mobile compatibility
-    // Mobile browsers require the click to happen synchronously from user gesture
-    const trigger = () => {
-      if (cameraInputRef.current) {
-        try {
-          // Ensure input is accessible
-          cameraInputRef.current.focus();
-          cameraInputRef.current.click();
-        } catch (error) {
-          console.error('Error triggering camera:', error);
-          setUploadError('Failed to open camera. Please check browser permissions and try again.');
-        }
-      } else {
-        console.error('Camera input ref is not available');
-        setUploadError('Camera input not available. Please refresh the page.');
+    // Set session in both state and ref - ref ensures it's always available
+    updateSession(session);
+    
+    // Reset camera input and trigger camera
+    // Must be synchronous with user interaction for mobile browsers
+    if (cameraInputRef.current) {
+      // Reset input value to ensure onChange fires
+      cameraInputRef.current.value = '';
+      
+      try {
+        // Trigger camera immediately (synchronous with user interaction for mobile)
+        cameraInputRef.current.focus();
+        cameraInputRef.current.click();
+      } catch (error) {
+        console.error('Error triggering camera:', error);
+        setUploadError('Failed to open camera. Please check browser permissions and try again.');
       }
-    };
-    
-    // Trigger immediately (synchronous with user interaction)
-    trigger();
+    } else {
+      console.error('Camera input ref is not available');
+      setUploadError('Camera input not available. Please refresh the page.');
+    }
   };
 
   const triggerCamera = () => {
@@ -164,35 +173,68 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       lastModified: file.lastModified
     });
 
-    // Get or create session
+    // Set uploading state immediately and clear review mode
+    setIsUploading(true);
+    setShowReview(false);
+    setUploadError(null);
+
+    // Get session from ref first (most reliable), then from state, or create new one
+    const existingSession = sessionRef.current;
     setCurrentSession((prevSession) => {
-      const session = prevSession || createNewSession(1);
-      console.log('Session state:', session.id, 'Pages:', session.pages.length);
+      // Use ref session if available (most reliable), otherwise use state, or create new
+      const session = existingSession || prevSession || createNewSession(1);
+      
+      // Update ref to ensure it's always in sync (don't call updateSession here to avoid recursion)
+      sessionRef.current = session;
+      
+      console.log('Session state:', session.id, 'Pages:', session.pages.length, 'Has session:', !!session);
       
       // Read file and create preview
       const reader = new FileReader();
       reader.onloadend = () => {
-        const pageNumber = session.pages.length + 1;
-        const preview = reader.result as string;
-        console.log('Preview created, length:', preview?.length);
-        
-        const page: InvoicePage = {
-          id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          file,
-          preview,
-          pageNumber,
-          uploaded: false,
-        };
-        
-        console.log('Setting current page:', page.id, 'Preview exists:', !!page.preview);
-        // Set current page - this will trigger the preview screen to show
-        setCurrentPage(page);
-        // Clear uploading state when new page is set
-        setIsUploading(false);
+        try {
+          // Use session from ref to ensure it's always available
+          const currentSession = sessionRef.current || session;
+          const pageNumber = currentSession.pages.length + 1;
+          const preview = reader.result as string;
+          console.log('Preview created, length:', preview?.length, 'Session ID:', currentSession.id);
+          
+          if (!preview) {
+            console.error('Preview is empty');
+            setUploadError('Failed to create image preview. Please try again.');
+            setIsUploading(false);
+            return;
+          }
+          
+          const page: InvoicePage = {
+            id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            file,
+            preview,
+            pageNumber,
+            uploaded: false,
+          };
+          
+          console.log('Setting current page:', page.id, 'Preview exists:', !!page.preview);
+          console.log('Current session:', currentSession.id);
+          
+          // Set all state updates together - React will batch them
+          // Ensure session is set first, then page, so preview screen condition is met
+          updateSession(currentSession);
+          setCurrentPage(page);
+          setIsUploading(false);
+          setShowReview(false);
+          
+          console.log('State updates queued - session:', currentSession.id, 'page:', page.id);
+        } catch (error) {
+          console.error('Error processing file preview:', error);
+          setUploadError('Failed to process image. Please try again.');
+          setIsUploading(false);
+        }
       };
       reader.onerror = (error) => {
         console.error('FileReader error:', error);
         setUploadError('Failed to read image. Please try again.');
+        setIsUploading(false);
       };
       reader.readAsDataURL(file);
       
@@ -401,8 +443,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         // Show success message
         alert('OK created task');
         
-        // Reset scanner immediately so user can start next scan
-        resetScanner();
+        // Reload page to reset everything to clean state
+        window.location.reload();
         
         // Optionally poll for job completion in the background (non-blocking)
         // This is just for logging/debugging - UI doesn't wait
@@ -422,7 +464,9 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         
         onComplete(completedSession);
         alert('OK created task');
-        resetScanner();
+        
+        // Reload page to reset everything to clean state
+        window.location.reload();
       }
     } catch (error: any) {
       console.error('Error completing invoice:', error);
@@ -435,7 +479,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   // Reset scanner to initial state
   const resetScanner = () => {
     // Set to null to show initial screen with "Scan with Camera" button
-    setCurrentSession(null);
+    updateSession(null);
     setCurrentPage(null);
     setShowReview(false);
     setShowSuccess(false);
@@ -443,6 +487,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     setUploadError(null);
     setIsSubmitting(false);
     setIsUploading(false);
+    
+    // Reset camera input so it can be triggered again
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+    }
   };
 
   // Helper function to poll job status in the background (non-blocking)
