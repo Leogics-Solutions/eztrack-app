@@ -21,19 +21,26 @@ export type {
   GetCurrentUserResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
+  LogoutResponse,
 } from './AuthService';
 
 // User Service
 export {
+  getCurrentUser as getCurrentUserProfile,
   updateCurrentUser,
   getUserQuota,
 } from './UserService';
 
 export type {
+  GetUserProfileResponse,
   UpdateUserRequest,
   UpdateUserResponse,
   QuotaData,
+  PersonalQuota,
+  OrganizationQuota,
+  EffectiveQuota,
   GetUserQuotaResponse,
+  LegacyQuotaData,
 } from './UserService';
 
 // Invoice Service
@@ -43,9 +50,22 @@ export {
   getInvoice,
   updateInvoice,
   deleteInvoice,
+  bulkDeleteInvoices,
   addLineItem,
   updateLineItem,
   deleteLineItem,
+  validateInvoice,
+  verifyInvoice,
+  addPayment,
+  batchUploadInvoices,
+  getBatchJobStatus,
+  listBatchJobs,
+  downloadInvoiceFile,
+  bulkVerifyInvoices,
+  exportInvoicesCsv,
+  downloadInvoicesZip,
+  checkDuplicateInvoice,
+  getInvoiceStatistics,
 } from './InvoiceService';
 
 export type {
@@ -58,11 +78,46 @@ export type {
   UpdateInvoiceRequest,
   UpdateInvoiceResponse,
   DeleteInvoiceResponse,
+  BulkDeleteInvoicesRequest,
+  BulkDeleteInvoicesData,
+  BulkDeleteInvoicesResponse,
+  ValidateInvoiceResponse,
+  VerifyInvoiceVerification,
+  VerifyInvoiceData,
+  VerifyInvoiceResponse,
   AddLineItemRequest,
   AddLineItemResponse,
   UpdateLineItemRequest,
   UpdateLineItemResponse,
   DeleteLineItemResponse,
+  AddPaymentRequest,
+  AddPaymentResponse,
+  InvoicePayment,
+  BatchUploadResponse,
+  BatchJob,
+  BatchJobStatus,
+  BatchJobStatusData,
+  GetBatchJobResponse,
+  ListBatchJobsParams,
+  BatchJobListItem,
+  ListBatchJobsResponse,
+  InvoiceFileDownload,
+  BulkVerifyInvoicesResponse,
+  ExportInvoicesRequest,
+  ExportInvoicesCsvResponse,
+  DownloadInvoicesZipResponse,
+  CheckDuplicateInvoiceParams,
+  DuplicateInvoiceInfo,
+  CheckDuplicateInvoiceResponse,
+  InvoiceStatisticsFilters,
+  InvoiceStatisticsSummary,
+  InvoiceStatisticsStatusBucket,
+  InvoiceStatisticsTopVendor,
+  InvoiceStatisticsCategory,
+  InvoiceStatisticsMonthlyTrend,
+  InvoiceStatisticsRecentActivity,
+  InvoiceStatisticsData,
+  InvoiceStatisticsResponse,
 } from './InvoiceService';
 
 // Vendor Service
@@ -113,4 +168,81 @@ export type {
   UpdateMemberRoleRequest,
   UpdateMemberRoleResponse,
 } from './OrganizationService';
+
+// Dashboard Service
+export {
+  getDashboardSummary,
+} from './DashboardService';
+
+export type {
+  DashboardSummaryResponse,
+  DashboardSummaryData,
+  DashboardSummaryParams,
+  DashboardKpis,
+  DashboardCharts,
+  DashboardCategoryBreakdownItem,
+  DashboardVendorTotalItem,
+  DashboardMonthlyTotalItem,
+  DashboardStatusDistributionItem,
+  DashboardActivityItem,
+  DashboardVendorFilterOption,
+} from './DashboardService';
+
+// Chart of Accounts Service
+export {
+  listChartOfAccounts,
+  listChartOfAccountsViewer,
+  listChartOfAccountsGrouped,
+  createChartOfAccount,
+  getChartOfAccount,
+  updateChartOfAccount,
+  deleteChartOfAccount,
+  importDefaultChartOfAccounts,
+  updateDefaultCoaKeywords,
+} from './ChartOfAccountsService';
+
+export type {
+  ChartOfAccount,
+  COAViewerAccount,
+  COAViewerSummary,
+  ListChartOfAccountsParams,
+  ListChartOfAccountsResponse,
+  ListChartOfAccountsViewerParams,
+  ListChartOfAccountsViewerResponse,
+  ListChartOfAccountsGroupedParams,
+  ListChartOfAccountsGroupedResponse,
+  CreateChartOfAccountRequest,
+  CreateChartOfAccountResponse,
+  GetChartOfAccountResponse,
+  UpdateChartOfAccountRequest,
+  UpdateChartOfAccountResponse,
+  DeleteChartOfAccountResponse,
+  ImportDefaultCoaResponse,
+  UpdateDefaultCoaKeywordsResponse,
+} from './ChartOfAccountsService';
+
+// Creditor Accounts Service
+export {
+  listCreditorAccounts,
+  createCreditorAccount,
+  getCreditorAccount,
+  updateCreditorAccount,
+  deleteCreditorAccount,
+  getCreditorAccountInvoices,
+} from './CreditorAccountsService';
+
+export type {
+  CreditorAccount,
+  ListCreditorAccountsParams,
+  ListCreditorAccountsResponse,
+  CreateCreditorAccountRequest,
+  CreateCreditorAccountResponse,
+  GetCreditorAccountResponse,
+  UpdateCreditorAccountRequest,
+  UpdateCreditorAccountResponse,
+  DeleteCreditorAccountResponse,
+  CreditorAccountInvoice,
+  ListCreditorAccountInvoicesParams,
+  ListCreditorAccountInvoicesResponse,
+} from './CreditorAccountsService';
 

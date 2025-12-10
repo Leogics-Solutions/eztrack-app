@@ -3,6 +3,10 @@
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
+import {
+    listChartOfAccountsViewer,
+    COAViewerAccount,
+} from "@/services";
 
 // Types
 interface Account {
@@ -28,6 +32,7 @@ const COAViewerList = () => {
     const [totalCount, setTotalCount] = useState(0);
     const [totalAmountAll, setTotalAmountAll] = useState(0);
     const [sortConfig, setSortConfig] = useState<SortConfig>({ column: null, direction: 'asc' });
+    const [isLoading, setIsLoading] = useState(false);
 
     // Filter state
     const [filters, setFilters] = useState({
@@ -38,66 +43,90 @@ const COAViewerList = () => {
         date_to: '',
     });
 
-    // Mock data loading - Replace with actual API calls
+    // Data loading
     useEffect(() => {
         loadData();
     }, [filters, sortConfig]);
 
     const loadData = async () => {
-        // TODO: Replace with actual API calls
-        // Mock data
-        const mockAccounts: Account[] = [
-            {
-                id: 1,
-                account_name: 'Cash',
-                account_type: 'Asset',
-                description: 'Cash on hand and in bank',
-                total_amount: 50000.00,
-                transaction_count: 125,
-                is_active: true,
-            },
-            {
-                id: 2,
-                account_name: 'Accounts Receivable',
-                account_type: 'Asset',
-                description: 'Money owed by customers',
-                total_amount: 25000.00,
-                transaction_count: 68,
-                is_active: true,
-            },
-            {
-                id: 3,
-                account_name: 'Office Supplies',
-                account_type: 'Expense',
-                description: 'Office supplies and stationery',
-                total_amount: -5000.00,
-                transaction_count: 42,
-                is_active: true,
-            },
-            {
-                id: 4,
-                account_name: 'Revenue',
-                account_type: 'Income',
-                description: 'Sales and service revenue',
-                total_amount: 150000.00,
-                transaction_count: 89,
-                is_active: true,
-            },
-            {
-                id: 5,
-                account_name: 'Accounts Payable',
-                account_type: 'Liability',
-                description: 'Money owed to suppliers',
-                total_amount: -15000.00,
-                transaction_count: 34,
-                is_active: true,
-            },
-        ];
+        try {
+            setIsLoading(true);
 
-        setAccounts(mockAccounts);
-        setAccountTypes(['Asset', 'Liability', 'Equity', 'Income', 'Expense']);
-        setTotalCount(mockAccounts.length);
-        setTotalAmountAll(mockAccounts.reduce((sum, acc) => sum + acc.total_amount, 0));
+            // Map status to active_only param
+            let activeOnly: boolean | undefined = undefined;
+            if (filters.status === 'active') {
+                activeOnly = true;
+            } else if (filters.status === '' || filters.status === 'inactive') {
+                // For "All" and "Inactive", fetch both active and inactive
+                activeOnly = false;
+            }
+
+            const response = await listChartOfAccountsViewer({
+                account_type: filters.account_type || undefined,
+                search: filters.search || undefined,
+                active_only: activeOnly,
+                start_date: filters.date_from || undefined,
+                end_date: filters.date_to || undefined,
+            });
+
+            let mappedAccounts: Account[] = response.data.accounts.map((item: COAViewerAccount) => ({
+                id: item.id,
+                account_name: item.account_name,
+                account_type: item.account_type,
+                // Prefer description but fall back to examples if needed
+                description: item.description || item.examples || '',
+                total_amount: item.total_amount,
+                transaction_count: item.transaction_count,
+                is_active: item.is_active,
+            }));
+
+            // Apply client-side status filter for inactive only
+            if (filters.status === 'inactive') {
+                mappedAccounts = mappedAccounts.filter(acc => !acc.is_active);
+            } else if (filters.status === 'active') {
+                mappedAccounts = mappedAccounts.filter(acc => acc.is_active);
+            }
+
+            // Apply client-side sorting
+            if (sortConfig.column) {
+                const { column, direction } = sortConfig;
+                mappedAccounts = [...mappedAccounts].sort((a, b) => {
+                    const aVal = (a as any)[column];
+                    const bVal = (b as any)[column];
+
+                    if (aVal === bVal) return 0;
+
+                    if (aVal === undefined || aVal === null) return 1;
+                    if (bVal === undefined || bVal === null) return -1;
+
+                    if (typeof aVal === 'number' && typeof bVal === 'number') {
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                    }
+
+                    const aStr = String(aVal).toLowerCase();
+                    const bStr = String(bVal).toLowerCase();
+                    if (aStr < bStr) return direction === 'asc' ? -1 : 1;
+                    if (aStr > bStr) return direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            setAccounts(mappedAccounts);
+
+            // Derive account types from backend data
+            const uniqueTypes = Array.from(
+                new Set(response.data.accounts.map((acc) => acc.account_type))
+            );
+            setAccountTypes(uniqueTypes);
+
+            setTotalCount(response.data.summary.total_accounts);
+            setTotalAmountAll(response.data.summary.total_amount);
+        } catch (error: any) {
+            console.error('Failed to load COA viewer data', error);
+            alert(error?.message || 'Failed to load chart of accounts viewer');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Filter functions
@@ -144,11 +173,19 @@ const COAViewerList = () => {
     const getTypeBadgeClass = (type: string) => {
         // Default (unhovered) styles - colorful badges, hover shows muted gray
         const typeMap: Record<string, string> = {
+            // Legacy human-readable labels
             'Asset': 'bg-blue-100 text-blue-900 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
             'Liability': 'bg-orange-100 text-orange-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
             'Equity': 'bg-pink-100 text-pink-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
             'Income': 'bg-green-100 text-green-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
             'Expense': 'bg-red-100 text-red-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            // Backend codes
+            'ASSET': 'bg-blue-100 text-blue-900 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'LIABILITY': 'bg-orange-100 text-orange-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'EQUITY': 'bg-pink-100 text-pink-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'INCOME': 'bg-green-100 text-green-700  group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'EXPENSE': 'bg-red-100 text-red-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
+            'COGS': 'bg-purple-100 text-purple-700 group-hover:bg-[var(--hover-bg-light)] group-hover:text-[var(--muted-foreground)] dark:group-hover:bg-[var(--hover-bg)] dark:group-hover:text-[var(--muted-foreground)]',
         };
         return typeMap[type] || 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300';
     };

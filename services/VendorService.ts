@@ -3,9 +3,7 @@
  * Simple functions to call vendor-related endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_URL || 'http://localhost:8000';
-const API_VERSION = 'v1';
-const BASE_URL = `${API_BASE_URL}/api/${API_VERSION}`;
+import { BASE_URL } from './config';
 
 // Types
 export interface Vendor {

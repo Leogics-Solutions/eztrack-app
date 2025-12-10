@@ -3,9 +3,7 @@
  * Simple functions to call invoice-related endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_URL || 'http://localhost:8000';
-const API_VERSION = 'v1';
-const BASE_URL = `${API_BASE_URL}/api/${API_VERSION}`;
+import { BASE_URL } from './config';
 
 // Types
 export interface InvoiceLineItem {
@@ -38,6 +36,8 @@ export interface Invoice {
   created_at?: string;
   pages_processed?: number;
   processing_time_seconds?: number;
+  // URLs for each uploaded page (when provided by multi-page endpoints)
+  page_files?: string[];
   lines?: InvoiceLineItem[];
 }
 
@@ -47,14 +47,44 @@ export interface UploadInvoiceResponse {
   message: string;
 }
 
+export type InvoiceStatus = 'DRAFT' | 'VALIDATED' | 'POSTED' | 'PAID';
+
 export interface ListInvoicesParams {
-  skip?: number;
-  limit?: number;
+  page?: number;
+  page_size?: number;
+  search?: string;
+  status?: InvoiceStatus[];
+  vendor_id?: number;
+  vendor_name?: string;
+  currency?: string;
+  min_amount?: number;
+  max_amount?: number;
+  tag?: string;
+  start_date?: string; // YYYY-MM-DD
+  end_date?: string; // YYYY-MM-DD
+  date_range?: 'today' | 'week' | 'month' | 'quarter' | 'year';
+  month?: number; // 1–12
+  year?: number;
+}
+
+export interface ListInvoicesData {
+  invoices: Invoice[];
+  verification?: Record<
+    string,
+    {
+      status: string;
+      ok: boolean;
+    }
+  >;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface ListInvoicesResponse {
   success: boolean;
-  data: Invoice[];
+  data: ListInvoicesData;
   message: string;
 }
 
@@ -64,19 +94,122 @@ export interface GetInvoiceResponse {
   message: string;
 }
 
+// Validation types
+export interface InvoiceValidationAdditionalCosts {
+  shipping_fee: string;
+  shipping_discount: string;
+  shipping_discount_subtotal: string;
+  shipping_fee_sst: string;
+  service_tax_on_shipping: string;
+  voucher_discount: string;
+  coin_discount: string;
+  service_charge: string;
+  platform_fee: string;
+  net_additional: string;
+}
+
+export interface InvoiceValidationTotals {
+  subtotal: string;
+  tax: string;
+  total: string;
+}
+
+export interface InvoiceValidationVerification {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  header: InvoiceValidationTotals;
+  calc: InvoiceValidationTotals & {
+    additional_costs: InvoiceValidationAdditionalCosts;
+  };
+}
+
+export interface ValidateInvoiceData {
+  ok: boolean;
+  status: string;
+  errors: string[];
+  warnings: string[];
+  verification: InvoiceValidationVerification;
+}
+
+export interface ValidateInvoiceResponse {
+  success: boolean;
+  data: ValidateInvoiceData;
+  message: string;
+}
+
+export interface VerifyInvoiceVerification {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  header: InvoiceValidationTotals;
+  calc: InvoiceValidationTotals & {
+    additional_costs: InvoiceValidationAdditionalCosts;
+  };
+}
+
+export interface VerifyInvoiceData {
+  invoice_id: number;
+  verification: VerifyInvoiceVerification;
+}
+
+export interface VerifyInvoiceResponse {
+  success: boolean;
+  data: VerifyInvoiceData;
+  message: string;
+}
+
 export interface UpdateInvoiceRequest {
   invoice_no?: string;
   invoice_date?: string;
+  vendor_id?: number;
+  status?: string;
+
+  // Vendor
   vendor_name?: string;
   vendor_address?: string;
   vendor_company_reg_no?: string;
+  vendor_company_reg_no_old?: string;
+  vendor_sst_number?: string;
+  vendor_tin_number?: string;
   vendor_phone?: string;
+  vendor_email?: string;
+
+  // Customer
   customer_name?: string;
+  customer_company_reg_no?: string;
+  customer_address?: string;
+  customer_sst_number?: string;
+
+  // Amounts
   subtotal?: number;
   tax?: number;
   total?: number;
+  service_tax?: number;
+  sst?: number;
+  gst?: number;
+  shipping_fee?: number;
+  shipping_discount?: number;
+  shipping_discount_subtotal?: number;
+  shipping_fee_sst?: number;
+  voucher_discount?: number;
+  coin_discount?: number;
+  platform_fee?: number;
+  service_charge?: number;
+  other_charges?: number;
+
+  // Banking / payment
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_beneficiary_name?: string;
+  bank_swift_code?: string;
+  payment_terms?: string;
+  payment_method?: string;
+
+  // Misc
+  remarks?: string;
+  tags?: string;
   currency?: string;
-  status?: string;
 }
 
 export interface UpdateInvoiceResponse {
@@ -85,9 +218,50 @@ export interface UpdateInvoiceResponse {
   message: string;
 }
 
+// Payments
+export interface InvoicePayment {
+  id: number;
+  invoice_id: number;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  reference?: string | null;
+  remarks?: string | null;
+}
+
+export interface AddPaymentRequest {
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  reference?: string;
+  remarks?: string;
+}
+
+export interface AddPaymentResponse {
+  success: boolean;
+  data: InvoicePayment;
+  message: string;
+}
+
 export interface DeleteInvoiceResponse {
   success: boolean;
   data: null;
+  message: string;
+}
+
+export interface BulkDeleteInvoicesRequest {
+  invoice_ids: number[];
+}
+
+export interface BulkDeleteInvoicesData {
+  deleted_count: number;
+  deleted_ids: number[];
+  total_requested: number;
+}
+
+export interface BulkDeleteInvoicesResponse {
+  success: boolean;
+  data: BulkDeleteInvoicesData;
   message: string;
 }
 
@@ -127,6 +301,191 @@ export interface DeleteLineItemResponse {
   message: string;
 }
 
+// Batch Upload Types
+export interface BatchJob {
+  job_id: string;
+  filename: string;
+  file_type: string;
+}
+
+export interface BatchUploadResponse {
+  success: boolean;
+  data: {
+    jobs: BatchJob[];
+    total_files: number;
+  };
+  message: string;
+}
+
+export type BatchJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+
+export interface BatchJobStatusData {
+  id: string;
+  user_id: number;
+  file_path: string;
+  file_type: string;
+  original_filename: string;
+  status: BatchJobStatus;
+  invoice_id: number | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface GetBatchJobResponse {
+  success: boolean;
+  data: BatchJobStatusData;
+  message: string;
+}
+
+export interface ListBatchJobsParams {
+  job_ids?: string[];
+}
+
+export interface BatchJobListItem {
+  id: string;
+  status: BatchJobStatus;
+  invoice_id: number | null;
+  original_filename: string;
+  created_at: string;
+}
+
+export interface ListBatchJobsResponse {
+  success: boolean;
+  data: {
+    jobs: BatchJobListItem[];
+    total_jobs: number;
+  };
+  message: string;
+}
+
+export interface InvoiceFileDownload {
+  blob: Blob;
+  contentType: string | null;
+  filename?: string | null;
+}
+
+export interface BulkVerifyInvoiceResult {
+  status: string;
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  header: InvoiceValidationTotals;
+  calc: InvoiceValidationTotals & {
+    additional_costs: InvoiceValidationAdditionalCosts;
+  };
+}
+
+export interface BulkVerifyInvoicesResponse {
+  success: boolean;
+  data: {
+    verification: Record<string, BulkVerifyInvoiceResult>;
+  };
+  message: string;
+}
+
+export interface ExportInvoicesRequest {
+  invoice_ids: number[];
+}
+
+export type ExportInvoicesCsvResponse = InvoiceFileDownload;
+export type DownloadInvoicesZipResponse = InvoiceFileDownload;
+
+export interface CheckDuplicateInvoiceParams {
+  invoice_no: string;
+  vendor_id?: number;
+  vendor_name?: string;
+}
+
+export interface DuplicateInvoiceInfo {
+  id: number;
+  invoice_no: string;
+  vendor_name: string;
+  total: number;
+  invoice_date: string;
+  created_at: string;
+  status: string;
+}
+
+export interface CheckDuplicateInvoiceResponse {
+  success: boolean;
+  data: {
+    is_duplicate: boolean;
+    existing_invoice: DuplicateInvoiceInfo | null;
+  };
+  message: string;
+}
+
+export interface InvoiceStatisticsFilters {
+  start_date?: string;
+  end_date?: string;
+  vendor_id?: number;
+  status?: InvoiceStatus;
+  date_range?: 'today' | 'week' | 'month' | 'quarter' | 'year';
+}
+
+export interface InvoiceStatisticsSummary {
+  total_invoices: number;
+  total_value: number;
+  average_invoice_value: number;
+}
+
+export interface InvoiceStatisticsStatusBucket {
+  count: number;
+  total_value: number;
+}
+
+export interface InvoiceStatisticsTopVendor {
+  vendor_id: number;
+  vendor_name: string;
+  invoice_count: number;
+  total_spent: number;
+}
+
+export interface InvoiceStatisticsCategory {
+  category: string;
+  invoice_count: number;
+  total_value: number;
+}
+
+export interface InvoiceStatisticsMonthlyTrend {
+  month: string; // YYYY-MM
+  invoice_count: number;
+  total_value: number;
+}
+
+export interface InvoiceStatisticsRecentActivity {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  action: string;
+  description: string;
+  created_at: string;
+}
+
+export interface InvoiceStatisticsData {
+  summary: InvoiceStatisticsSummary;
+  status_distribution: Record<string, InvoiceStatisticsStatusBucket>;
+  top_vendors: InvoiceStatisticsTopVendor[];
+  categories: InvoiceStatisticsCategory[];
+  monthly_trends: InvoiceStatisticsMonthlyTrend[];
+  recent_activities: InvoiceStatisticsRecentActivity[];
+  filters_applied: {
+    start_date: string | null;
+    end_date: string | null;
+    vendor_id: number | null;
+    status: string | null;
+    time_range: string | null;
+  };
+}
+
+export interface InvoiceStatisticsResponse {
+  success: boolean;
+  data: InvoiceStatisticsData;
+  message: string;
+}
+
 /**
  * Get access token from localStorage
  */
@@ -139,7 +498,10 @@ function getAccessToken(): string | null {
  * Upload and process an invoice file with OCR
  * POST /invoices/upload
  */
-export async function uploadInvoice(file: File): Promise<UploadInvoiceResponse> {
+export async function uploadInvoice(
+  file: File,
+  options?: { auto_classify?: boolean }
+): Promise<UploadInvoiceResponse> {
   const token = getAccessToken();
 
   if (!token) {
@@ -148,8 +510,16 @@ export async function uploadInvoice(file: File): Promise<UploadInvoiceResponse> 
 
   const formData = new FormData();
   formData.append('file', file);
+  const queryParams = new URLSearchParams();
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
 
-  const response = await fetch(`${BASE_URL}/invoices/upload`, {
+  const url = `${BASE_URL}/invoices/upload${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -166,10 +536,12 @@ export async function uploadInvoice(file: File): Promise<UploadInvoiceResponse> 
 }
 
 /**
- * List all invoices for the current user with pagination
+ * List all invoices for the current user with pagination and filters
  * GET /invoices
  */
-export async function listInvoices(params?: ListInvoicesParams): Promise<ListInvoicesResponse> {
+export async function listInvoices(
+  params?: ListInvoicesParams
+): Promise<ListInvoicesResponse> {
   const token = getAccessToken();
 
   if (!token) {
@@ -177,14 +549,56 @@ export async function listInvoices(params?: ListInvoicesParams): Promise<ListInv
   }
 
   const queryParams = new URLSearchParams();
-  if (params?.skip !== undefined) {
-    queryParams.append('skip', params.skip.toString());
+
+  if (params?.page !== undefined) {
+    queryParams.append('page', params.page.toString());
   }
-  if (params?.limit !== undefined) {
-    queryParams.append('limit', params.limit.toString());
+  if (params?.page_size !== undefined) {
+    queryParams.append('page_size', params.page_size.toString());
+  }
+  if (params?.search) {
+    queryParams.append('search', params.search);
+  }
+  if (params?.status && params.status.length > 0) {
+    params.status.forEach((s) => queryParams.append('status', s));
+  }
+  if (params?.vendor_id !== undefined) {
+    queryParams.append('vendor_id', params.vendor_id.toString());
+  }
+  if (params?.vendor_name) {
+    queryParams.append('vendor_name', params.vendor_name);
+  }
+  if (params?.currency) {
+    queryParams.append('currency', params.currency);
+  }
+  if (params?.min_amount !== undefined) {
+    queryParams.append('min_amount', params.min_amount.toString());
+  }
+  if (params?.max_amount !== undefined) {
+    queryParams.append('max_amount', params.max_amount.toString());
+  }
+  if (params?.tag) {
+    queryParams.append('tag', params.tag);
+  }
+  if (params?.start_date) {
+    queryParams.append('start_date', params.start_date);
+  }
+  if (params?.end_date) {
+    queryParams.append('end_date', params.end_date);
+  }
+  if (params?.date_range) {
+    queryParams.append('date_range', params.date_range);
+  }
+  if (params?.month !== undefined) {
+    queryParams.append('month', params.month.toString());
+  }
+  if (params?.year !== undefined) {
+    queryParams.append('year', params.year.toString());
   }
 
-  const url = `${BASE_URL}/invoices${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  const url = `${BASE_URL}/invoices${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -200,6 +614,51 @@ export async function listInvoices(params?: ListInvoicesParams): Promise<ListInv
   }
 
   return response.json();
+}
+
+/**
+ * Download the original invoice file for preview/download
+ * GET /invoices/{invoice_id}/file
+ */
+export async function downloadInvoiceFile(invoiceId: number): Promise<InvoiceFileDownload> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/file`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    // Try to parse JSON error if available
+    let message = response.statusText;
+    try {
+      const err = await response.json();
+      message = err.message || err.error || message;
+    } catch {
+      // ignore JSON parse errors for non-JSON bodies
+    }
+    throw new Error(message || 'Failed to download invoice file');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
 }
 
 /**
@@ -224,6 +683,60 @@ export async function getInvoice(invoiceId: number): Promise<GetInvoiceResponse>
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to get invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Validate an invoice and run full server-side checks
+ * POST /invoices/{invoice_id}/validate
+ */
+export async function validateInvoice(invoiceId: number): Promise<ValidateInvoiceResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/validate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to validate invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Verify invoice subtotals - get server-side verification of invoice header totals vs line items
+ * GET /invoices/{invoice_id}/verification
+ */
+export async function verifyInvoice(invoiceId: number): Promise<VerifyInvoiceResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/verification`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to verify invoice');
   }
 
   return response.json();
@@ -261,6 +774,41 @@ export async function updateInvoice(
 }
 
 /**
+ * Record a payment for an invoice
+ * POST /invoices/{invoice_id}/payments
+ */
+export async function addPayment(
+  invoiceId: number,
+  data: AddPaymentRequest
+): Promise<AddPaymentResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/payments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (response.status === 404) {
+    throw new Error('Invoice not found');
+  }
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to record payment');
+  }
+
+  return response.json();
+}
+
+/**
  * Delete an invoice and its associated file
  * DELETE /invoices/{invoice_id}
  */
@@ -282,6 +830,38 @@ export async function deleteInvoice(invoiceId: number): Promise<DeleteInvoiceRes
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to delete invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Bulk delete multiple invoices (hard delete)
+ * POST /invoices/delete-bulk
+ */
+export async function bulkDeleteInvoices(
+  invoiceIds: number[]
+): Promise<BulkDeleteInvoicesResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: BulkDeleteInvoicesRequest = { invoice_ids: invoiceIds };
+
+  const response = await fetch(`${BASE_URL}/invoices/delete-bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to delete invoices');
   }
 
   return response.json();
@@ -375,6 +955,581 @@ export async function deleteLineItem(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to delete line item');
+  }
+
+  return response.json();
+}
+
+/**
+ * Upload multiple invoice files in a single batch request
+ * POST /invoices/batch-upload
+ */
+export async function batchUploadInvoices(
+  files: File[],
+  options?: {
+    auto_classify?: boolean;
+    remark?: string;
+  }
+): Promise<BatchUploadResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  // Build query parameters
+  const queryParams = new URLSearchParams();
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.remark) {
+    queryParams.append('remark', options.remark);
+  }
+
+  const url = `${BASE_URL}/invoices/batch-upload${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload invoices');
+  }
+
+  return response.json();
+}
+
+/**
+ * Bulk verify invoice subtotals (list view helper)
+ * GET /invoices/verification?invoice_ids=...
+ */
+export async function bulkVerifyInvoices(
+  invoiceIds: number[]
+): Promise<BulkVerifyInvoicesResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const queryParams = new URLSearchParams();
+  invoiceIds.forEach((id) => queryParams.append('invoice_ids', id.toString()));
+
+  const url = `${BASE_URL}/invoices/verification?${
+    queryParams.toString() ? queryParams.toString() : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to verify invoices');
+  }
+
+  return response.json();
+}
+
+/**
+ * Export selected invoices to CSV
+ * POST /invoices/export
+ */
+export async function exportInvoicesCsv(
+  invoiceIds: number[]
+): Promise<ExportInvoicesCsvResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: ExportInvoicesRequest = { invoice_ids: invoiceIds };
+
+  const response = await fetch(`${BASE_URL}/invoices/export`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to export invoices');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
+}
+
+/**
+ * Download original invoice files for selected invoices (ZIP)
+ * POST /invoices/download
+ */
+export async function downloadInvoicesZip(
+  invoiceIds: number[]
+): Promise<DownloadInvoicesZipResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: ExportInvoicesRequest = { invoice_ids: invoiceIds };
+
+  const response = await fetch(`${BASE_URL}/invoices/download`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to download invoice files');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
+}
+
+/**
+ * Check for duplicate invoice by invoice_no and vendor
+ * GET /invoices/check-duplicate
+ */
+export async function checkDuplicateInvoice(
+  params: CheckDuplicateInvoiceParams
+): Promise<CheckDuplicateInvoiceResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('invoice_no', params.invoice_no);
+  if (params.vendor_id !== undefined) {
+    queryParams.append('vendor_id', params.vendor_id.toString());
+  } else if (params.vendor_name) {
+    queryParams.append('vendor_name', params.vendor_name);
+  }
+
+  const url = `${BASE_URL}/invoices/check-duplicate?${queryParams.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to check duplicate invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get aggregate invoice statistics
+ * GET /invoices/statistics
+ */
+export async function getInvoiceStatistics(
+  filters?: InvoiceStatisticsFilters
+): Promise<InvoiceStatisticsResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const queryParams = new URLSearchParams();
+  if (filters?.start_date) {
+    queryParams.append('start_date', filters.start_date);
+  }
+  if (filters?.end_date) {
+    queryParams.append('end_date', filters.end_date);
+  }
+  if (filters?.vendor_id !== undefined) {
+    queryParams.append('vendor_id', filters.vendor_id.toString());
+  }
+  if (filters?.status) {
+    queryParams.append('status', filters.status);
+  }
+  if (filters?.date_range) {
+    queryParams.append('date_range', filters.date_range);
+  }
+
+  const url = `${BASE_URL}/invoices/statistics${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to get invoice statistics');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the status of a single batch job
+ * GET /invoices/batch-jobs/{job_id}
+ */
+export async function getBatchJobStatus(jobId: string): Promise<GetBatchJobResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/batch-jobs/${jobId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to get batch job status');
+  }
+
+  return response.json();
+}
+
+/**
+ * List batch jobs for the current user
+ * GET /invoices/batch-jobs
+ */
+export async function listBatchJobs(params?: ListBatchJobsParams): Promise<ListBatchJobsResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const queryParams = new URLSearchParams();
+  if (params?.job_ids && params.job_ids.length > 0) {
+    params.job_ids.forEach((jobId) => {
+      queryParams.append('job_ids', jobId);
+    });
+  }
+
+  const url = `${BASE_URL}/invoices/batch-jobs${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to list batch jobs');
+  }
+
+  return response.json();
+}
+
+// Multi-Page Invoice Upload Types
+export interface UploadGroupResponse {
+  success: boolean;
+  data: {
+    group_id: string;
+    page_number: number;
+    total_files: number;
+    page_numbers: number[];
+  };
+  message: string;
+}
+
+export interface GroupStatusFile {
+  file_path: string;
+  page_number: number;
+  file_type: string;
+  uploaded_at: string;
+}
+
+export interface GroupStatusData {
+  group_id: string;
+  user_id: number;
+  total_files: number;
+  page_numbers: number[];
+  created_at: string;
+  expires_at: string;
+  files: GroupStatusFile[];
+}
+
+export interface GetGroupStatusResponse {
+  success: boolean;
+  data: GroupStatusData;
+  message: string;
+}
+
+export interface CompleteGroupResponse {
+  success: boolean;
+  data: Invoice;
+  message: string;
+}
+
+export interface CancelGroupResponse {
+  success: boolean;
+  data: {
+    group_id: string;
+  };
+  message: string;
+}
+
+/**
+ * Upload multiple images for a single invoice in one request
+ * POST /invoices/upload-multi
+ */
+export async function uploadMultiPageInvoice(
+  files: File[],
+  options?: {
+    page_numbers?: number[];
+    auto_classify?: boolean;
+  }
+): Promise<UploadInvoiceResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  if (files.length < 2) {
+    throw new Error('At least 2 images are required for multi-page upload');
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const queryParams = new URLSearchParams();
+  if (options?.page_numbers && options.page_numbers.length > 0) {
+    queryParams.append('page_numbers', options.page_numbers.join(','));
+  }
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
+
+  const url = `${BASE_URL}/invoices/upload-multi${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload multi-page invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Upload a single image to an invoice group (sequential upload)
+ * POST /invoices/upload-group
+ */
+export async function uploadToGroup(
+  file: File,
+  pageNumber: number,
+  options?: {
+    group_id?: string;
+  }
+): Promise<UploadGroupResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  if (pageNumber < 1) {
+    throw new Error('Page number must be >= 1');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const queryParams = new URLSearchParams();
+  queryParams.append('page_number', pageNumber.toString());
+  if (options?.group_id) {
+    queryParams.append('group_id', options.group_id);
+  }
+
+  const url = `${BASE_URL}/invoices/upload-group${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload to group');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the status of an invoice upload group
+ * GET /invoices/group/{group_id}
+ */
+export async function getGroupStatus(groupId: string): Promise<GetGroupStatusResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/group/${groupId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to get group status');
+  }
+
+  return response.json();
+}
+
+/**
+ * Complete a multi-page invoice upload group
+ * POST /invoices/group/{group_id}/complete
+ */
+export async function completeGroup(
+  groupId: string,
+  options?: {
+    auto_classify?: boolean;
+  }
+): Promise<CompleteGroupResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const queryParams = new URLSearchParams();
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
+
+  const url = `${BASE_URL}/invoices/group/${groupId}/complete${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to complete group');
+  }
+
+  return response.json();
+}
+
+/**
+ * Cancel and cleanup an incomplete invoice upload group
+ * DELETE /invoices/group/{group_id}
+ */
+export async function cancelGroup(groupId: string): Promise<CancelGroupResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/invoices/group/${groupId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to cancel group');
   }
 
   return response.json();

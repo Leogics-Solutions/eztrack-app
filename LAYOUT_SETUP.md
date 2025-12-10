@@ -52,11 +52,16 @@ const navItems = [
 Change the logo and brand name:
 
 ```tsx
-<div className="h-8 w-8 rounded-lg bg-blue-600">
-  <span className="text-white font-bold">EZ</span> {/* Change this */}
+<div className="h-24 w-24 relative flex-shrink-0">
+  <Image
+    src="/smartdok.png"
+    alt="Smartdok.ai"
+    fill
+    className="object-contain"
+  />
 </div>
 <span className="font-semibold text-lg">
-  EZTrack {/* Change this */}
+  Smartdok.ai {/* Change this */}
 </span>
 ```
 

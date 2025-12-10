@@ -3,9 +3,7 @@
  * Simple functions to call authentication endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_URL || 'http://localhost:8000';
-const API_VERSION = 'v1';
-const BASE_URL = `${API_BASE_URL}/api/${API_VERSION}`;
+import { BASE_URL } from './config';
 
 // Types
 export interface RegisterRequest {
@@ -66,6 +64,12 @@ export interface ChangePasswordRequest {
 }
 
 export interface ChangePasswordResponse {
+  success: boolean;
+  data: null;
+  message: string;
+}
+
+export interface LogoutResponse {
   success: boolean;
   data: null;
   message: string;
@@ -174,7 +178,7 @@ export async function changePassword(data: ChangePasswordRequest): Promise<Chang
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
+    const error: { message?: string; error?: string } = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to change password');
   }
 
@@ -182,13 +186,67 @@ export async function changePassword(data: ChangePasswordRequest): Promise<Chang
 }
 
 /**
- * Logout - clear tokens
+ * Logout - call API endpoint and clear tokens
+ * POST /auth/logout
  */
-export function logout(): void {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+export async function logout(): Promise<LogoutResponse> {
+  if (typeof window === 'undefined') {
+    return {
+      success: true,
+      data: null,
+      message: 'Logout successful. Please remove tokens from client storage.',
+    };
   }
+
+  const token = localStorage.getItem('access_token');
+  
+  // Try to call the logout API endpoint if we have a token
+  if (token) {
+    try {
+      const response = await fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(error.message || error.error || 'Logout failed');
+      }
+
+      const result = await response.json();
+      
+      // Always clear tokens from storage after successful API call
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      
+      return result;
+    } catch (error) {
+      // If API call fails, still clear tokens from storage
+      console.error('Logout API call failed:', error);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      
+      // Return success response even if API call failed (tokens are cleared)
+      return {
+        success: true,
+        data: null,
+        message: 'Logout successful. Tokens removed from client storage.',
+      };
+    }
+  }
+
+  // No token exists, just clear storage
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  
+  return {
+    success: true,
+    data: null,
+    message: 'Logout successful. Tokens removed from client storage.',
+  };
 }
 
 /**

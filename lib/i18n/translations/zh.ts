@@ -36,6 +36,7 @@ export const zh: Translations = {
     newInvoice: '新建发票',
     batchUpload: '批量上传',
     exportSelected: '导出所选',
+    downloadPdf: '下载PDF',
     deleteSelected: '删除所选',
     verifySubtotals: '验证小计',
     filters: {
@@ -418,6 +419,7 @@ export const zh: Translations = {
       draft: '草稿',
       validated: '已验证',
       posted: '已过账',
+      paid: '已支付',
     },
   },
   settings: {
@@ -444,7 +446,7 @@ export const zh: Translations = {
     usageStatistics: '使用统计',
     usageStatisticsDescription: '您的页面处理活动',
     pagesProcessed: '已处理页面',
-    monthlyPageQuota: '每月页面配额',
+    monthlyPageQuota: '页面配额',
     pagesRemaining: '剩余页面',
     lastInvoice: '最后发票',
     never: '从未',

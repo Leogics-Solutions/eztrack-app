@@ -2,9 +2,18 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { Plus } from "lucide-react";
+import {
+  listInvoices,
+  deleteInvoice as deleteInvoiceApi,
+  bulkDeleteInvoices,
+  bulkVerifyInvoices,
+  exportInvoicesCsv,
+  downloadInvoicesZip,
+  type Invoice as ApiInvoice,
+} from "@/services";
 
 // Types
 interface Vendor {
@@ -16,22 +25,16 @@ interface Remark {
   remarks: string;
 }
 
-interface Invoice {
-  id: number;
-  vendor_name?: string;
+// Extend backend Invoice type with extra optional fields used by UI
+interface Invoice extends ApiInvoice {
   vendor_tax_id?: string;
   vendor_tin_number?: string;
   vendor_reg_no?: string;
   vendor_reg_no_new?: string;
   vendor_reg_no_old?: string;
-  invoice_no?: string;
-  invoice_date?: string;
-  currency?: string;
-  total?: number;
   remarks?: string;
   created_by_name?: string;
   created_by_email?: string;
-  status?: 'draft' | 'validated' | 'posted';
 }
 
 interface VerifyStatus {
@@ -62,9 +65,17 @@ const DocumentsListing = () => {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [filtersVisible, setFiltersVisible] = useState(true);
+  const [advancedFiltersVisible, setAdvancedFiltersVisible] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [orgRole, setOrgRole] = useState<string>('member');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -81,63 +92,185 @@ const DocumentsListing = () => {
     per_page: 20,
   });
 
-  // Mock data loading - Replace with actual API calls
   useEffect(() => {
     loadData();
   }, [filters]);
 
+  // Check if table needs horizontal scrolling
+  useEffect(() => {
+    const checkScrollNeeded = () => {
+      if (tableContainerRef.current) {
+        const container = tableContainerRef.current;
+        const table = container.querySelector('table');
+        if (table) {
+          // Add a small delay to ensure table is fully rendered
+          setTimeout(() => {
+            const needsScroll = table.scrollWidth > container.clientWidth;
+            setNeedsHorizontalScroll(needsScroll);
+          }, 100);
+        }
+      }
+    };
+
+    // Check on mount and when data changes
+    checkScrollNeeded();
+
+    // Check on window resize
+    window.addEventListener('resize', checkScrollNeeded);
+    
+    // Use ResizeObserver for more accurate detection
+    let resizeObserver: ResizeObserver | null = null;
+    if (tableContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        // Debounce the check
+        setTimeout(checkScrollNeeded, 50);
+      });
+      resizeObserver.observe(tableContainerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', checkScrollNeeded);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, [invoices, filtersVisible]);
+
   const loadData = async () => {
-    // TODO: Replace with actual API calls
-    // For now, using mock data
-    setInvoices([
-      {
-        id: 1,
-        vendor_name: 'Sample Vendor Ltd',
-        vendor_tax_id: 'SST123456',
-        vendor_tin_number: 'TIN987654',
-        vendor_reg_no_new: '202301234567',
-        invoice_no: 'INV-2024-001',
-        invoice_date: '2024-01-15',
-        currency: 'MYR',
-        total: 1500.00,
-        remarks: 'Office Supplies',
-        created_by_name: 'John Doe',
-        created_by_email: 'john@example.com',
-        status: 'posted',
-      },
-      // Add more mock data as needed
-    ]);
+    setIsLoading(true);
+    setError(null);
 
-    setVendors([
-      { id: 1, name: 'Sample Vendor Ltd' },
-      { id: 2, name: 'Another Vendor Co' },
-    ]);
+    try {
+      const response = await listInvoices({
+        page: filters.page,
+        page_size: filters.per_page,
+        search: filters.search || undefined,
+        status:
+          filters.status && filters.status.length > 0
+            ? filters.status.map((s) => s.toUpperCase())
+            : undefined,
+        vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
+        currency: filters.currency || undefined,
+        min_amount: filters.min_amount ? Number(filters.min_amount) : undefined,
+        max_amount: filters.max_amount ? Number(filters.max_amount) : undefined,
+        tag: filters.remark || undefined,
+        start_date: filters.start_date || undefined,
+        end_date: filters.end_date || undefined,
+      });
 
-    setRemarks([
-      { remarks: 'Office Supplies' },
-      { remarks: 'Equipment' },
-      { remarks: 'Services' },
-    ]);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to load invoices');
+      }
 
-    setVerifyMap({
-      1: { status: 'ok' },
-    });
+      const rawData = (response as any).data;
+      const data: ApiInvoice[] = Array.isArray(rawData)
+        ? rawData
+        : Array.isArray(rawData?.invoices)
+        ? rawData.invoices
+        : [];
+      setInvoices(data as Invoice[]);
 
-    setTotalCount(1);
-    setPagination({
-      page: 1,
-      has_prev: false,
-      has_next: false,
-      start: 1,
-      end: 1,
-      total: 1,
-      iter_pages: () => [1],
-    });
+      // Use backend pagination metadata when available
+      const total = typeof rawData?.total === 'number' ? rawData.total : data.length;
+      const page = typeof rawData?.page === 'number' ? rawData.page : filters.page;
+      const pageSize =
+        typeof rawData?.page_size === 'number' ? rawData.page_size : filters.per_page;
+      const totalPages =
+        typeof rawData?.total_pages === 'number'
+          ? rawData.total_pages
+          : Math.max(1, Math.ceil(total / pageSize));
+
+      setTotalCount(total);
+
+      const hasPrev = page > 1;
+      const hasNext = page < totalPages;
+      const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+      const end = total === 0 ? 0 : Math.min(page * pageSize, total);
+
+      const iter_pages = () => {
+        const pages: (number | null)[] = [];
+        const windowSize = 5;
+        let startPage = Math.max(1, page - 2);
+        let endPage = Math.min(totalPages, startPage + windowSize - 1);
+        if (endPage - startPage < windowSize - 1) {
+          startPage = Math.max(1, endPage - windowSize + 1);
+        }
+
+        for (let p = startPage; p <= endPage; p++) {
+          pages.push(p);
+        }
+
+        return pages;
+      };
+
+      setPagination({
+        page,
+        prev_num: hasPrev ? page - 1 : undefined,
+        next_num: hasNext ? page + 1 : undefined,
+        has_prev: hasPrev,
+        has_next: hasNext,
+        start,
+        end,
+        total,
+        iter_pages,
+      });
+
+      // Vendor / remark filter options can be derived from current page for now
+      const uniqueVendors: Record<number, string> = {};
+      const remarkSet = new Set<string>();
+
+      data.forEach((inv: ApiInvoice & { remarks?: string }) => {
+        // @ts-expect-error vendor_id may not exist on all invoices
+        if (inv.vendor_id && inv.vendor_name) {
+          // @ts-expect-error vendor_id may not exist on type
+          uniqueVendors[inv.vendor_id] = inv.vendor_name;
+        }
+        if (inv.remarks) {
+          remarkSet.add(inv.remarks);
+        }
+      });
+
+      setVendors(
+        Object.entries(uniqueVendors).map(([id, name]) => ({
+          id: Number(id),
+          name,
+        }))
+      );
+
+      setRemarks(Array.from(remarkSet).map((r) => ({ remarks: r })));
+
+      // Verification indicators from API (if provided)
+      const verificationMap: Record<number, VerifyStatus> = {};
+      if (rawData?.verification && typeof rawData.verification === 'object') {
+        Object.entries(rawData.verification as Record<string, any>).forEach(
+          ([idStr, v]) => {
+            const id = Number(idStr);
+            if (!Number.isFinite(id)) return;
+            const status =
+              v?.status === 'ok' && v?.ok
+                ? 'ok'
+                : v?.status === 'mismatch' || v?.ok === false
+                ? 'mismatch'
+                : 'unknown';
+            verificationMap[id] = { status };
+          }
+        );
+      }
+      setVerifyMap(verificationMap);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load invoices');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Filter functions
   const toggleFilters = () => {
     setFiltersVisible(!filtersVisible);
+  };
+
+  const toggleAdvancedFilters = () => {
+    setAdvancedFiltersVisible(!advancedFiltersVisible);
   };
 
   const clearFilters = () => {
@@ -243,8 +376,32 @@ const DocumentsListing = () => {
     if (!confirm(message)) {
       return;
     }
-    // TODO: Implement bulk delete API call
-    console.log('Bulk delete:', Array.from(selectedInvoices));
+
+    try {
+      const ids = Array.from(selectedInvoices);
+      const response = await bulkDeleteInvoices(ids);
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to delete invoices');
+      }
+
+      // Show success message
+      alert(
+        response.message || 
+        `Successfully deleted ${response.data.deleted_count} invoice(s)`
+      );
+
+      // Clear selection and reload data
+      setSelectedInvoices(new Set());
+      setSelectAll(false);
+      await loadData();
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Failed to delete invoices'
+      );
+    }
   };
 
   const exportSelected = async () => {
@@ -252,8 +409,69 @@ const DocumentsListing = () => {
       alert(t.documents.alerts.exportSelectAtLeastOne);
       return;
     }
-    // TODO: Implement export API call
-    console.log('Export:', Array.from(selectedInvoices));
+    try {
+      setIsExporting(true);
+      const ids = Array.from(selectedInvoices);
+      const { blob, filename } = await exportInvoicesCsv(ids);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date();
+      const fallbackName = `invoices_${timestamp
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .slice(0, 15)}.csv`;
+
+      link.download = filename || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : t.documents.alerts.exportSelectAtLeastOne
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (selectedInvoices.size === 0) {
+      alert(t.documents.alerts.exportSelectAtLeastOne);
+      return;
+    }
+    try {
+      setIsDownloading(true);
+      const ids = Array.from(selectedInvoices);
+      const { blob, filename } = await downloadInvoicesZip(ids);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date();
+      const fallbackName = `invoices_${timestamp
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .slice(0, 15)}.zip`;
+
+      link.download = filename || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : t.documents.alerts.exportSelectAtLeastOne
+      );
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const deleteInvoice = async (invoiceId: number) => {
@@ -261,12 +479,63 @@ const DocumentsListing = () => {
     if (!confirm(message)) {
       return;
     }
-    // TODO: Implement delete API call
-    console.log('Delete invoice:', invoiceId);
+
+    try {
+      const response = await deleteInvoiceApi(invoiceId);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to delete invoice');
+      }
+      await loadData();
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : t.documents.alerts.deleteFailed
+      );
+    }
   };
 
   const recalcIndicators = () => {
-    alert(t.documents.alerts.verifyIndicators);
+    if (invoices.length === 0) {
+      alert(t.documents.alerts.exportSelectAtLeastOne);
+      return;
+    }
+
+    const ids = invoices.map((inv) => inv.id);
+
+    const run = async () => {
+      try {
+        setIsVerifying(true);
+        const response = await bulkVerifyInvoices(ids);
+        if (!response.success || !response.data?.verification) {
+          throw new Error(response.message || 'Failed to verify invoices');
+        }
+
+        const verificationMap: Record<number, VerifyStatus> = {};
+        Object.entries(response.data.verification).forEach(([idStr, v]) => {
+          const id = Number(idStr);
+          if (!Number.isFinite(id)) return;
+          const status =
+            v?.status === 'ok' && v?.ok
+              ? 'ok'
+              : v?.status === 'mismatch' || v?.ok === false
+              ? 'mismatch'
+              : 'unknown';
+          verificationMap[id] = { status };
+        });
+        setVerifyMap(verificationMap);
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : t.documents.alerts.verifyIndicators
+        );
+      } finally {
+        setIsVerifying(false);
+      }
+    };
+
+    void run();
   };
 
   return (
@@ -287,154 +556,176 @@ const DocumentsListing = () => {
 
         {filtersVisible && (
           <form onSubmit={applyFilters} className="p-6">
-            {/* Date Range */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">{t.documents.filters.dateRange}</label>
-              <div className="flex gap-2 max-w-md mb-3">
-                <input
-                  type="date"
-                  value={filters.start_date}
-                  onChange={(e) => handleFilterChange('start_date', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  placeholder={t.documents.filters.startDate}
-                />
-                <input
-                  type="date"
-                  value={filters.end_date}
-                  onChange={(e) => handleFilterChange('end_date', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  placeholder={t.documents.filters.endDate}
-                />
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {['today', 'week', 'month', 'quarter', 'year'].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setDateRange(preset)}
-                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
-                  >
-                    {preset === 'today' && t.dashboard.filters.today}
-                    {preset === 'week' && t.dashboard.filters.thisWeek}
-                    {preset === 'month' && t.dashboard.filters.thisMonth}
-                    {preset === 'quarter' && t.dashboard.filters.thisQuarter}
-                    {preset === 'year' && t.dashboard.filters.thisYear}
-                  </button>
-                ))}
+            {/* Basic Filters - Always Visible */}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Date Range */}
+                <div className="lg:col-span-2">
+                  <label className="block text-sm font-medium mb-2">{t.documents.filters.dateRange}</label>
+                  <div className="flex gap-2 max-w-md mb-3">
+                    <input
+                      type="date"
+                      value={filters.start_date}
+                      onChange={(e) => handleFilterChange('start_date', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                      placeholder={t.documents.filters.startDate}
+                    />
+                    <input
+                      type="date"
+                      value={filters.end_date}
+                      onChange={(e) => handleFilterChange('end_date', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                      placeholder={t.documents.filters.endDate}
+                    />
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {['today', 'week', 'month', 'quarter', 'year'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setDateRange(preset)}
+                        className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                      >
+                        {preset === 'today' && t.dashboard.filters.today}
+                        {preset === 'week' && t.dashboard.filters.thisWeek}
+                        {preset === 'month' && t.dashboard.filters.thisMonth}
+                        {preset === 'quarter' && t.dashboard.filters.thisQuarter}
+                        {preset === 'year' && t.dashboard.filters.thisYear}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t.documents.filters.search}</label>
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    placeholder={t.documents.filters.searchPlaceholder}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Search */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">{t.documents.filters.search}</label>
-              <input
-                type="text"
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                placeholder={t.documents.filters.searchPlaceholder}
-                className="w-full max-w-lg px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-              />
-            </div>
-
-            {/* Remark/Tag */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2">{t.documents.filters.remarkTag}</label>
-              <select
-                value={filters.remark}
-                onChange={(e) => handleFilterChange('remark', e.target.value)}
-                className="w-full max-w-lg px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+            {/* Advanced Filters Toggle */}
+            <div className="mt-6 pt-6 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={toggleAdvancedFilters}
+                className="flex items-center gap-2 text-sm font-medium text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors"
               >
-                <option value="">{t.documents.filters.allTags}</option>
-                {remarks.map((remark, idx) => (
-                  <option key={idx} value={remark.remarks}>
-                    {remark.remarks}
-                  </option>
-                ))}
-              </select>
+                <span>{advancedFiltersVisible ? '▼' : '▶'}</span>
+                <span>{advancedFiltersVisible ? 'Hide Advanced Filters' : 'Show Advanced Filters'}</span>
+              </button>
             </div>
 
-            {/* Vendor, Currency, Status, Amount */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Vendor */}
-              <div>
-                <label className="block text-sm font-medium mb-2">{t.documents.filters.vendor}</label>
-                <select
-                  value={filters.vendor_id}
-                  onChange={(e) => handleFilterChange('vendor_id', e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                >
-                  <option value="">{t.documents.filters.allVendors}</option>
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Advanced Filters - Collapsible */}
+            {advancedFiltersVisible && (
+              <div className="mt-6 pt-6 border-t border-[var(--border)] space-y-6">
+                {/* Remark/Tag */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t.documents.filters.remarkTag}</label>
+                  <select
+                    value={filters.remark}
+                    onChange={(e) => handleFilterChange('remark', e.target.value)}
+                    className="w-full max-w-lg px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                  >
+                    <option value="">{t.documents.filters.allTags}</option>
+                    {remarks.map((remark, idx) => (
+                      <option key={idx} value={remark.remarks}>
+                        {remark.remarks}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Currency */}
-              <div>
-                <label className="block text-sm font-medium mb-2">{t.documents.filters.currency}</label>
-                <select
-                  value={filters.currency}
-                  onChange={(e) => handleFilterChange('currency', e.target.value)}
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                >
-                  <option value="">{t.documents.filters.allCurrencies}</option>
-                  <option value="MYR">MYR</option>
-                  <option value="USD">USD</option>
-                  <option value="SGD">SGD</option>
-                </select>
-              </div>
+                {/* Vendor, Currency, Status, Amount */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Vendor */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">{t.documents.filters.vendor}</label>
+                    <select
+                      value={filters.vendor_id}
+                      onChange={(e) => handleFilterChange('vendor_id', e.target.value)}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                    >
+                      <option value="">{t.documents.filters.allVendors}</option>
+                      {vendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium mb-2">{t.documents.filters.status}</label>
-                <div className="space-y-2">
-                  {['draft', 'validated', 'posted'].map((status) => (
-                    <label key={status} className="flex items-center space-x-2">
+                  {/* Currency */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">{t.documents.filters.currency}</label>
+                    <select
+                      value={filters.currency}
+                      onChange={(e) => handleFilterChange('currency', e.target.value)}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                    >
+                      <option value="">{t.documents.filters.allCurrencies}</option>
+                      <option value="MYR">MYR</option>
+                      <option value="USD">USD</option>
+                      <option value="SGD">SGD</option>
+                    </select>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">{t.documents.filters.status}</label>
+                    <div className="space-y-2">
+                      {['draft', 'validated', 'paid'].map((status) => (
+                        <label key={status} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.status.includes(status)}
+                            onChange={(e) => handleStatusChange(status, e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm capitalize">
+                            {status === 'draft' ? t.dashboard.status.draft :
+                             status === 'validated' ? t.dashboard.status.validated :
+                             status === 'paid' ? (t.dashboard.status as any).paid || 'Paid' : status}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Amount Range */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">{t.documents.filters.amountRange}</label>
+                    <div className="flex gap-2 w-full">
                       <input
-                        type="checkbox"
-                        checked={filters.status.includes(status)}
-                        onChange={(e) => handleStatusChange(status, e.target.checked)}
-                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                        type="number"
+                        value={filters.min_amount}
+                        onChange={(e) => handleFilterChange('min_amount', e.target.value)}
+                        placeholder={t.documents.filters.min}
+                        step="0.01"
+                        className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                       />
-                      <span className="text-sm capitalize">
-                        {status === 'draft' ? t.dashboard.status.draft :
-                         status === 'validated' ? t.dashboard.status.validated :
-                         status === 'posted' ? t.dashboard.status.posted : status}
-                      </span>
-                    </label>
-                  ))}
+                      <input
+                        type="number"
+                        value={filters.max_amount}
+                        onChange={(e) => handleFilterChange('max_amount', e.target.value)}
+                        placeholder={t.documents.filters.max}
+                        step="0.01"
+                        className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* Amount Range */}
-              <div>
-                <label className="block text-sm font-medium mb-2">{t.documents.filters.amountRange}</label>
-                <div className="flex gap-2 w-full">
-                  <input
-                    type="number"
-                    value={filters.min_amount}
-                    onChange={(e) => handleFilterChange('min_amount', e.target.value)}
-                    placeholder={t.documents.filters.min}
-                    step="0.01"
-                    className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  />
-                  <input
-                    type="number"
-                    value={filters.max_amount}
-                    onChange={(e) => handleFilterChange('max_amount', e.target.value)}
-                    placeholder={t.documents.filters.max}
-                    step="0.01"
-                    className="w-1/2 min-w-0 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-                  />
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Action Buttons */}
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3 justify-end mt-6 pt-6 border-t border-[var(--border)]">
               <button
                 type="button"
                 onClick={clearFilters}
@@ -466,6 +757,11 @@ const DocumentsListing = () => {
                 {t.documents.table.showing} {invoices.length} {t.documents.table.of} {totalCount} {t.documents.table.invoices}
               </p>
             )}
+            {error && (
+              <p className="mt-1 text-sm text-red-500">
+                {error}
+              </p>
+            )}
           </div>
           <div className="flex gap-3 flex-wrap">
             <button
@@ -484,18 +780,35 @@ const DocumentsListing = () => {
             </button>
             <button
               onClick={recalcIndicators}
-              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+              disabled={isVerifying || invoices.length === 0}
+              className="px-4 py-2 border border-[var(--border)] hover:text-white rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="mr-2">✓</span>
-              {t.documents.verifySubtotals}
+              {isVerifying ? `${t.documents.verifySubtotals}...` : t.documents.verifySubtotals}
             </button>
             <button
               onClick={exportSelected}
-              disabled={selectedInvoices.size === 0}
+              disabled={selectedInvoices.size === 0 || isExporting}
               className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="mr-2">📤</span>
-              {t.documents.exportSelected} {selectedInvoices.size > 0 && `(${selectedInvoices.size})`}
+              {isExporting
+                ? t.documents.exportSelected
+                : `${t.documents.exportSelected}${
+                    selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
+                  }`}
+            </button>
+            <button
+              onClick={downloadPdf}
+              disabled={selectedInvoices.size === 0 || isDownloading}
+              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="mr-2">📄</span>
+              {isDownloading
+                ? t.documents.downloadPdf
+                : `${t.documents.downloadPdf}${
+                    selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
+                  }`}
             </button>
             <button
               onClick={bulkDelete}
@@ -509,7 +822,7 @@ const DocumentsListing = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div ref={tableContainerRef} className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
               <tr>
@@ -521,6 +834,9 @@ const DocumentsListing = () => {
                     className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                   />
                 </th>
+                {needsHorizontalScroll && (
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] sticky left-[56px] z-10 bg-[var(--muted)] border-r border-[var(--border)]">{t.documents.table.actions}</th>
+                )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.vendor}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
@@ -533,12 +849,14 @@ const DocumentsListing = () => {
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
+                {!needsHorizontalScroll && (
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors">
+                <tr key={invoice.id} className="group hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors">
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -547,6 +865,24 @@ const DocumentsListing = () => {
                       className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                     />
                   </td>
+                  {needsHorizontalScroll && (
+                    <td className="px-4 py-3 sticky left-[56px] z-10 bg-white dark:bg-[var(--card)] border-r border-[var(--border)] group-hover:bg-[var(--hover-bg)] dark:group-hover:bg-[var(--hover-bg)]">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => router.push(`/documents/${invoice.id}`)}
+                          className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                        >
+                          {t.documents.table.open}
+                        </button>
+                        <button
+                          onClick={() => deleteInvoice(invoice.id)}
+                          className="px-3 py-1 text-sm bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors"
+                        >
+                          {t.documents.table.delete}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-sm">{invoice.id}</td>
                   <td className="px-4 py-3">
                     <div>
@@ -601,36 +937,57 @@ const DocumentsListing = () => {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-1 text-xs rounded-md ${
-                        invoice.status === 'posted'
+                    {(() => {
+                      const rawStatus = invoice.status || 'draft';
+                      const status = rawStatus.toLowerCase();
+                      const isDraft = status === 'draft';
+                      const isValidated = status === 'validated';
+                      const isPosted = status === 'posted';
+                      const isPaid = status === 'paid';
+
+                      const label =
+                        isDraft
+                          ? t.dashboard.status.draft
+                          : isValidated
+                          ? t.dashboard.status.validated
+                          : isPosted
+                          ? t.dashboard.status.posted
+                          : isPaid
+                          ? (t.dashboard.status as any).paid ?? 'Paid'
+                          : rawStatus;
+
+                      const cls =
+                        isPaid || isPosted
                           ? 'bg-[var(--success)] text-white'
-                          : invoice.status === 'validated'
+                          : isValidated
                           ? 'bg-[var(--info)] text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                      }`}
-                    >
-                      {invoice.status === 'draft' ? t.dashboard.status.draft :
-                       invoice.status === 'validated' ? t.dashboard.status.validated :
-                       invoice.status === 'posted' ? t.dashboard.status.posted : invoice.status || t.dashboard.status.draft}
-                    </span>
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+
+                      return (
+                        <span className={`inline-block px-2 py-1 text-xs rounded-md ${cls}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => router.push(`/documents/${invoice.id}`)}
-                        className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
-                      >
-                        {t.documents.table.open}
-                      </button>
-                      <button
-                        onClick={() => deleteInvoice(invoice.id)}
-                        className="px-3 py-1 text-sm bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors"
-                      >
-                        {t.documents.table.delete}
-                      </button>
-                    </div>
-                  </td>
+                  {!needsHorizontalScroll && (
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => router.push(`/documents/${invoice.id}`)}
+                          className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                        >
+                          {t.documents.table.open}
+                        </button>
+                        <button
+                          onClick={() => deleteInvoice(invoice.id)}
+                          className="px-3 py-1 text-sm bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors"
+                        >
+                          {t.documents.table.delete}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -43,6 +43,7 @@ export interface Translations {
     newInvoice: string;
     batchUpload: string;
     exportSelected: string;
+    downloadPdf: string;
     deleteSelected: string;
     verifySubtotals: string;
     newInvoicePage: {
@@ -431,6 +432,7 @@ export interface Translations {
       draft: string;
       validated: string;
       posted: string;
+      paid: string;
     };
   };
 

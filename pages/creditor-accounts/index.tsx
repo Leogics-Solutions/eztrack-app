@@ -2,38 +2,43 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
-import { Plus, Upload, Edit, Trash2, FileText } from "lucide-react";
-
-// Types
-interface Vendor {
-    id: number;
-    name: string;
-}
-
-interface CreditorAccount {
-    id: number;
-    name: string;
-    account_code?: string;
-    vendor_link?: number;
-    description?: string;
-    vendor_name: string;
-    invoice_count: number;
-}
+import { useRouter } from "next/router";
+import { Plus, Upload, Edit, Trash2, FileText, Loader2, Eye, X } from "lucide-react";
+import {
+    listCreditorAccounts,
+    createCreditorAccount,
+    updateCreditorAccount,
+    deleteCreditorAccount,
+    getCreditorAccountInvoices,
+    type CreditorAccount,
+    type CreditorAccountInvoice,
+} from "@/services";
+import { listVendors, type Vendor } from "@/services";
 
 const CreditorAccounts = () => {
     const { t } = useLanguage();
+    const toast = useToast();
+    const router = useRouter();
     // State
     const [creditors, setCreditors] = useState<CreditorAccount[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [formData, setFormData] = useState({
         account_name: '',
         account_code: '',
         vendor_link: '',
         description: '',
     });
+    // Invoice modal state
+    const [isInvoicesModalOpen, setIsInvoicesModalOpen] = useState(false);
+    const [selectedCreditorAccount, setSelectedCreditorAccount] = useState<CreditorAccount | null>(null);
+    const [invoices, setInvoices] = useState<CreditorAccountInvoice[]>([]);
+    const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
 
     // Load creditors data
     useEffect(() => {
@@ -42,39 +47,26 @@ const CreditorAccounts = () => {
     }, []);
 
     const loadCreditors = async () => {
-        // TODO: Replace with actual API call
-        // Mock data for testing
-        const mockCreditors: CreditorAccount[] = [
-            {
-                id: 1,
-                name: '650 Industries, Inc. (Expo)',
-                account_code: 'CR001',
-                vendor_link: 1,
-                description: '',
-                vendor_name: '650 Industries, Inc. (Expo)',
-                invoice_count: 2,
-            },
-            {
-                id: 2,
-                name: 'Amazon Web Services, Inc.',
-                account_code: 'CR002',
-                vendor_link: 2,
-                description: '',
-                vendor_name: 'Amazon Web Services, Inc.',
-                invoice_count: 1,
-            },
-        ];
-        setCreditors(mockCreditors);
+        try {
+            setIsLoading(true);
+            const response = await listCreditorAccounts({ active_only: true });
+            setCreditors(response.data);
+        } catch (error) {
+            console.error('Failed to load creditor accounts:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to load creditor accounts');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const loadVendors = async () => {
-        // TODO: Replace with actual API call
-        setVendors([
-            { id: 1, name: '650 Industries, Inc. (Expo)' },
-            { id: 2, name: 'Amazon Web Services, Inc.' },
-            { id: 3, name: 'Sample Vendor Ltd' },
-            { id: 4, name: 'Another Vendor Co' },
-        ]);
+        try {
+            const response = await listVendors({ active_only: true });
+            setVendors(response.data);
+        } catch (error) {
+            console.error('Failed to load vendors:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to load vendors');
+        }
     };
 
     // Modal handlers
@@ -93,8 +85,8 @@ const CreditorAccounts = () => {
         setEditingId(creditor.id);
         setFormData({
             account_name: creditor.name,
-            account_code: creditor.account_code || '',
-            vendor_link: creditor.vendor_link?.toString() || '',
+            account_code: creditor.code || '',
+            vendor_link: creditor.vendor_id?.toString() || '',
             description: creditor.description || '',
         });
         setIsModalOpen(true);
@@ -112,13 +104,31 @@ const CreditorAccounts = () => {
     const saveCreditor = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // TODO: Replace with actual API call
-        console.log('Saving creditor:', formData);
+        try {
+            setIsSaving(true);
+            const payload = {
+                name: formData.account_name,
+                code: formData.account_code || undefined,
+                vendor_id: formData.vendor_link ? parseInt(formData.vendor_link) : undefined,
+                description: formData.description || undefined,
+            };
 
-        // Mock success
-        alert(editingId ? t.creditors.accountUpdated : t.creditors.accountCreated);
-        closeCreditorModal();
-        // loadCreditors(); // Uncomment when API is ready
+            if (editingId) {
+                await updateCreditorAccount(editingId, payload);
+                toast.success(t.creditors.accountUpdated || 'Creditor account updated successfully');
+            } else {
+                await createCreditorAccount(payload);
+                toast.success(t.creditors.accountCreated || 'Creditor account created successfully');
+            }
+
+            closeCreditorModal();
+            await loadCreditors();
+        } catch (error) {
+            console.error('Failed to save creditor account:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to save creditor account');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const deleteCreditor = async (id: number, name: string) => {
@@ -126,15 +136,68 @@ const CreditorAccounts = () => {
             return;
         }
 
-        // TODO: Replace with actual API call
-        console.log('Deleting creditor:', id);
-        alert(t.creditors.accountDeleted);
-        // loadCreditors(); // Uncomment when API is ready
+        try {
+            setIsLoading(true);
+            await deleteCreditorAccount(id);
+            toast.success(t.creditors.accountDeleted || 'Creditor account deleted successfully');
+            await loadCreditors();
+        } catch (error) {
+            console.error('Failed to delete creditor account:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to delete creditor account');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleImportCSV = async () => {
         // TODO: Implement CSV import functionality
         alert(t.creditors.csvImportMessage);
+    };
+
+    const viewInvoices = async (creditor: CreditorAccount) => {
+        setSelectedCreditorAccount(creditor);
+        setIsInvoicesModalOpen(true);
+        await loadInvoices(creditor.id);
+    };
+
+    const loadInvoices = async (accountId: number) => {
+        try {
+            setIsLoadingInvoices(true);
+            const response = await getCreditorAccountInvoices(accountId);
+            setInvoices(response.data);
+        } catch (error) {
+            console.error('Failed to load invoices:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to load invoices');
+        } finally {
+            setIsLoadingInvoices(false);
+        }
+    };
+
+    const closeInvoicesModal = () => {
+        setIsInvoicesModalOpen(false);
+        setSelectedCreditorAccount(null);
+        setInvoices([]);
+    };
+
+    const formatDate = (dateString: string) => {
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString();
+        } catch {
+            return dateString;
+        }
+    };
+
+    const formatCurrency = (amount: number, currency: string) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency || 'MYR',
+            minimumFractionDigits: 2,
+        }).format(amount);
+    };
+
+    const handleInvoiceClick = (invoiceId: number) => {
+        router.push(`/documents/${invoiceId}`);
     };
 
     return (
@@ -172,7 +235,12 @@ const CreditorAccounts = () => {
 
                 {/* Creditor Accounts List */}
                 <div className="p-6">
-                    {creditors.length > 0 ? (
+                    {isLoading && creditors.length === 0 ? (
+                        <div className="py-12 px-4 text-center rounded-lg">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: 'var(--muted-foreground)' }} />
+                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Loading creditor accounts...</p>
+                        </div>
+                    ) : creditors.length > 0 ? (
                         <div className="space-y-4">
                             {creditors.map((creditor) => (
                                 <div
@@ -183,27 +251,61 @@ const CreditorAccounts = () => {
                                         <h3 className="text-lg font-semibold mb-2" >
                                             {creditor.name}
                                         </h3>
-                                        <div className="space-y-1 mb-3">
-                                            <p className="text-sm" >
-                                                {t.creditors.vendor} {creditor.vendor_name}
+                                        {creditor.code && (
+                                            <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.creditors.accountCode}: {creditor.code}
                                             </p>
+                                        )}
+                                        <div className="space-y-1 mb-3">
+                                            {creditor.vendor_name && (
+                                                <p className="text-sm" >
+                                                    {t.creditors.vendor} {creditor.vendor_name}
+                                                </p>
+                                            )}
+                                            {creditor.description && (
+                                                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                    {creditor.description}
+                                                </p>
+                                            )}
                                             <div className="flex items-center gap-2 text-sm">
                                                 <FileText className="h-4 w-4" />
-                                                <span>{creditor.invoice_count} {creditor.invoice_count === 1 ? t.creditors.invoice : t.creditors.invoices}</span>
+                                                {(creditor.invoice_count || 0) > 0 ? (
+                                                    <button
+                                                        onClick={() => viewInvoices(creditor)}
+                                                        className="hover:underline cursor-pointer"
+                                                        style={{ color: 'var(--primary)' }}
+                                                    >
+                                                        {creditor.invoice_count || 0} {creditor.invoice_count === 1 ? t.creditors.invoice : t.creditors.invoices}
+                                                    </button>
+                                                ) : (
+                                                    <span>{creditor.invoice_count || 0} {creditor.invoice_count === 1 ? t.creditors.invoice : t.creditors.invoices}</span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="border-t pt-3 mt-5 group-hover:border-[var(--hover-border)]" style={{ borderTopColor: 'var(--border)' }}>
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap gap-2">
+                                                {(creditor.invoice_count || 0) > 0 && (
+                                                    <button
+                                                        onClick={() => viewInvoices(creditor)}
+                                                        disabled={isLoading}
+                                                        className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        <Eye className="h-4 w-4 mr-2" />
+                                                        View Invoices
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => editCreditor(creditor)}
-                                                    className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center"
+                                                    disabled={isLoading}
+                                                    className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     <Edit className="h-4 w-4 mr-2" />
                                                     {t.creditors.edit}
                                                 </button>
                                                 <button
                                                     onClick={() => deleteCreditor(creditor.id, creditor.name)}
-                                                    className="px-4 py-2 bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors flex items-center"
+                                                    disabled={isLoading}
+                                                    className="px-4 py-2 bg-[var(--error)] text-white rounded-md hover:bg-[var(--error-dark)] transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
                                                     <Trash2 className="h-4 w-4 mr-2" />
                                                     {t.creditors.delete}
@@ -376,9 +478,17 @@ const CreditorAccounts = () => {
                             >
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium"
+                                    disabled={isSaving}
+                                    className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                 >
-                                    {editingId ? t.creditors.updateAccount : t.creditors.createAccount}
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            {editingId ? 'Updating...' : 'Creating...'}
+                                        </>
+                                    ) : (
+                                        editingId ? t.creditors.updateAccount : t.creditors.createAccount
+                                    )}
                                 </button>
                                 <button
                                     type="button"
@@ -389,6 +499,147 @@ const CreditorAccounts = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Invoices Modal */}
+            {isInvoicesModalOpen && selectedCreditorAccount && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center md:items-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            closeInvoicesModal();
+                        }
+                    }}
+                >
+                    <div
+                        className="w-full h-full md:w-full md:max-w-4xl md:h-auto md:max-h-[90vh] overflow-y-auto md:rounded-xl shadow-2xl"
+                        style={{
+                            backgroundColor: 'var(--card)',
+                            border: '1px solid var(--border)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div
+                            className="flex justify-between items-center p-4 md:p-6 border-b sticky top-0 bg-[var(--card)] z-10"
+                            style={{ borderBottomColor: 'var(--border)' }}
+                        >
+                            <div>
+                                <h3 className="text-lg md:text-xl font-bold" style={{ color: 'var(--foreground)' }}>
+                                    Invoices - {selectedCreditorAccount.name}
+                                </h3>
+                                <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                    {invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={closeInvoicesModal}
+                                className="w-8 h-8 flex items-center justify-center rounded-md text-2xl transition-colors hover:bg-white/10"
+                                style={{ color: 'var(--muted-foreground)' }}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Invoices Table */}
+                        <div className="p-4 md:p-6">
+                            {isLoadingInvoices ? (
+                                <div className="py-12 px-4 text-center rounded-lg">
+                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: 'var(--muted-foreground)' }} />
+                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Loading invoices...</p>
+                                </div>
+                            ) : invoices.length > 0 ? (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse">
+                                        <thead>
+                                            <tr className="border-b" style={{ borderBottomColor: 'var(--border)' }}>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Invoice No.
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Date
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Vendor
+                                                </th>
+                                                <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Total
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Status
+                                                </th>
+                                                <th className="px-4 py-3 text-center text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    Actions
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {invoices.map((invoice) => (
+                                                <tr
+                                                    key={invoice.id}
+                                                    className="border-b hover:bg-[var(--hover-bg)] transition-colors"
+                                                    style={{ borderBottomColor: 'var(--border)' }}
+                                                >
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--foreground)' }}>
+                                                        {invoice.invoice_no}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--foreground)' }}>
+                                                        {formatDate(invoice.invoice_date)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--foreground)' }}>
+                                                        {invoice.vendor_name}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-right" style={{ color: 'var(--foreground)' }}>
+                                                        {formatCurrency(invoice.total, invoice.currency)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm">
+                                                        <span
+                                                            className="px-2 py-1 rounded text-xs font-medium"
+                                                            style={{
+                                                                backgroundColor: invoice.status === 'VALIDATED' || invoice.status === 'POSTED' || invoice.status === 'PAID'
+                                                                    ? 'rgba(34, 197, 94, 0.1)'
+                                                                    : invoice.status === 'DRAFT'
+                                                                    ? 'rgba(251, 191, 36, 0.1)'
+                                                                    : 'rgba(107, 114, 128, 0.1)',
+                                                                color: invoice.status === 'VALIDATED' || invoice.status === 'POSTED' || invoice.status === 'PAID'
+                                                                    ? 'rgb(34, 197, 94)'
+                                                                    : invoice.status === 'DRAFT'
+                                                                    ? 'rgb(251, 191, 36)'
+                                                                    : 'rgb(107, 114, 128)',
+                                                            }}
+                                                        >
+                                                            {invoice.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <button
+                                                            onClick={() => handleInvoiceClick(invoice.id)}
+                                                            className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors"
+                                                            style={{ color: 'var(--foreground)' }}
+                                                        >
+                                                            View
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div
+                                    className="py-12 px-4 text-center rounded-lg"
+                                    style={{
+                                        color: 'var(--muted-foreground)',
+                                        backgroundColor: 'rgba(255,255,255,0.03)',
+                                    }}
+                                >
+                                    <p className="text-sm italic">No invoices found for this creditor account</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

@@ -1,4 +1,6 @@
 import { AuthAdapter, User } from './types';
+import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/services/AuthService';
+import { getCurrentUser as getUserProfile } from '@/services/UserService';
 
 /**
  * =====================================================
@@ -335,7 +337,147 @@ export const authAdapter: AuthAdapter = new CustomAPIAuthAdapter();
 */
 
 // =====================================================
+// INVOICE READER API IMPLEMENTATION
+// =====================================================
+class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
+  private user: User | null = null;
+  private listeners: Array<(user: User | null) => void> = [];
+
+  async initialize(): Promise<void> {
+    // Check for stored token and validate
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          const user = await this.getCurrentUser();
+          this.setUser(user);
+        } catch (error) {
+          // Token invalid, clear it
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          this.setUser(null);
+        }
+      }
+    }
+  }
+
+  async getCurrentUser(): Promise<User | null> {
+    if (typeof window === 'undefined') return null;
+    
+    const token = localStorage.getItem('access_token');
+    if (!token) return null;
+
+    try {
+      const response = await getUserProfile();
+      if (response.success && response.data) {
+        const apiUser = response.data;
+        const user: User = {
+          id: String(apiUser.id),
+          email: apiUser.email,
+          name: apiUser.full_name,
+          full_name: apiUser.full_name,
+          role: apiUser.role,
+          status: apiUser.status,
+          phone: apiUser.phone,
+          industry: apiUser.industry,
+          invoice_quota_pages: apiUser.invoice_quota_pages,
+        };
+        return user;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async signIn(email: string, password: string): Promise<User> {
+    try {
+      const response = await apiLogin({ username: email, password });
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Login failed');
+      }
+
+      // Tokens are already stored by AuthService.login()
+      // Wait a moment for token to be available, then get user details
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const userResponse = await getUserProfile();
+      
+      if (userResponse.success && userResponse.data) {
+        const apiUser = userResponse.data;
+        const user: User = {
+          id: String(apiUser.id),
+          email: apiUser.email || email,
+          name: apiUser.full_name,
+          full_name: apiUser.full_name,
+          role: apiUser.role,
+          status: apiUser.status,
+          phone: apiUser.phone,
+          industry: apiUser.industry,
+          invoice_quota_pages: apiUser.invoice_quota_pages,
+        };
+        this.setUser(user);
+        return user;
+      } else {
+        // Login succeeded but couldn't fetch user - create minimal user object
+        const user: User = {
+          id: '0',
+          email: email,
+          name: email.split('@')[0],
+        };
+        this.setUser(user);
+        return user;
+      }
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('Login failed');
+    }
+  }
+
+  async signUp(email: string, password: string, userData?: Partial<User>): Promise<User> {
+    try {
+      const response = await apiRegister({
+        email,
+        password,
+        full_name: userData?.name || '',
+        industry: userData?.industry || '',
+      });
+      
+      if (response.success && response.data) {
+        // After registration, automatically sign in
+        return await this.signIn(email, password);
+      }
+      throw new Error('Registration failed');
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('Registration failed');
+    }
+  }
+
+  async signOut(): Promise<void> {
+    await apiLogout();
+    this.setUser(null);
+  }
+
+  async signInWithProvider(provider: string): Promise<User> {
+    throw new Error('OAuth provider sign-in not supported by Invoice Reader API');
+  }
+
+  onAuthStateChange(callback: (user: User | null) => void): () => void {
+    this.listeners.push(callback);
+    // Immediately call with current user
+    callback(this.user);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== callback);
+    };
+  }
+
+  private setUser(user: User | null) {
+    this.user = user;
+    this.listeners.forEach(listener => listener(user));
+  }
+}
+
+// =====================================================
 // 👇 EXPORT YOUR AUTH ADAPTER HERE
 // =====================================================
-// Replace MockAuthAdapter with your implementation above
-export const authAdapter: AuthAdapter = new MockAuthAdapter();
+export const authAdapter: AuthAdapter = new InvoiceReaderAPIAuthAdapter();

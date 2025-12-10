@@ -1,37 +1,80 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Plus, Check, ArrowLeft, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { Camera, Upload, X, Plus, Check, ArrowLeft, ArrowUp, ArrowDown, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
+import { uploadToGroup, completeGroup, cancelGroup, getGroupStatus, type GroupStatusData } from '@/services/InvoiceService';
 
 interface InvoicePage {
   id: string;
   file: File;
   preview: string;
+  pageNumber: number;
+  uploaded?: boolean;
 }
 
 interface InvoiceSession {
   id: string;
   number: number;
   pages: InvoicePage[];
+  groupId?: string;
 }
 
 interface InvoiceScannerProps {
   onComplete: (session: InvoiceSession) => void;
   onCancel?: () => void;
+  autoClassify?: boolean;
 }
 
-export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
+export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: InvoiceScannerProps) {
   const { t } = useLanguage();
   const [currentSession, setCurrentSession] = useState<InvoiceSession | null>(null);
   const [currentPage, setCurrentPage] = useState<InvoicePage | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [groupStatus, setGroupStatus] = useState<GroupStatusData | null>(null);
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleFileSelectRef = useRef<(e: React.ChangeEvent<HTMLInputElement>) => void>();
+
+  // Ensure camera input is properly set up and accessible
+  useEffect(() => {
+    const input = cameraInputRef.current;
+    if (input) {
+      // Make sure input is accessible (not completely hidden) - mobile browsers need this
+      input.style.position = 'absolute';
+      input.style.width = '1px';
+      input.style.height = '1px';
+      input.style.opacity = '0';
+      input.style.overflow = 'hidden';
+      input.style.clip = 'rect(0, 0, 0, 0)';
+      input.style.whiteSpace = 'nowrap';
+      input.style.border = '0';
+      if (input.classList.contains('hidden')) {
+        input.classList.remove('hidden');
+      }
+      
+      // Add direct event listener as backup (some mobile browsers need this)
+      const handleChange = (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        console.log('Direct event listener fired, files:', target.files?.length);
+        if (target.files && target.files.length > 0 && handleFileSelectRef.current) {
+          const changeEvent = e as unknown as React.ChangeEvent<HTMLInputElement>;
+          handleFileSelectRef.current(changeEvent);
+        }
+      };
+      
+      input.addEventListener('change', handleChange, { capture: true });
+      return () => {
+        input.removeEventListener('change', handleChange, { capture: true });
+      };
+    }
+  }, []);
 
   const createNewSession = (sessionNumber: number): InvoiceSession => {
     return {
@@ -41,77 +84,256 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
     };
   };
 
-  const startScanSession = () => {
+  const startScanSession = (e?: React.MouseEvent | React.TouchEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    
     const sessionNumber = 1; // In a real app, this would come from state/context
     const session = createNewSession(sessionNumber);
     setCurrentSession(session);
     setCurrentPage(null);
     setShowReview(false);
-    triggerCamera();
+    setUploadError(null);
+    
+    // Trigger camera directly from user interaction (no setTimeout for mobile)
+    // Use immediate click for better mobile compatibility
+    // Mobile browsers require the click to happen synchronously from user gesture
+    const trigger = () => {
+      if (cameraInputRef.current) {
+        try {
+          // Ensure input is accessible
+          cameraInputRef.current.focus();
+          cameraInputRef.current.click();
+        } catch (error) {
+          console.error('Error triggering camera:', error);
+          setUploadError('Failed to open camera. Please check browser permissions and try again.');
+        }
+      } else {
+        console.error('Camera input ref is not available');
+        setUploadError('Camera input not available. Please refresh the page.');
+      }
+    };
+    
+    // Trigger immediately (synchronous with user interaction)
+    trigger();
   };
 
   const triggerCamera = () => {
-    setTimeout(() => {
-      cameraInputRef.current?.click();
-    }, 100);
+    // For subsequent camera triggers (retake, add more pages)
+    // Use requestAnimationFrame to ensure DOM is ready
+    if (cameraInputRef.current) {
+      requestAnimationFrame(() => {
+        if (cameraInputRef.current) {
+          try {
+            cameraInputRef.current.click();
+          } catch (error) {
+            console.error('Error triggering camera:', error);
+            setUploadError('Failed to open camera. Please try again.');
+          }
+        }
+      });
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('=== handleFileSelect called ===', {
+      filesLength: e.target.files?.length,
+      hasFiles: !!e.target.files,
+      target: e.target
+    });
+    
     const file = e.target.files?.[0];
-    if (!file || !currentSession) return;
+    
+    if (!file) {
+      console.log('No file selected in handleFileSelect');
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const page: InvoicePage = {
-        id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        file,
-        preview: reader.result as string,
+    console.log('File selected:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified
+    });
+
+    // Get or create session
+    setCurrentSession((prevSession) => {
+      const session = prevSession || createNewSession(1);
+      console.log('Session state:', session.id, 'Pages:', session.pages.length);
+      
+      // Read file and create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const pageNumber = session.pages.length + 1;
+        const preview = reader.result as string;
+        console.log('Preview created, length:', preview?.length);
+        
+        const page: InvoicePage = {
+          id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          file,
+          preview,
+          pageNumber,
+          uploaded: false,
+        };
+        
+        console.log('Setting current page:', page.id, 'Preview exists:', !!page.preview);
+        // Set current page - this will trigger the preview screen to show
+        setCurrentPage(page);
+        // Clear uploading state when new page is set
+        setIsUploading(false);
       };
-      setCurrentPage(page);
-    };
-    reader.readAsDataURL(file);
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        setUploadError('Failed to read image. Please try again.');
+      };
+      reader.readAsDataURL(file);
+      
+      return session;
+    });
     
     // Reset input so same file can be selected again
-    e.target.value = '';
+    // Don't reset immediately on mobile - wait a bit
+    setTimeout(() => {
+      if (e.target) {
+        e.target.value = '';
+      }
+    }, 100);
   };
 
-  const handleAddPage = () => {
+  // Update the ref after handleFileSelect is defined
+  // Using useLayoutEffect to ensure it runs synchronously after render
+  useEffect(() => {
+    handleFileSelectRef.current = handleFileSelect;
+  }, [handleFileSelect]);
+
+  const handleAddPage = async () => {
     if (!currentPage || !currentSession) return;
     
-    const updatedSession = {
-      ...currentSession,
-      pages: [...currentSession.pages, currentPage],
-    };
-    setCurrentSession(updatedSession);
-    setCurrentPage(null);
-    triggerCamera();
+    setIsUploading(true);
+    setUploadError(null);
+    
+    try {
+      // Upload to group
+      const response = await uploadToGroup(
+        currentPage.file,
+        currentPage.pageNumber,
+        currentSession.groupId ? { group_id: currentSession.groupId } : undefined
+      );
+
+      // Update session with group ID if this is the first page
+      const groupId = response.data.group_id;
+      const updatedSession: InvoiceSession = {
+        ...currentSession,
+        groupId,
+        pages: [
+          ...currentSession.pages,
+          { ...currentPage, uploaded: true }
+        ],
+      };
+      setCurrentSession(updatedSession);
+
+      // Fetch updated group status
+      const statusResponse = await getGroupStatus(groupId);
+      setGroupStatus(statusResponse.data);
+
+      // Clear current page and trigger camera
+      // Use a small delay to ensure state updates before triggering camera
+      setCurrentPage(null);
+      
+      // Trigger camera immediately (synchronous for mobile)
+      if (cameraInputRef.current) {
+        try {
+          cameraInputRef.current.click();
+        } catch (error) {
+          console.error('Error triggering camera:', error);
+          setUploadError('Failed to open camera. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error uploading page:', error);
+      setUploadError(error.message || 'Failed to upload page');
+      setIsUploading(false);
+    }
+    // Note: Don't set isUploading to false here - let it stay true until new photo is taken
   };
 
   const handleRetake = () => {
     setCurrentPage(null);
-    triggerCamera();
+    // Small delay to ensure state is updated before triggering camera
+    requestAnimationFrame(() => {
+      triggerCamera();
+    });
   };
 
-  const handleReviewPages = () => {
-    if (!currentPage || !currentSession) return;
-    
-    const updatedSession = {
-      ...currentSession,
-      pages: [...currentSession.pages, currentPage],
-    };
-    setCurrentSession(updatedSession);
-    setCurrentPage(null);
+  const handleReviewPages = async () => {
+    if (!currentSession) return;
+
+    // If there's a current page, upload it first
+    if (currentPage) {
+      setIsUploading(true);
+      setUploadError(null);
+      
+      try {
+        const response = await uploadToGroup(
+          currentPage.file,
+          currentPage.pageNumber,
+          currentSession.groupId ? { group_id: currentSession.groupId } : undefined
+        );
+
+        const groupId = response.data.group_id;
+        const updatedSession: InvoiceSession = {
+          ...currentSession,
+          groupId,
+          pages: [
+            ...currentSession.pages,
+            { ...currentPage, uploaded: true }
+          ],
+        };
+        setCurrentSession(updatedSession);
+
+        // Fetch updated group status
+        const statusResponse = await getGroupStatus(groupId);
+        setGroupStatus(statusResponse.data);
+
+        setCurrentPage(null);
+      } catch (error: any) {
+        console.error('Error uploading page:', error);
+        setUploadError(error.message || 'Failed to upload page');
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    // Refresh group status if we have a group
+    if (currentSession.groupId) {
+      try {
+        const statusResponse = await getGroupStatus(currentSession.groupId);
+        setGroupStatus(statusResponse.data);
+      } catch (error) {
+        console.error('Error fetching group status:', error);
+      }
+    }
+
     setShowReview(true);
   };
 
   const handleAddMorePages = () => {
     setShowReview(false);
-    triggerCamera();
+    setUploadError(null);
+    // Small delay to ensure state is updated before triggering camera
+    requestAnimationFrame(() => {
+      triggerCamera();
+    });
   };
 
   const handleDeletePage = (pageId: string) => {
     if (!currentSession) return;
     
+    // Note: The API doesn't support deleting individual pages from a group
+    // So we'll just remove it from the UI, but it will still be in the group
+    // The user would need to cancel the entire group and start over
     const updatedSession = {
       ...currentSession,
       pages: currentSession.pages.filter(p => p.id !== pageId),
@@ -132,22 +354,38 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
     });
   };
 
-  const handleSubmit = async () => {
-    if (!currentSession || currentSession.pages.length === 0) return;
+  const handleSubmit = async (overrideAutoClassify?: boolean) => {
+    const shouldAutoClassify = overrideAutoClassify !== undefined ? overrideAutoClassify : autoClassify;
+    if (!currentSession || !currentSession.groupId || currentSession.pages.length === 0) {
+      alert('No pages to submit. Please add at least one page.');
+      return;
+    }
     
     setIsSubmitting(true);
+    setUploadError(null);
     
     try {
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Complete the group
+      const response = await completeGroup(currentSession.groupId, {
+        auto_classify: shouldAutoClassify,
+      });
+      
+      // Create a session object compatible with onComplete
+      const completedSession: InvoiceSession = {
+        ...currentSession,
+        pages: currentSession.pages.map((page, index) => ({
+          ...page,
+          pageNumber: index + 1,
+        })),
+      };
       
       // Call the onComplete callback with the session
-      onComplete(currentSession);
+      onComplete(completedSession);
       
       setShowSuccess(true);
-    } catch (error) {
-      console.error('Error submitting invoice:', error);
-      alert('Failed to submit invoice. Please try again.');
+    } catch (error: any) {
+      console.error('Error completing invoice:', error);
+      setUploadError(error.message || 'Failed to complete invoice. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -161,43 +399,119 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
     setCurrentPage(null);
     setShowReview(false);
     setShowSuccess(false);
+    setGroupStatus(null);
+    setUploadError(null);
     triggerCamera();
+  };
+
+  const handleCancelGroup = async () => {
+    if (!currentSession?.groupId) {
+      // Just reset if no group exists
+      setCurrentSession(null);
+      setCurrentPage(null);
+      setShowReview(false);
+      setGroupStatus(null);
+      setUploadError(null);
+      if (onCancel) onCancel();
+      return;
+    }
+
+    try {
+      await cancelGroup(currentSession.groupId);
+      setCurrentSession(null);
+      setCurrentPage(null);
+      setShowReview(false);
+      setGroupStatus(null);
+      setUploadError(null);
+      if (onCancel) onCancel();
+    } catch (error: any) {
+      console.error('Error canceling group:', error);
+      setUploadError(error.message || 'Failed to cancel upload. Please try again.');
+    }
+  };
+
+  const refreshGroupStatus = async () => {
+    if (!currentSession?.groupId) return;
+
+    try {
+      const statusResponse = await getGroupStatus(currentSession.groupId);
+      setGroupStatus(statusResponse.data);
+    } catch (error: any) {
+      console.error('Error refreshing group status:', error);
+      setUploadError(error.message || 'Failed to refresh status');
+    }
   };
 
   const handleUploadFile = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     const sessionNumber = 1;
     const session = createNewSession(sessionNumber);
+    setCurrentSession(session);
     
-    const pages: InvoicePage[] = [];
-    let loadedCount = 0;
+    setIsUploading(true);
+    setUploadError(null);
 
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+    try {
+      // Upload all files sequentially to the group
+      let groupId: string | undefined;
+      const pages: InvoicePage[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const pageNumber = i + 1;
+
+        const reader = new FileReader();
+        const preview = await new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        // Upload to group
+        const response = await uploadToGroup(
+          file,
+          pageNumber,
+          groupId ? { group_id: groupId } : undefined
+        );
+
+        groupId = response.data.group_id;
+
         pages.push({
           id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           file,
-          preview: reader.result as string,
+          preview,
+          pageNumber,
+          uploaded: true,
         });
-        loadedCount++;
-        
-        if (loadedCount === files.length) {
-          session.pages = pages;
-          setCurrentSession(session);
-          setShowReview(true);
-        }
+      }
+
+      // Update session with all pages and group ID
+      const updatedSession: InvoiceSession = {
+        ...session,
+        groupId,
+        pages,
       };
-      reader.readAsDataURL(file);
-    });
-    
-    e.target.value = '';
+      setCurrentSession(updatedSession);
+
+      // Fetch group status
+      if (groupId) {
+        const statusResponse = await getGroupStatus(groupId);
+        setGroupStatus(statusResponse.data);
+      }
+
+      setShowReview(true);
+    } catch (error: any) {
+      console.error('Error uploading files:', error);
+      setUploadError(error.message || 'Failed to upload files');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
   };
 
   // Entry Point
@@ -217,11 +531,20 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
           <button
             type="button"
             onClick={startScanSession}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] active:bg-[var(--primary-hover)] transition-colors touch-manipulation"
+            style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
             <Camera className="h-5 w-5" />
             <span className="text-base font-medium">Scan with Camera</span>
           </button>
+          {uploadError && (
+            <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+              <p className="text-xs text-red-500 dark:text-red-500 mt-1">
+                Tip: Make sure you've granted camera permissions and are using HTTPS.
+              </p>
+            </div>
+          )}
           {onCancel && (
             <button
               type="button"
@@ -248,58 +571,126 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          className="hidden"
+          style={{ 
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            opacity: 0,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0
+          }}
+          aria-label="Camera input"
         />
       </div>
     );
   }
 
   // Preview Screen (after taking a photo)
-  if (currentPage && !showReview) {
+  // Also show if we're uploading (waiting for next photo)
+  if ((currentPage || isUploading) && !showReview && currentSession) {
     return (
       <div className="space-y-4">
         <div className="text-center mb-4">
           <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-            Invoice #{currentSession?.number} — Capture Pages
+            Invoice #{currentSession.number} — Capture Pages
           </h3>
           <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            Page {currentSession ? currentSession.pages.length + 1 : 1}
+            {currentPage 
+              ? `Page ${currentSession.pages.length + 1}`
+              : `Uploading page ${currentSession.pages.length}...`
+            }
+          </p>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Pages process in parallel (max 3 at a time by default), then combine into one invoice.
           </p>
         </div>
 
-        <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
-          <img
-            src={currentPage.preview}
-            alt="Preview"
-            className="w-full h-full object-contain"
-          />
-        </div>
+        {currentPage ? (
+          <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
+            {currentPage.preview ? (
+              <img
+                src={currentPage.preview}
+                alt="Preview"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  console.error('Image failed to load:', currentPage.preview);
+                  setUploadError('Failed to load image preview. Please try again.');
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white">
+                <p>Loading preview...</p>
+              </div>
+            )}
+          </div>
+        ) : isUploading ? (
+          <div className="relative bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
+            <div className="w-full h-full flex flex-col items-center justify-center">
+              <Loader2 className="h-12 w-12 animate-spin mb-4" style={{ color: 'var(--primary)' }} />
+              <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                Uploading page... Please wait for camera to open.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleRetake}
-            className="flex-1 px-4 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
-            style={{ color: 'var(--foreground)' }}
-          >
-            Retake
-          </button>
-          <button
-            type="button"
-            onClick={handleAddPage}
-            className="flex-1 px-4 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
-          >
-            Add Next Page
-          </button>
-          <button
-            type="button"
-            onClick={handleReviewPages}
-            className="flex-1 px-4 py-3 border border-[var(--primary)] rounded-lg hover:bg-[var(--primary)] hover:text-white transition-colors"
-            style={{ color: 'var(--primary)' }}
-          >
-            Review Pages
-          </button>
-        </div>
+        {uploadError && (
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+          </div>
+        )}
+
+        {currentPage ? (
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleRetake}
+              disabled={isUploading}
+              className="flex-1 px-4 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: 'var(--foreground)' }}
+            >
+              Retake
+            </button>
+            <button
+              type="button"
+              onClick={handleAddPage}
+              disabled={isUploading}
+              className="flex-1 px-4 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                'Add Next Page'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleReviewPages}
+              disabled={isUploading}
+              className="flex-1 px-4 py-3 border border-[var(--primary)] rounded-lg hover:bg-[var(--primary)] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: 'var(--primary)' }}
+            >
+              Review Pages
+            </button>
+          </div>
+        ) : isUploading ? (
+          <div className="flex gap-3">
+            <button
+              type="button"
+              disabled
+              className="flex-1 px-4 py-3 border border-[var(--border)] rounded-lg opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
+              style={{ color: 'var(--foreground)' }}
+            >
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Waiting for camera...
+            </button>
+          </div>
+        ) : null}
 
         <input
           ref={cameraInputRef}
@@ -307,7 +698,17 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          className="hidden"
+          style={{ 
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            opacity: 0,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0
+          }}
+          aria-label="Camera input"
         />
       </div>
     );
@@ -323,19 +724,53 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
               Invoice #{currentSession.number} — Review Pages
             </h3>
             <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-              {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'}
+              {currentSession.pages.length} {currentSession.pages.length === 1 ? 'page' : 'pages'} uploaded
+              {groupStatus && groupStatus.total_files !== currentSession.pages.length && (
+                <span className="text-yellow-600 dark:text-yellow-400 ml-2">
+                  ({groupStatus.total_files} on server)
+                </span>
+              )}
             </p>
+            {groupStatus && (
+              <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                Group ID: {groupStatus.group_id.substring(0, 8)}...
+                {groupStatus.expires_at && (
+                  <span className="ml-2">
+                    Expires: {new Date(groupStatus.expires_at).toLocaleTimeString()}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={handleAddMorePages}
-            className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
-            style={{ color: 'var(--foreground)' }}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="text-sm">Add Page</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={refreshGroupStatus}
+              disabled={isUploading || !currentSession.groupId}
+              className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: 'var(--foreground)' }}
+              title="Refresh group status"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleAddMorePages}
+              disabled={isUploading}
+              className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: 'var(--foreground)' }}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="text-sm">Add Page</span>
+            </button>
+          </div>
         </div>
+
+        {uploadError && (
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {currentSession.pages.map((page, index) => (
@@ -356,11 +791,14 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
             >
               <img
                 src={page.preview}
-                alt={`Page ${index + 1}`}
+                alt={`Page ${page.pageNumber || index + 1}`}
                 className="w-full h-full object-contain"
               />
-              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                {index + 1}
+              <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                <span>Page {page.pageNumber || index + 1}</span>
+                {page.uploaded && (
+                  <Check className="h-3 w-3 text-green-400" />
+                )}
               </div>
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {index > 0 && (
@@ -396,22 +834,39 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
         <div className="flex gap-3 pt-4 border-t" style={{ borderTopColor: 'var(--border)' }}>
           <button
             type="button"
+            onClick={handleCancelGroup}
+            disabled={isSubmitting || isUploading}
+            className="px-4 py-3 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-red-600 dark:text-red-400"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setShowReview(false);
+              setUploadError(null);
               triggerCamera();
             }}
-            className="flex-1 px-4 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
+            disabled={isSubmitting || isUploading}
+            className="flex-1 px-4 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ color: 'var(--foreground)' }}
           >
             Add More Pages
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || currentSession.pages.length === 0}
-            className="flex-1 px-4 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => handleSubmit()}
+            disabled={isSubmitting || isUploading || currentSession.pages.length === 0 || !currentSession.groupId}
+            className="flex-1 px-4 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isSubmitting ? 'Submitting...' : `Submit Invoice #${currentSession.number}`}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Complete Invoice #${currentSession.number}`
+            )}
           </button>
         </div>
 
@@ -421,7 +876,17 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          className="hidden"
+          style={{ 
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            opacity: 0,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0
+          }}
+          aria-label="Camera input"
         />
       </div>
     );
@@ -452,16 +917,22 @@ export function InvoiceScanner({ onComplete, onCancel }: InvoiceScannerProps) {
           >
             Scan Next Invoice
           </button>
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="w-full px-6 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Done
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentSession(null);
+              setCurrentPage(null);
+              setShowReview(false);
+              setShowSuccess(false);
+              setGroupStatus(null);
+              setUploadError(null);
+              if (onCancel) onCancel();
+            }}
+            className="w-full px-6 py-3 border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
+            style={{ color: 'var(--foreground)' }}
+          >
+            Done
+          </button>
         </div>
       </div>
     );

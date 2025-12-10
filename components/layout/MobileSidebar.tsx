@@ -83,7 +83,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           {/* Header with Logo and Close Button */}
           <div className="flex items-center justify-between px-4 py-4 border-b" style={{ borderBottomColor: 'var(--border)' }}>
             <Link href="/" className="flex items-center gap-2" onClick={onClose}>
-              <div className="h-12 w-12 relative flex-shrink-0">
+              <div className="h-12 w-12 relative flex-shrink-0 rounded-lg" style={{ backgroundColor: 'white' }}>
                 <Image
                   src="/smartdok.png"
                   alt="Smartdok.ai"

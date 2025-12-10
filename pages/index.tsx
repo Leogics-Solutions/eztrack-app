@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Line, Pie, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -32,53 +32,10 @@ ChartJS.register(
   Filler
 );
 
-// Dummy Data
-const DUMMY_VENDORS = [
-  { id: 1, name: 'Acme Corporation' },
-  { id: 2, name: 'TechSupply Co.' },
-  { id: 3, name: 'Global Services Ltd.' },
-  { id: 4, name: 'Digital Solutions Inc.' },
-  { id: 5, name: 'Enterprise Systems' },
-];
-
-const DUMMY_CATEGORY_DATA = [
-  { category: 'Office Supplies', total: 12500.50 },
-  { category: 'Software Licenses', total: 45000.00 },
-  { category: 'Hardware', total: 28750.75 },
-  { category: 'Consulting', total: 65000.00 },
-  { category: 'Marketing', total: 18900.25 },
-];
-
-const DUMMY_VENDOR_DATA = [
-  { vendor_name: 'Acme Corporation', total: 85000.00 },
-  { vendor_name: 'TechSupply Co.', total: 52000.00 },
-  { vendor_name: 'Global Services Ltd.', total: 38500.00 },
-  { vendor_name: 'Digital Solutions Inc.', total: 29750.50 },
-  { vendor_name: 'Enterprise Systems', total: 15900.00 },
-];
-
-const DUMMY_MONTHLY_DATA = [
-  { month: 'Jan 2025', total: 45000 },
-  { month: 'Feb 2025', total: 52000 },
-  { month: 'Mar 2025', total: 48500 },
-  { month: 'Apr 2025', total: 61000 },
-  { month: 'May 2025', total: 58500 },
-  { month: 'Jun 2025', total: 72000 },
-];
-
-const DUMMY_STATUS_DATA = [
-  { status: 'draft', count: 15 },
-  { status: 'validated', count: 28 },
-  { status: 'posted', count: 42 },
-];
-
-const DUMMY_RECENT_LOGS = [
-  { created_at: '2025-11-14 10:30', entity: 'Invoice', entity_id: '1234', action: 'created', details: 'New invoice created for Acme Corporation' },
-  { created_at: '2025-11-14 09:15', entity: 'Invoice', entity_id: '1233', action: 'validated', details: 'Invoice validated and ready for posting' },
-  { created_at: '2025-11-14 08:45', entity: 'Vendor', entity_id: '567', action: 'updated', details: 'Vendor information updated' },
-  { created_at: '2025-11-13 16:20', entity: 'Invoice', entity_id: '1232', action: 'posted', details: 'Invoice posted to accounting system' },
-  { created_at: '2025-11-13 14:10', entity: 'Invoice', entity_id: '1231', action: 'created', details: 'New invoice created for TechSupply Co.' },
-];
+import {
+  getDashboardSummary,
+  type DashboardSummaryData,
+} from "@/services";
 
 interface Filters {
   date_from: string;
@@ -96,13 +53,40 @@ export default function Home() {
     status: ['draft', 'validated', 'posted'],
   });
 
-  const [kpis] = useState({
-    total_value: 221150.50,
-    invoices_total: 85,
-    outstanding: 78450.25,
-    invoices_pending: 15,
-    avg_value: 2601.77,
-  });
+  const [dashboard, setDashboard] = useState<DashboardSummaryData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch dashboard data whenever filters change
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await getDashboardSummary({
+          date_from: filters.date_from || undefined,
+          date_to: filters.date_to || undefined,
+          vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
+          status: filters.status,
+        });
+        setDashboard(response.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, [filters]);
+
+  const kpis = dashboard?.kpis || {
+    total_value: 0,
+    invoices_total: 0,
+    outstanding: 0,
+    invoices_pending: 0,
+    avg_value: 0,
+  };
 
   // Chart color palette
   const chartColors = {
@@ -178,10 +162,17 @@ export default function Home() {
   };
 
   // Chart Data
+  const categoryData = dashboard?.charts.category_breakdown || [];
+  const vendorTotals = dashboard?.charts.vendor_totals || [];
+  const monthlyTotals = dashboard?.charts.monthly_totals || [];
+  const statusDistribution = dashboard?.charts.status_distribution || [];
+  const recentLogs = dashboard?.recent_activity || [];
+  const vendorOptions = dashboard?.vendor_filter_options || [];
+
   const categoryChartData = {
-    labels: DUMMY_CATEGORY_DATA.map(item => item.category),
+    labels: categoryData.map(item => item.category),
     datasets: [{
-      data: DUMMY_CATEGORY_DATA.map(item => item.total),
+      data: categoryData.map(item => item.total),
       backgroundColor: chartColors.background,
       borderColor: chartColors.primary,
       borderWidth: 2,
@@ -189,10 +180,10 @@ export default function Home() {
   };
 
   const vendorChartData = {
-    labels: DUMMY_VENDOR_DATA.map(item => item.vendor_name),
+    labels: vendorTotals.map(item => item.vendor_name),
     datasets: [{
       label: t.dashboard.charts.totalSpend,
-      data: DUMMY_VENDOR_DATA.map(item => item.total),
+      data: vendorTotals.map(item => item.total),
       backgroundColor: 'rgba(106,166,255,0.6)',
       borderColor: '#6aa6ff',
       borderWidth: 2,
@@ -201,10 +192,10 @@ export default function Home() {
   };
 
   const monthlyChartData = {
-    labels: DUMMY_MONTHLY_DATA.map(item => item.month),
+    labels: monthlyTotals.map(item => item.month),
     datasets: [{
       label: t.dashboard.charts.invoiceTotal,
-      data: DUMMY_MONTHLY_DATA.map(item => item.total),
+      data: monthlyTotals.map(item => item.total),
       borderColor: '#6aa6ff',
       backgroundColor: 'rgba(106,166,255,0.1)',
       fill: true,
@@ -219,30 +210,33 @@ export default function Home() {
   };
 
   const statusChartData = {
-    labels: DUMMY_STATUS_DATA.map(item => {
+    labels: statusDistribution.map(item => {
       if (item.status === 'draft') return t.dashboard.status.draft;
       if (item.status === 'validated') return t.dashboard.status.validated;
       if (item.status === 'posted') return t.dashboard.status.posted;
+      if (item.status === 'paid') return t.dashboard.status.paid ?? 'Paid';
       return item.status;
     }),
     datasets: [{
-      data: DUMMY_STATUS_DATA.map(item => item.count),
-      backgroundColor: chartColors.background.slice(0, DUMMY_STATUS_DATA.length),
-      borderColor: chartColors.primary.slice(0, DUMMY_STATUS_DATA.length),
+      data: statusDistribution.map(item => item.count),
+      backgroundColor: chartColors.background.slice(0, statusDistribution.length || 1),
+      borderColor: chartColors.primary.slice(0, statusDistribution.length || 1),
       borderWidth: 2,
     }],
   };
 
   const chartOptions = {
     responsive: true,
-    maintainAspectRatio: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom' as const,
+        position: 'right' as const,
         labels: {
-          padding: 15,
-          font: { size: 11 },
-          color: '#9aa4b2',
+          padding: 12,
+          font: { size: 12 },
+          color: 'var(--foreground)',
+          usePointStyle: true,
+          boxWidth: 12,
         },
       },
     },
@@ -331,7 +325,7 @@ export default function Home() {
                 }}
               >
                 <option value="">{t.dashboard.filters.allVendors}</option>
-                {DUMMY_VENDORS.map(vendor => (
+                {vendorOptions.map(vendor => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
               </select>
@@ -383,6 +377,13 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        {/* Error / Loading States */}
+        {error && (
+          <div className="rounded-lg p-4 border border-red-500 bg-red-500/10 text-sm text-red-500">
+            {error}
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -487,7 +488,7 @@ export default function Home() {
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
               💸 {t.dashboard.charts.expenseBreakdown}
             </h3>
-            <div className="h-64">
+            <div className="h-80">
               <Pie data={categoryChartData} options={chartOptions} />
             </div>
           </div>
@@ -503,7 +504,7 @@ export default function Home() {
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
               🏢 {t.dashboard.charts.topVendors}
             </h3>
-            <div className="h-64">
+            <div className="h-80">
               <Bar
                 data={vendorChartData}
                 options={{
@@ -528,12 +529,24 @@ export default function Home() {
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
               📈 {t.dashboard.charts.monthlyTrend}
             </h3>
-            <div className="h-64">
-              <Line data={monthlyChartData} options={chartOptions} />
+            <div className="h-80">
+              <Line data={monthlyChartData} options={{
+                ...chartOptions,
+                plugins: {
+                  legend: {
+                    position: 'right' as const,
+                    labels: {
+                      padding: 12,
+                      font: { size: 12 },
+                      color: 'var(--foreground)',
+                      usePointStyle: true,
+                      boxWidth: 12,
+                    },
+                  },
+                },
+              }} />
             </div>
           </div>
-
-          <div className="hidden lg:block lg:col-span-1"></div>
 
           {/* Status Distribution Chart */}
           <div
@@ -546,12 +559,10 @@ export default function Home() {
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
               📋 {t.dashboard.charts.statusDistribution}
             </h3>
-            <div className="h-64">
+            <div className="h-80">
               <Doughnut data={statusChartData} options={chartOptions} />
             </div>
           </div>
-
-          <div className="hidden lg:block lg:col-span-1"></div>
         </div>
 
         {/* Recent Activity */}
@@ -576,7 +587,7 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {DUMMY_RECENT_LOGS.map((log, idx) => (
+                {recentLogs.map((log, idx) => (
                   <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
                       {log.created_at}

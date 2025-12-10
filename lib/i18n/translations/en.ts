@@ -28,7 +28,7 @@ export const en: Translations = {
     settings: 'Settings',
   },
   header: {
-    addDocument: 'Add Document',
+    addDocument: 'Add Documents',
     logout: 'Logout',
   },
   documents: {
@@ -36,6 +36,7 @@ export const en: Translations = {
     newInvoice: 'New Invoice',
     batchUpload: 'Batch Upload',
     exportSelected: 'Export Selected',
+    downloadPdf: 'Download PDF',
     deleteSelected: 'Delete Selected',
     verifySubtotals: 'Verify Subtotals',
     filters: {
@@ -418,6 +419,7 @@ export const en: Translations = {
       draft: 'Draft',
       validated: 'Validated',
       posted: 'Posted',
+      paid: 'Paid',
     },
   },
   settings: {
@@ -444,7 +446,7 @@ export const en: Translations = {
     usageStatistics: 'Usage Statistics',
     usageStatisticsDescription: 'Your page processing activity',
     pagesProcessed: 'Pages Processed',
-    monthlyPageQuota: 'Monthly Page Quota',
+    monthlyPageQuota: 'Page Quota',
     pagesRemaining: 'Pages Remaining',
     lastInvoice: 'Last Invoice',
     never: 'Never',
@@ -464,6 +466,8 @@ export const en: Translations = {
     teamMembersDescription: 'Manage users in your organization',
     addMember: 'Add Member',
     remove: 'Remove',
+    removeMember: 'Remove Member',
+    add: 'Add',
     admin: 'Admin',
     uploader: 'Uploader',
     operator: 'Operator',
@@ -485,6 +489,7 @@ export const en: Translations = {
     otpSent: 'OTP sent to WhatsApp. Please enter the code to verify.',
     phoneSetFailed: 'Failed to set phone',
     enterVerificationCode: 'Enter the 6-digit verification code:',
+    verify: 'Verify',
     phoneVerified: 'Phone verified for WhatsApp uploads.',
     verificationFailed: 'Verification failed',
     roleUpdated: 'Role updated successfully',

@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   // Check if dev mode is enabled
-  const isDevMode = process.env.NEXT_PUBLIC_DEV === 'true';
+  const isDevMode = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEV === 'true';
 
   // Bypass middleware if in dev mode
   if (isDevMode) {

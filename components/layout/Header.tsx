@@ -5,7 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { LanguageSwitcher } from './LanguageSwitcher';
+// import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
   pageName?: string;
@@ -41,26 +41,33 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
   };
 
   const handleSignOut = async () => {
-    return router.push('/login');
     try {
       await signOut();
+      router.push('/login');
     } catch (error) {
       console.error('Sign out error:', error);
+      // Still redirect to login even if signOut fails
+      router.push('/login');
     }
   };
 
   // Get user initials for avatar
   const getInitials = () => {
-    if (user?.name) {
-      return user.name
+    const baseName = user?.name || (user as any)?.full_name || '';
+    if (baseName) {
+      return baseName
         .split(' ')
-        .map(n => n[0])
+        .filter(Boolean)
+        .map((n) => n[0])
         .join('')
         .toUpperCase()
         .slice(0, 2);
     }
     return user?.email?.[0]?.toUpperCase() || 'U';
   };
+
+  const displayName =
+    user?.name || (user as any)?.full_name || user?.email || '';
 
   return (
     <header
@@ -102,7 +109,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
       {/* Right side - Language Switcher, Theme Toggle, Avatar, Username/Business, Logout */}
       <div className="flex items-center gap-6">
         {/* Language Switcher */}
-        <LanguageSwitcher />
+        {/* <LanguageSwitcher /> */}
 
         {/* Theme Toggle */}
         <button
@@ -148,14 +155,14 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
         {/* Username and Business */}
         <div className="flex flex-col">
           <span className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
-            {user?.name || user?.email || 'User'}
+            {displayName || '—'}
           </span>
           <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
             business
           </span>
         </div>
 
-        {/* Add Document Button */}
+        {/* Add Documents Button */}
         <button
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           style={{
@@ -169,7 +176,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
             e.currentTarget.style.opacity = '1';
           }}
           onClick={()=>{
-            router.push("/documents/new")
+            router.push("/documents/batch")
           }}
         >
           <Plus className="h-4 w-4" />

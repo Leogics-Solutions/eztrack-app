@@ -3,13 +3,14 @@
 import { useAuth } from '@/lib/auth';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Image from 'next/image';
 
 /**
- * Eztract AI Login Page
+ * Smartdok.ai Login Page
  * Beautiful, modern login interface with theme support
  */
 function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,6 +18,16 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [hasRedirected, setHasRedirected] = useState(false);
+
+  // Redirect if already authenticated (only once, and only if not currently logging in)
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && router.isReady && !hasRedirected && !isLoading) {
+      setHasRedirected(true);
+      const next = router.query.next as string;
+      router.replace(next || '/');
+    }
+  }, [isAuthenticated, router.isReady, authLoading, hasRedirected, isLoading]);
 
   // Initialize theme on mount
   useEffect(() => {
@@ -37,21 +48,20 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    return router.push("/");
-    // 
-    // setError('');
-    // setIsLoading(true);
+    setError('');
+    setIsLoading(true);
 
-    // try {
-    //   await signIn(email, password);
-    //   // Redirect to dashboard or next page
-    //   const next = router.query.next as string;
-    //   router.push(next || '/');
-    // } catch (err) {
-    //   setError(err instanceof Error ? err.message : 'Failed to sign in');
-    // } finally {
-    //   setIsLoading(false);
-    // }
+    try {
+      await signIn(email, password);
+      // The useEffect will handle the redirect when isAuthenticated becomes true
+      // Just wait a moment for state to update
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setIsLoading(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in';
+      setError(errorMessage);
+      setIsLoading(false);
+    }
   };
 
   const handleForgotPassword = () => {
@@ -143,7 +153,7 @@ function LoginPage() {
           width: 80px;
           height: 80px;
           margin: 0 auto 20px;
-          background: linear-gradient(135deg, var(--primary), #8b7bff);
+          background: white;
           border-radius: 20px;
           display: flex;
           align-items: center;
@@ -169,10 +179,11 @@ function LoginPage() {
           100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
 
-        .login-logo-text {
-          font-size: 48px;
+        .login-logo-image {
           position: relative;
           z-index: 1;
+          width: 100%;
+          height: 100%;
         }
 
         .login-title {
@@ -422,10 +433,16 @@ function LoginPage() {
             {/* Header */}
             <div className="login-header">
               <div className="login-logo">
-                <span className="login-logo-text">📊</span>
+                <Image
+                  src="/smartdok.png"
+                  alt="Smartdok.ai"
+                  width={80}
+                  height={80}
+                  className="login-logo-image"
+                />
               </div>
               <h1 className="login-title">Welcome Back</h1>
-              <p className="login-subtitle">Sign in to your Eztract AI account</p>
+              <p className="login-subtitle">Sign in to your Smartdok.ai account</p>
             </div>
 
             {/* Error Message */}

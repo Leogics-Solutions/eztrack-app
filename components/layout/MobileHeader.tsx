@@ -5,7 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, Menu, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { LanguageSwitcher } from './LanguageSwitcher';
+// import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface MobileHeaderProps {
   pageName?: string;
@@ -87,7 +87,7 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
 
       {/* Right side - Compact controls */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Add Document Button - Icon only */}
+        {/* Add Documents Button - Icon only */}
         <button
           className="flex items-center justify-center rounded-lg p-2 transition-colors"
           style={{
@@ -101,7 +101,7 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
             e.currentTarget.style.opacity = '1';
           }}
           onClick={() => {
-            router.push("/documents/new");
+            router.push("/documents/batch");
           }}
           aria-label={t.header.addDocument}
         >

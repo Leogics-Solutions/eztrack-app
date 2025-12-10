@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
 import { InvoiceScanner } from "@/components/InvoiceScanner";
+import { uploadInvoice } from "@/services";
 
 // Types
 interface Vendor {
@@ -129,60 +130,20 @@ const NewInvoice = () => {
   };
 
   // Handle scanner session completion
+  // Note: The InvoiceScanner now handles the completeGroup API call internally
+  // This callback is called after the invoice is successfully created
   const handleScannerComplete = async (session: any) => {
     setScannerSession(session);
 
-    if (session.pages.length === 0) return;
-
-    startProcessingTimer();
-
-    const formData = new FormData();
-    formData.append('vendor_id', vendorId);
-    formData.append('use_ocr', useOCR.toString());
-    formData.append('auto_classify', autoClassify.toString());
-    formData.append('remark', remark);
-
-    // Add all pages as files
-    session.pages.forEach((page: any) => {
-      formData.append('files', page.file);
-    });
-
-    if (!isAIEnabled) {
-      formData.append('invoice_no', invoiceNo);
-      formData.append('invoice_date', invoiceDate);
-      formData.append('currency', currency);
-      formData.append('subtotal', subtotal);
-      formData.append('tax', tax);
-      formData.append('total', total);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
+    setIsProcessing(false);
 
-    try {
-      // TODO: Replace with actual API endpoint for batch upload
-      const response = await fetch('/api/invoices/upload-batch', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      setIsProcessing(false);
-
-      if (response.ok) {
-        const result = await response.json();
-        alert(t.documents.newInvoicePage.alerts.createSuccess);
-        router.push('/documents');
-      } else {
-        alert(t.documents.newInvoicePage.alerts.createFailed);
-      }
-    } catch (error) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      setIsProcessing(false);
-      console.error('Error creating invoice:', error);
-      alert(t.documents.newInvoicePage.alerts.createError);
-    }
+    // The invoice has already been created by the scanner component
+    // Just show success and redirect
+    alert(t.documents.newInvoicePage.alerts.createSuccess);
+    router.push('/documents');
   };
 
   // Handle form submission
@@ -196,36 +157,16 @@ const NewInvoice = () => {
 
     startProcessingTimer();
 
-    const formData = new FormData();
-    formData.append('vendor_id', vendorId);
-    formData.append('use_ocr', useOCR.toString());
-    formData.append('auto_classify', autoClassify.toString());
-    formData.append('file', file);
-    formData.append('remark', remark);
-
-    if (!isAIEnabled) {
-      formData.append('invoice_no', invoiceNo);
-      formData.append('invoice_date', invoiceDate);
-      formData.append('currency', currency);
-      formData.append('subtotal', subtotal);
-      formData.append('tax', tax);
-      formData.append('total', total);
-    }
-
     try {
-      // TODO: Replace with actual API endpoint
-      const response = await fetch('/api/invoices/create', {
-        method: 'POST',
-        body: formData,
-      });
+      // Use backend /invoices/upload via InvoiceService
+      const response = await uploadInvoice(file, { auto_classify: autoClassify });
 
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
       setIsProcessing(false);
 
-      if (response.ok) {
-        const result = await response.json();
+      if (response.success) {
         alert(t.documents.newInvoicePage.alerts.createSuccess);
         router.push('/documents');
       } else {
@@ -314,6 +255,7 @@ const NewInvoice = () => {
             </label>
             <InvoiceScanner
               onComplete={handleScannerComplete}
+              autoClassify={autoClassify}
             />
             <small className="text-xs text-[var(--muted-foreground)] mt-2 block">
               {t.documents.newInvoicePage.uploadFileHelp}
@@ -424,6 +366,7 @@ const NewInvoice = () => {
           <button
             type="submit"
             className="w-full px-4 py-3 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium"
+            style={{ display: 'none' }}
           >
             {t.documents.newInvoicePage.create}
           </button>

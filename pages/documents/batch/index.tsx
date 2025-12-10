@@ -5,36 +5,14 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
+import { batchUploadInvoices, getBatchJobStatus, BatchJobStatusData } from "@/services";
 
-interface ProgressData {
-  status: 'not_found' | 'waiting' | 'processing' | 'completed' | 'error';
-  percentage?: number;
-  current?: number;
-  total?: number;
-  message?: string;
-  summary?: {
-    created?: number;
-    failed?: number;
-    failed_files?: Array<{
-      file?: string;
-      type?: string;
-      reason?: string;
-      extracted?: {
-        vendor_name?: string;
-        invoice_no?: string;
-        invoice_date?: string;
-        total?: number;
-      };
-      duplicate_of?: {
-        id?: number;
-        vendor_name?: string;
-        invoice_no?: string;
-        invoice_date?: string;
-        total?: number;
-        status?: string;
-      };
-    }>;
-  };
+interface JobProgress {
+  jobId: string;
+  filename: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  invoiceId: number | null;
+  errorMessage: string | null;
 }
 
 const BatchUpload = () => {
@@ -56,7 +34,8 @@ const BatchUpload = () => {
   const [showResultActions, setShowResultActions] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [jobProgresses, setJobProgresses] = useState<JobProgress[]>([]);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const currentFileStartTimeRef = useRef<number>(0);
@@ -64,8 +43,8 @@ const BatchUpload = () => {
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
       if (timingIntervalRef.current) {
         clearInterval(timingIntervalRef.current);
@@ -85,20 +64,12 @@ const BatchUpload = () => {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('use_ocr', useOcr ? 'on' : '');
-    formData.append('auto_classify', autoClassify ? 'on' : '');
-    formData.append('batch_remark', batchRemark);
-
-    for (let i = 0; i < selectedFiles.length; i++) {
-      formData.append('files', selectedFiles[i]);
-    }
-
     setIsUploading(true);
     setShowProgress(true);
     setProgressStatus('normal');
     setResultSummary(null);
     setShowResultActions(false);
+    setJobProgresses([]);
 
     // Start timing
     startTimeRef.current = Date.now();
@@ -114,92 +85,141 @@ const BatchUpload = () => {
     }, 100);
 
     try {
-      // Start the batch upload
-      const response = await fetch('/ap/invoices/batch', {
-        method: 'POST',
-        body: formData
+      // Upload files using batch upload API
+      setProgressText(t.documents.batchUploadPage.preparingUpload);
+      setProgressDetails('Uploading files...');
+      
+      const uploadResponse = await batchUploadInvoices(selectedFiles, {
+        auto_classify: autoClassify,
+        remark: batchRemark || undefined,
       });
-
-      if (!response.ok) {
+      
+      if (!uploadResponse.success || !uploadResponse.data) {
         throw new Error('Upload failed');
       }
 
-      const result = await response.json();
-      const batchId = result.batch_id;
+      const jobs = uploadResponse.data.jobs;
+      
+      // Initialize job progresses
+      const initialProgresses: JobProgress[] = jobs.map(job => ({
+        jobId: job.job_id,
+        filename: job.filename,
+        status: 'PENDING',
+        invoiceId: null,
+        errorMessage: null,
+      }));
+      setJobProgresses(initialProgresses);
 
-      // Set up Server-Sent Events for progress updates
-      const eventSource = new EventSource(`/api/batch-progress/${batchId}`);
-      eventSourceRef.current = eventSource;
+      // Start polling for job statuses
+      const pollJobs = async () => {
+        const updatedProgresses: JobProgress[] = [];
+        let allCompleted = true;
+        let runningCount = 0;
+        let successCount = 0;
+        let failedCount = 0;
 
-      eventSource.onmessage = (event) => {
-        const progressData: ProgressData = JSON.parse(event.data);
+        for (const job of jobs) {
+          try {
+            const statusResponse = await getBatchJobStatus(job.job_id);
+            if (statusResponse.success && statusResponse.data) {
+              const jobData = statusResponse.data;
+              updatedProgresses.push({
+                jobId: job.job_id,
+                filename: jobData.original_filename,
+                status: jobData.status,
+                invoiceId: jobData.invoice_id,
+                errorMessage: jobData.error_message,
+              });
 
-        if (progressData.status === 'not_found') {
-          setProgressText(t.documents.batchUploadPage.uploadNotFound);
-          setProgressDetails(progressData.message || t.documents.batchUploadPage.sessionExpired);
-          eventSource.close();
-          return;
+              if (jobData.status === 'RUNNING') {
+                allCompleted = false;
+                runningCount++;
+                currentFileStartTimeRef.current = Date.now();
+                setShowFileTiming(true);
+              } else if (jobData.status === 'SUCCESS') {
+                successCount++;
+              } else if (jobData.status === 'FAILED') {
+                failedCount++;
+              } else if (jobData.status === 'PENDING') {
+                allCompleted = false;
+              }
+            }
+          } catch (error) {
+            console.error(`Error polling job ${job.job_id}:`, error);
+            updatedProgresses.push({
+              jobId: job.job_id,
+              filename: job.filename,
+              status: 'FAILED',
+              invoiceId: null,
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
+            failedCount++;
+          }
         }
 
-        if (progressData.status === 'waiting') {
-          setProgressText(t.documents.batchUploadPage.preparingUpload);
-          setProgressDetails(progressData.message || t.documents.batchUploadPage.preparingUpload);
-        } else if (progressData.status === 'processing') {
-          setProgress(progressData.percentage || 0);
-          setProgressText(`${t.documents.batchUploadPage.processing} ${progressData.current} of ${progressData.total} files`);
-          setProgressDetails(progressData.message || '');
+        setJobProgresses(updatedProgresses);
 
-          // Reset file timing when processing a new file
-          if (progressData.message && progressData.message.includes('Processing')) {
-            currentFileStartTimeRef.current = Date.now();
-            setShowFileTiming(true);
-          }
-        } else if (progressData.status === 'completed') {
+        // Update progress percentage
+        const total = jobs.length;
+        const completed = successCount + failedCount;
+        const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        setProgress(progressPercent);
+
+        // Update progress text
+        if (runningCount > 0) {
+          setProgressText(`${t.documents.batchUploadPage.processing} ${completed + 1} of ${total} files`);
+          setProgressDetails(`Processing ${runningCount} file(s)...`);
+        } else if (allCompleted) {
           setProgress(100);
           setProgressStatus('completed');
           setProgressText(t.documents.batchUploadPage.uploadCompleted);
-          setProgressDetails(progressData.message || '');
-          setResultSummary(progressData.summary || null);
+          setProgressDetails(`Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+          
+          // Build result summary
+          const failedFiles = updatedProgresses
+            .filter(jp => jp.status === 'FAILED')
+            .map(jp => ({
+              file: jp.filename,
+              type: 'error',
+              reason: jp.errorMessage || 'Processing failed',
+            }));
+          
+          setResultSummary({
+            created: successCount,
+            failed: failedCount,
+            failed_files: failedFiles,
+          });
           setShowResultActions(true);
-          eventSource.close();
 
+          // Stop polling and timing
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
           if (timingIntervalRef.current) {
             clearInterval(timingIntervalRef.current);
+            timingIntervalRef.current = null;
           }
-        } else if (progressData.status === 'error') {
-          setProgress(100);
-          setProgressStatus('error');
-          setProgressText(t.documents.batchUploadPage.uploadFailed);
-          setProgressDetails(progressData.message || '');
-          eventSource.close();
-
-          if (timingIntervalRef.current) {
-            clearInterval(timingIntervalRef.current);
-          }
-
           setIsUploading(false);
         }
       };
 
-      eventSource.onerror = () => {
-        setProgressText(t.documents.batchUploadPage.connectionError);
-        setProgressDetails(t.documents.batchUploadPage.connectionErrorDetails);
-        eventSource.close();
-
-        if (timingIntervalRef.current) {
-          clearInterval(timingIntervalRef.current);
-        }
-
-        setIsUploading(false);
-      };
+      // Poll immediately, then every 2 seconds
+      await pollJobs();
+      pollingIntervalRef.current = setInterval(pollJobs, 2000);
 
     } catch (error) {
       setProgressText(t.documents.batchUploadPage.uploadFailed);
       setProgressDetails(error instanceof Error ? error.message : 'Unknown error');
       setProgressStatus('error');
 
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
       if (timingIntervalRef.current) {
         clearInterval(timingIntervalRef.current);
+        timingIntervalRef.current = null;
       }
 
       setIsUploading(false);
@@ -208,6 +228,10 @@ const BatchUpload = () => {
 
   const duplicates = resultSummary?.failed_files?.filter(ff => ff && ff.type === 'duplicate') || [];
   const errors = resultSummary?.failed_files?.filter(ff => !ff || ff.type !== 'duplicate') || [];
+  
+  // Get failed jobs from jobProgresses for display
+  const failedJobs = jobProgresses.filter(jp => jp.status === 'FAILED');
+  const successfulJobs = jobProgresses.filter(jp => jp.status === 'SUCCESS');
 
   return (
     <AppLayout pageName={t.documents.batchUploadPage.title}>
@@ -304,6 +328,41 @@ const BatchUpload = () => {
             <div className="mb-2 text-sm">{progressText}</div>
             <div className="text-[var(--muted-foreground)] text-sm mb-4">{progressDetails}</div>
 
+            {/* Individual Job Statuses */}
+            {jobProgresses.length > 0 && (
+              <div className="mt-4 mb-4">
+                <h4 className="font-semibold mb-2 text-sm">File Status</h4>
+                <div className="space-y-2">
+                  {jobProgresses.map((job, idx) => (
+                    <div
+                      key={job.jobId}
+                      className="flex items-center justify-between p-2 rounded border border-[var(--border)] text-xs"
+                    >
+                      <span className="truncate flex-1">{job.filename}</span>
+                      <span className={`ml-2 px-2 py-1 rounded ${
+                        job.status === 'SUCCESS' ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' :
+                        job.status === 'FAILED' ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' :
+                        job.status === 'RUNNING' ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' :
+                        'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
+                      }`}>
+                        {job.status}
+                      </span>
+                      {job.invoiceId && (
+                        <a
+                          href={`/documents/${job.invoiceId}`}
+                          className="ml-2 text-[var(--primary)] hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Result Summary */}
             {resultSummary && (
               <div className="mt-4">
@@ -352,7 +411,7 @@ const BatchUpload = () => {
                                 <td className="border border-[var(--border)] px-4 py-2 text-xs">
                                   {du.id && (
                                     <a
-                                      href={`/ap/invoices/${du.id}`}
+                                      href={`/documents/${du.id}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-[var(--primary)] hover:underline"
@@ -390,7 +449,7 @@ const BatchUpload = () => {
             {showResultActions && (
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => router.push('/ap/invoices')}
+                  onClick={() => router.push('/documents')}
                   className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium text-sm"
                 >
                   {t.documents.batchUploadPage.goToDocuments}

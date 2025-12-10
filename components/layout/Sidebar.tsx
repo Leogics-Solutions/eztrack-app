@@ -49,7 +49,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
       >
         {!isCollapsed && (
           <Link href="/" className="flex items-center gap-2 py-3">
-            <div className="h-24 w-24 relative flex-shrink-0">
+            <div className="h-24 w-24 relative flex-shrink-0 rounded-lg" style={{ backgroundColor: 'white' }}>
               <Image
                 src="/smartdok.png"
                 alt="Smartdok.ai"
@@ -64,7 +64,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
         )}
         {isCollapsed && (
           <Link href="/" className="flex items-center justify-center w-full">
-            <div className="h-20 w-20 relative">
+            <div className="h-20 w-20 relative rounded-lg" style={{ backgroundColor: 'white' }}>
               <Image
                 src="/smartdok.png"
                 alt="Smartdok.ai"
