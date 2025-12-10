@@ -58,7 +58,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
       return baseName
         .split(' ')
         .filter(Boolean)
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join('')
         .toUpperCase()
         .slice(0, 2);
