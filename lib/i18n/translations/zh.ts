@@ -100,6 +100,7 @@ export const zh: Translations = {
       selectAtLeastOne: '请至少选择一张发票。',
       deleteConfirm: '您确定要删除 {count} 张发票吗？此操作无法撤销。',
       deleteConfirmSingle: '删除发票 #{id}？此操作无法撤销。',
+      deleteFailed: '删除发票失败，请重试。',
       exportSelectAtLeastOne: '请至少选择一张发票进行导出。',
       verifyIndicators: '验证指标按发票显示。打开发票以检查不匹配项。',
     },
