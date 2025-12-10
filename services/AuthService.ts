@@ -106,6 +106,18 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   formData.append('username', data.username);
   formData.append('password', data.password);
 
+  const setClientCookie = (name: string, value: string, days = 7) => {
+    if (typeof document === 'undefined') return;
+    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=${value}; Path=/; Expires=${expires}; SameSite=Lax${secure}`;
+  };
+
+  const clearClientCookie = (name: string) => {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  };
+
   const response = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: {
@@ -125,6 +137,18 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   if (result.success && result.data && typeof window !== 'undefined') {
     localStorage.setItem('access_token', result.data.access_token);
     localStorage.setItem('refresh_token', result.data.refresh_token);
+
+    // Also set cookies so Next.js middleware can validate the session in production
+    try {
+      // Clear any stale values first
+      clearClientCookie('auth_token');
+      clearClientCookie('session');
+
+      setClientCookie('auth_token', result.data.access_token);
+      setClientCookie('session', result.data.access_token);
+    } catch (err) {
+      console.warn('Unable to set auth cookies:', err);
+    }
   }
 
   return result;
@@ -221,6 +245,9 @@ export async function logout(): Promise<LogoutResponse> {
       // Always clear tokens from storage after successful API call
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
+      // Clear auth cookies used by middleware
+      document.cookie = 'auth_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       
       return result;
     } catch (error) {
@@ -228,6 +255,8 @@ export async function logout(): Promise<LogoutResponse> {
       console.error('Logout API call failed:', error);
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
+      document.cookie = 'auth_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       
       // Return success response even if API call failed (tokens are cleared)
       return {
@@ -241,6 +270,8 @@ export async function logout(): Promise<LogoutResponse> {
   // No token exists, just clear storage
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
+  document.cookie = 'auth_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+  document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   
   return {
     success: true,
