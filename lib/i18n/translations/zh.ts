@@ -466,6 +466,7 @@ export const zh: Translations = {
     teamMembersDescription: '管理您组织中的用户',
     addMember: '添加成员',
     remove: '移除',
+    removeMember: '移除成员',
     admin: '管理员',
     uploader: '上传者',
     operator: '操作员',
