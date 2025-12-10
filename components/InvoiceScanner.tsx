@@ -458,34 +458,42 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   };
 
   const handleDeletePage = (pageId: string) => {
-    if (!currentSession) return;
+    const latestSession = sessionRef.current;
+    if (!latestSession) return;
     
     // Note: The API doesn't support deleting individual pages from a group
     // So we'll just remove it from the UI, but it will still be in the group
     // The user would need to cancel the entire group and start over
     const updatedSession = {
-      ...currentSession,
-      pages: currentSession.pages.filter(p => p.id !== pageId),
+      ...latestSession,
+      pages: latestSession.pages.filter(p => p.id !== pageId),
     };
-    setCurrentSession(updatedSession);
+    sessionRef.current = updatedSession;
+    updateSession(updatedSession);
   };
 
   const handleReorder = (fromIndex: number, toIndex: number) => {
-    if (!currentSession) return;
+    const latestSession = sessionRef.current;
+    if (!latestSession) return;
     
-    const pages = [...currentSession.pages];
+    const pages = [...latestSession.pages];
     const [removed] = pages.splice(fromIndex, 1);
     pages.splice(toIndex, 0, removed);
     
-    setCurrentSession({
-      ...currentSession,
+    const updatedSession = {
+      ...latestSession,
       pages,
-    });
+    };
+    sessionRef.current = updatedSession;
+    updateSession(updatedSession);
   };
 
   const handleSubmit = async (overrideAutoClassify?: boolean) => {
     const shouldAutoClassify = overrideAutoClassify !== undefined ? overrideAutoClassify : autoClassify;
-    if (!currentSession || !currentSession.groupId || currentSession.pages.length === 0) {
+    
+    // Use ref session to get latest data
+    const latestSession = sessionRef.current;
+    if (!latestSession || !latestSession.groupId || latestSession.pages.length === 0) {
       alert('No pages to submit. Please add at least one page.');
       return;
     }
@@ -495,7 +503,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     
     try {
       // Complete the group asynchronously - returns immediately with job_id
-      const response = await completeGroup(currentSession.groupId, {
+      const response = await completeGroup(latestSession.groupId, {
         auto_classify: shouldAutoClassify,
         async_process: true, // Enable async processing so user can start next group immediately
       });
@@ -508,8 +516,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         
         // Create a session object compatible with onComplete
         const completedSession: InvoiceSession = {
-          ...currentSession,
-          pages: currentSession.pages.map((page, index) => ({
+          ...latestSession,
+          pages: latestSession.pages.map((page, index) => ({
             ...page,
             pageNumber: index + 1,
           })),
@@ -534,8 +542,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       } else {
         // Sync mode (shouldn't happen with async_process: true, but handle it)
         const completedSession: InvoiceSession = {
-          ...currentSession,
-          pages: currentSession.pages.map((page, index) => ({
+          ...latestSession,
+          pages: latestSession.pages.map((page, index) => ({
             ...page,
             pageNumber: index + 1,
           })),
@@ -1049,7 +1057,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
                     <ArrowUp className="h-3 w-3" />
                   </button>
                 )}
-                {index < currentSession.pages.length - 1 && (
+                {index < uniquePages.length - 1 && (
                   <button
                     type="button"
                     onClick={() => handleReorder(index, index + 1)}
