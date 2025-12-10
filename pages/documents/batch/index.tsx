@@ -22,6 +22,20 @@ interface ResultSummary {
     file: string;
     type: 'error' | 'duplicate';
     reason: string;
+    extracted?: {
+      vendor_name?: string;
+      invoice_no?: string;
+      invoice_date?: string;
+      total?: number;
+    };
+    duplicate_of?: {
+      id?: number;
+      vendor_name?: string;
+      invoice_no?: string;
+      invoice_date?: string;
+      total?: number;
+      status?: string;
+    };
   }>;
 }
 
