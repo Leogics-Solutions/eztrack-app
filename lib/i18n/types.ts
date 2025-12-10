@@ -481,6 +481,7 @@ export interface Translations {
     teamMembersDescription: string;
     addMember: string;
     remove: string;
+    add: string;
     removeMember: string;
     admin: string;
     uploader: string;
