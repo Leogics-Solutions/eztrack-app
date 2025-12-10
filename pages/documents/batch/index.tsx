@@ -15,6 +15,16 @@ interface JobProgress {
   errorMessage: string | null;
 }
 
+interface ResultSummary {
+  created: number;
+  failed: number;
+  failed_files: Array<{
+    file: string;
+    type: 'error' | 'duplicate';
+    reason: string;
+  }>;
+}
+
 const BatchUpload = () => {
   const router = useRouter();
   const { t } = useLanguage();
@@ -30,7 +40,7 @@ const BatchUpload = () => {
   const [currentFileTime, setCurrentFileTime] = useState("0.0s");
   const [showFileTiming, setShowFileTiming] = useState(false);
   const [progressStatus, setProgressStatus] = useState<'normal' | 'error' | 'completed'>('normal');
-  const [resultSummary, setResultSummary] = useState<ProgressData['summary'] | null>(null);
+  const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [showResultActions, setShowResultActions] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
