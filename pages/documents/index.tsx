@@ -13,6 +13,7 @@ import {
   exportInvoicesCsv,
   downloadInvoicesZip,
   type Invoice as ApiInvoice,
+  type InvoiceStatus,
 } from "@/services";
 
 // Types
@@ -147,7 +148,7 @@ const DocumentsListing = () => {
         search: filters.search || undefined,
         status:
           filters.status && filters.status.length > 0
-            ? filters.status.map((s) => s.toUpperCase())
+            ? (filters.status.map((s) => s.toUpperCase()) as InvoiceStatus[])
             : undefined,
         vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
         currency: filters.currency || undefined,
