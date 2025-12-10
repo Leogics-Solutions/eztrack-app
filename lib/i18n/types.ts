@@ -267,6 +267,7 @@ export interface Translations {
       deleteConfirm: string;
       deleteConfirmSingle: string;
       exportSelectAtLeastOne: string;
+      deleteFailed: string;
       verifyIndicators: string;
     };
   };
