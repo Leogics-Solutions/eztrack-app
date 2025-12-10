@@ -118,6 +118,7 @@ export type {
   InvoiceStatisticsRecentActivity,
   InvoiceStatisticsData,
   InvoiceStatisticsResponse,
+  InvoiceStatus,
 } from './InvoiceService';
 
 // Vendor Service
