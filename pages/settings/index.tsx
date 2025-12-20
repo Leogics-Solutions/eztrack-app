@@ -19,6 +19,18 @@ import {
     type Organization as ApiOrganization,
     type OrganizationMember as ApiOrganizationMember,
 } from "@/services/OrganizationService";
+import {
+    getSettings,
+    updateSettings,
+    enableBusinessCentral,
+    disableBusinessCentral,
+    testBusinessCentralConnection,
+    type SettingsResponse,
+    type BusinessCentralConnection,
+    type EnableBusinessCentralRequest,
+    type TestConnectionRequest,
+    type TestConnectionResponse,
+} from "@/services/SettingsService";
 
 // Local view types
 interface SettingsUser {
@@ -71,6 +83,26 @@ const SettingsPage = () => {
 
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
+    // Settings state
+    const [appSettings, setAppSettings] = useState<SettingsResponse | null>(null);
+    const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+    // Business Central enable/disable modals
+    const [showEnableBCModal, setShowEnableBCModal] = useState(false);
+    const [showDisableBCModal, setShowDisableBCModal] = useState(false);
+    const [isEnablingBC, setIsEnablingBC] = useState(false);
+    const [isDisablingBC, setIsDisablingBC] = useState(false);
+    const [isTestingConnection, setIsTestingConnection] = useState(false);
+    const [testConnectionResult, setTestConnectionResult] = useState<TestConnectionResponse | null>(null);
+    
+    // Business Central enable form fields
+    const [bcTenantId, setBcTenantId] = useState('');
+    const [bcClientId, setBcClientId] = useState('');
+    const [bcClientSecret, setBcClientSecret] = useState('');
+    const [bcEnvironment, setBcEnvironment] = useState('');
+    const [bcCompanyId, setBcCompanyId] = useState('');
+
     // Modal states
     const [showIndustryModal, setShowIndustryModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
@@ -118,6 +150,7 @@ const SettingsPage = () => {
             hydrateUserFromAuth();
             loadQuota();
             loadTeamMembers();
+            loadSettings();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authLoading, hydrateUserFromAuth]);
@@ -530,6 +563,168 @@ const SettingsPage = () => {
 
     const contactSupport = () => {
         alert(t.settings.contactSupportMessage);
+    };
+
+    // Settings functions
+    const loadSettings = async () => {
+        setIsLoadingSettings(true);
+        try {
+            const response = await getSettings();
+            if (response) {
+                setAppSettings(response);
+            }
+        } catch (error) {
+            console.error("Failed to load settings", error);
+            // Set default settings if API fails
+            setAppSettings({
+                integrations: {
+                    business_central: {
+                        enabled: false,
+                        connection_count: 0,
+                        connections: [],
+                    },
+                },
+                user: {
+                    id: 0,
+                    email: '',
+                    full_name: '',
+                },
+            });
+        } finally {
+            setIsLoadingSettings(false);
+        }
+    };
+
+    // Note: Business Central enabled status is derived from connections
+    // There's no toggle - enabled is true when at least one active connection exists
+    const businessCentralEnabled = appSettings?.integrations?.business_central?.enabled ?? false;
+    const businessCentralConnections = appSettings?.integrations?.business_central?.connections ?? [];
+    const businessCentralConnectionCount = appSettings?.integrations?.business_central?.connection_count ?? 0;
+
+    // Business Central enable/disable handlers
+    const openEnableBCModal = () => {
+        setShowEnableBCModal(true);
+        // Reset form
+        setBcTenantId('');
+        setBcClientId('');
+        setBcClientSecret('');
+        setBcEnvironment('');
+        setBcCompanyId('');
+        setTestConnectionResult(null);
+    };
+
+    const closeEnableBCModal = () => {
+        setShowEnableBCModal(false);
+        setTestConnectionResult(null);
+    };
+
+    const openDisableBCModal = () => {
+        setShowDisableBCModal(true);
+    };
+
+    const closeDisableBCModal = () => {
+        setShowDisableBCModal(false);
+    };
+
+    const handleEnableBC = async () => {
+        if (!bcTenantId || !bcClientId || !bcClientSecret || !bcEnvironment || !bcCompanyId) {
+            showNotification('Please fill in all fields', 'error');
+            return;
+        }
+
+        setIsEnablingBC(true);
+        try {
+            const request: EnableBusinessCentralRequest = {
+                tenant_id: bcTenantId.trim(),
+                client_id: bcClientId.trim(),
+                client_secret: bcClientSecret.trim(),
+                environment: bcEnvironment.trim(),
+                company_id: bcCompanyId.trim(),
+                organization_id: activeOrgId,
+            };
+
+            await enableBusinessCentral(request);
+            showNotification('Business Central integration enabled successfully', 'success');
+            closeEnableBCModal();
+            // Reload settings to get updated connection info
+            await loadSettings();
+        } catch (error: any) {
+            console.error("Failed to enable Business Central", error);
+            showNotification(
+                error?.message || 'Failed to enable Business Central integration',
+                'error'
+            );
+        } finally {
+            setIsEnablingBC(false);
+        }
+    };
+
+    const handleDisableBC = async (connectionId?: number) => {
+        setIsDisablingBC(true);
+        try {
+            await disableBusinessCentral(connectionId ? { connection_id: connectionId } : {});
+            showNotification('Business Central integration disabled successfully', 'success');
+            closeDisableBCModal();
+            // Reload settings to get updated connection info
+            await loadSettings();
+        } catch (error: any) {
+            console.error("Failed to disable Business Central", error);
+            showNotification(
+                error?.message || 'Failed to disable Business Central integration',
+                'error'
+            );
+        } finally {
+            setIsDisablingBC(false);
+        }
+    };
+
+    const handleTestConnection = async (connectionId?: number) => {
+        setIsTestingConnection(true);
+        setTestConnectionResult(null);
+        
+        try {
+            let request: TestConnectionRequest;
+            
+            if (connectionId) {
+                // Test using existing connection ID
+                request = { connection_id: connectionId };
+            } else {
+                // Test using credentials from form
+                if (!bcTenantId || !bcClientId || !bcClientSecret || !bcEnvironment || !bcCompanyId) {
+                    showNotification('Please fill in all fields before testing connection', 'error');
+                    setIsTestingConnection(false);
+                    return;
+                }
+                request = {
+                    tenant_id: bcTenantId.trim(),
+                    client_id: bcClientId.trim(),
+                    client_secret: bcClientSecret.trim(),
+                    environment: bcEnvironment.trim(),
+                    company_id: bcCompanyId.trim(),
+                };
+            }
+
+            const result = await testBusinessCentralConnection(request);
+            setTestConnectionResult(result);
+            
+            if (result.status === 'success') {
+                showNotification('Connection test successful!', 'success');
+            } else {
+                showNotification(`Connection test failed: ${result.message}`, 'error');
+            }
+        } catch (error: any) {
+            console.error("Failed to test connection", error);
+            setTestConnectionResult({
+                status: 'error',
+                message: error?.message || 'Failed to test connection',
+            });
+            showNotification(
+                error?.message || 'Failed to test Business Central connection',
+                'error'
+            );
+        } finally {
+            setIsTestingConnection(false);
+        }
     };
 
     // Calculate usage percentage from effective quota
@@ -1089,6 +1284,156 @@ const SettingsPage = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* Integrations Card */}
+                    <div
+                        className="rounded-lg border lg:col-span-2"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="text-3xl">🔌</div>
+                                <div>
+                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                        {t.settings.integrations.title}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.integrations.description}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            {isLoadingSettings ? (
+                                <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
+                                    {t.settings.integrations.businessCentral.loading}
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Business Central Integration */}
+                                    <div className="p-4 border rounded-lg" style={{ borderColor: 'var(--border)' }}>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="text-2xl">📊</div>
+                                                    <h4 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                        {t.settings.integrations.businessCentral.title}
+                                                    </h4>
+                                                </div>
+                                                <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
+                                                    {t.settings.integrations.businessCentral.description}
+                                                </p>
+                                                
+                                                {/* Status Badge */}
+                                                <div className="mb-3">
+                                                    <span className={`inline-block px-3 py-1 text-xs rounded-md font-semibold ${
+                                                        businessCentralEnabled
+                                                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                                    }`}>
+                                                        {businessCentralEnabled
+                                                            ? t.settings.integrations.businessCentral.enabled
+                                                            : t.settings.integrations.businessCentral.disabled}
+                                                    </span>
+                                                    {businessCentralConnectionCount > 0 && (
+                                                        <span className="ml-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                            ({businessCentralConnectionCount} {businessCentralConnectionCount === 1 ? 'connection' : 'connections'})
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Connection Details */}
+                                                {businessCentralConnections.length > 0 && (
+                                                    <div className="mt-4 space-y-2">
+                                                        <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
+                                                            Active Connections:
+                                                        </div>
+                                                        {businessCentralConnections.map((connection: BusinessCentralConnection) => (
+                                                            <div
+                                                                key={connection.id}
+                                                                className="p-3 rounded-md border"
+                                                                style={{
+                                                                    borderColor: 'var(--border)',
+                                                                    backgroundColor: 'var(--muted)',
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex-1">
+                                                                        <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                                                            {connection.environment}
+                                                                        </div>
+                                                                        <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                            Company ID: {connection.company_id.substring(0, 8)}...
+                                                                        </div>
+                                                                        {connection.last_sync_at && (
+                                                                            <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                                Last sync: {new Date(connection.last_sync_at).toLocaleDateString()}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => handleTestConnection(connection.id)}
+                                                                            disabled={isTestingConnection}
+                                                                            className="px-3 py-1 text-xs rounded-md transition-colors hover:opacity-90 border"
+                                                                            style={{
+                                                                                borderColor: 'var(--border)',
+                                                                                background: 'var(--card)',
+                                                                                color: 'var(--foreground)',
+                                                                            }}
+                                                                        >
+                                                                            {isTestingConnection ? 'Testing...' : 'Test'}
+                                                                        </button>
+                                                                        <span className={`px-2 py-1 text-xs rounded-md ${
+                                                                            connection.is_active
+                                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                                                        }`}>
+                                                                            {connection.is_active ? 'Active' : 'Inactive'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {businessCentralConnectionCount === 0 && (
+                                                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                        {t.settings.integrations.businessCentral.note}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {!businessCentralEnabled ? (
+                                                    <button
+                                                        onClick={openEnableBCModal}
+                                                        className="px-4 py-2 rounded-md transition-colors hover:opacity-90 text-sm font-medium"
+                                                        style={{
+                                                            background: 'var(--primary)',
+                                                            color: 'white',
+                                                        }}
+                                                    >
+                                                        {t.settings.integrations.businessCentral.enableToggle}
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={openDisableBCModal}
+                                                        className="px-4 py-2 rounded-md transition-colors hover:opacity-90 text-sm font-medium bg-red-600 text-white"
+                                                    >
+                                                        {t.settings.integrations.businessCentral.disableToggle}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1598,6 +1943,275 @@ const SettingsPage = () => {
                                 }}
                             >
                                 {t.settings.add}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Enable Business Central Modal */}
+            {showEnableBCModal && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeEnableBCModal();
+                    }}
+                >
+                    <div
+                        className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+                            <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                                {t.settings.integrations.businessCentral.enableToggle}
+                            </h3>
+                            <button
+                                onClick={closeEnableBCModal}
+                                className="text-2xl hover:opacity-70 transition-opacity"
+                                style={{ color: 'var(--foreground)' }}
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm mb-4" style={{ color: 'var(--muted-foreground)' }}>
+                                {t.settings.integrations.businessCentral.description}
+                            </p>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                                    Tenant ID *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={bcTenantId}
+                                    onChange={(e) => setBcTenantId(e.target.value)}
+                                    placeholder="6ca8a3a0-69d3-4b64-af7b-118b60317e4a"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                                    Client ID *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={bcClientId}
+                                    onChange={(e) => setBcClientId(e.target.value)}
+                                    placeholder="7d85e20d-b3c9-4eee-8a21-d9e65fea1a90"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                                    Client Secret *
+                                </label>
+                                <input
+                                    type="password"
+                                    value={bcClientSecret}
+                                    onChange={(e) => setBcClientSecret(e.target.value)}
+                                    placeholder="DxV8Q~nR2Dw_6FdnUnIIqUOwXtHs3eTlDaWmgdaB"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                                    Environment *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={bcEnvironment}
+                                    onChange={(e) => setBcEnvironment(e.target.value)}
+                                    placeholder="production"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                                    Company ID *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={bcCompanyId}
+                                    onChange={(e) => setBcCompanyId(e.target.value)}
+                                    placeholder="98aae70d-7bd0-f011-8bce-7ced8d9d8de2"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)'
+                                    }}
+                                />
+                            </div>
+
+                            {/* Test Connection Result */}
+                            {testConnectionResult && (
+                                <div className={`mt-4 p-4 rounded-md border ${
+                                    testConnectionResult.status === 'success'
+                                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                }`}>
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-lg">
+                                            {testConnectionResult.status === 'success' ? '✅' : '❌'}
+                                        </span>
+                                        <div className="flex-1">
+                                            <div className={`font-semibold text-sm ${
+                                                testConnectionResult.status === 'success'
+                                                    ? 'text-green-700 dark:text-green-300'
+                                                    : 'text-red-700 dark:text-red-300'
+                                            }`}>
+                                                {testConnectionResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
+                                            </div>
+                                            <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                {testConnectionResult.message}
+                                            </div>
+                                            {testConnectionResult.status === 'success' && testConnectionResult.company && (
+                                                <div className="text-sm mt-2 space-y-1">
+                                                    <div><strong>Company:</strong> {testConnectionResult.company}</div>
+                                                    {testConnectionResult.company_id && (
+                                                        <div><strong>Company ID:</strong> {testConnectionResult.company_id}</div>
+                                                    )}
+                                                    {testConnectionResult.available_companies && testConnectionResult.available_companies.length > 0 && (
+                                                        <div className="mt-2">
+                                                            <strong>Available Companies:</strong>
+                                                            <ul className="list-disc list-inside ml-2">
+                                                                {testConnectionResult.available_companies.map((company, idx) => (
+                                                                    <li key={idx}>{company.name} ({company.id})</li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-6 border-t flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                                onClick={() => handleTestConnection()}
+                                disabled={isTestingConnection || isEnablingBC}
+                                className="px-4 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-sm"
+                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                            >
+                                {isTestingConnection ? 'Testing Connection...' : 'Test Connection'}
+                            </button>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={closeEnableBCModal}
+                                    className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
+                                    style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                                    disabled={isEnablingBC || isTestingConnection}
+                                >
+                                    {t.settings.cancel}
+                                </button>
+                                <button
+                                    onClick={handleEnableBC}
+                                    className="px-6 py-2 rounded-md transition-colors hover:opacity-90"
+                                    style={{
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                    }}
+                                    disabled={isEnablingBC || isTestingConnection}
+                                >
+                                    {isEnablingBC ? t.settings.integrations.businessCentral.saving : t.settings.integrations.businessCentral.enableToggle}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Disable Business Central Modal */}
+            {showDisableBCModal && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeDisableBCModal();
+                    }}
+                >
+                    <div
+                        className="rounded-lg max-w-md w-full"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+                            <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                                {t.settings.integrations.businessCentral.disableToggle}
+                            </h3>
+                            <button
+                                onClick={closeDisableBCModal}
+                                className="text-2xl hover:opacity-70 transition-opacity"
+                                style={{ color: 'var(--foreground)' }}
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <p className="mb-4" style={{ color: 'var(--foreground)' }}>
+                                Are you sure you want to disable Business Central integration? This will disable all active connections.
+                            </p>
+                            {businessCentralConnections.length > 0 && (
+                                <div className="mb-4">
+                                    <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                                        Active connections that will be disabled:
+                                    </p>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        {businessCentralConnections.map((conn) => (
+                                            <li key={conn.id} className="text-sm" style={{ color: 'var(--foreground)' }}>
+                                                {conn.environment} ({conn.company_id.substring(0, 8)}...)
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                                onClick={closeDisableBCModal}
+                                className="px-6 py-2 border rounded-md transition-colors hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)]"
+                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                                disabled={isDisablingBC}
+                            >
+                                {t.settings.cancel}
+                            </button>
+                            <button
+                                onClick={() => handleDisableBC()}
+                                className="px-6 py-2 rounded-md transition-colors hover:opacity-90 bg-red-600 text-white"
+                                disabled={isDisablingBC}
+                            >
+                                {isDisablingBC ? 'Disabling...' : t.settings.integrations.businessCentral.disableToggle}
                             </button>
                         </div>
                     </div>

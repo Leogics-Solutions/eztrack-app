@@ -32,3 +32,4 @@ frontend:
       - .next/cache/**/*
       - node_modules/**/*
 
+

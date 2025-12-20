@@ -247,3 +247,36 @@ export type {
   ListCreditorAccountInvoicesResponse,
 } from './CreditorAccountsService';
 
+// Settings Service
+export {
+  getSettings,
+  updateSettings,
+  isBusinessCentralEnabled,
+  getBusinessCentralConnectionCount,
+  getBusinessCentralConnections,
+  enableBusinessCentral,
+  disableBusinessCentral,
+  testBusinessCentralConnection,
+  pushInvoicesToBusinessCentral,
+} from './SettingsService';
+
+export type {
+  SettingsResponse,
+  IntegrationSettings,
+  BusinessCentralIntegration,
+  BusinessCentralConnection,
+  UserInfo,
+  GetSettingsResponse,
+  UpdateSettingsRequest,
+  UpdateSettingsResponse,
+  EnableBusinessCentralRequest,
+  EnableBusinessCentralResponse,
+  DisableBusinessCentralRequest,
+  DisableBusinessCentralResponse,
+  TestConnectionRequest,
+  TestConnectionResponse,
+  PushInvoicesRequest,
+  PushInvoicesResponse,
+  PushInvoiceDetail,
+} from './SettingsService';
+

@@ -15,6 +15,8 @@ import {
   validateInvoice,
   verifyInvoice,
   addPayment as apiAddPayment,
+  getSettings,
+  pushInvoicesToBusinessCentral,
   type Invoice as ApiInvoice,
   type UpdateInvoiceRequest,
   type AddLineItemRequest,
@@ -23,6 +25,7 @@ import {
   type ValidateInvoiceResponse,
   type VerifyInvoiceResponse,
   type InvoicePayment,
+  type PushInvoicesResponse,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 
@@ -108,13 +111,58 @@ const InvoiceDetail = () => {
   const [verificationResult, setVerificationResult] = useState<VerifyInvoiceResponse['data'] | null>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  // Business Central push state
+  const [bcConnectionId, setBcConnectionId] = useState<number | null>(null);
+  const [isPushingToBC, setIsPushingToBC] = useState(false);
+  const [showPushResultModal, setShowPushResultModal] = useState(false);
+  const [pushResult, setPushResult] = useState<PushInvoicesResponse | null>(null);
 
   // Load invoice data
   useEffect(() => {
     if (id) {
       loadInvoiceData();
     }
+    loadBusinessCentralConnection();
   }, [id]);
+
+  const loadBusinessCentralConnection = async () => {
+    try {
+      const settings = await getSettings();
+      const connections = settings?.integrations?.business_central?.connections || [];
+      const activeConnection = connections.find((c) => c.is_active);
+      if (activeConnection) {
+        setBcConnectionId(activeConnection.id);
+      }
+    } catch (error) {
+      console.error('Failed to load Business Central connection', error);
+    }
+  };
+
+  const handlePushToBusinessCentral = async () => {
+    if (!bcConnectionId || !invoice) {
+      alert('Business Central connection not available. Please configure it in Settings.');
+      return;
+    }
+
+    setIsPushingToBC(true);
+    try {
+      const result = await pushInvoicesToBusinessCentral({
+        connection_id: bcConnectionId,
+        invoice_ids: [invoice.id],
+      });
+      setPushResult(result);
+      setShowPushResultModal(true);
+      
+      // Reload invoice to get updated BC status
+      await loadInvoiceData();
+    } catch (error: any) {
+      console.error('Failed to push invoice to Business Central', error);
+      alert(error?.message || 'Failed to push invoice to Business Central');
+    } finally {
+      setIsPushingToBC(false);
+    }
+  };
 
   // Cleanup object URL on unmount
   useEffect(() => {
@@ -728,7 +776,18 @@ const InvoiceDetail = () => {
         {/* Invoice Data - Right Column (scrollable) */}
         <div className="space-y-6 lg:max-h-[calc(100vh-7rem)] lg:overflow-auto lg:pr-2">
           {/* Invoice Information */}
-          <InvoiceInformationCard invoice={invoice} isEditMode={isEditMode} onSave={handleSaveInvoice} onStatusChange={handleStatusChange} onVerify={handleVerifyInvoice} isVerifying={isVerifying} t={t} />
+          <InvoiceInformationCard 
+            invoice={invoice} 
+            isEditMode={isEditMode} 
+            onSave={handleSaveInvoice} 
+            onStatusChange={handleStatusChange} 
+            onVerify={handleVerifyInvoice} 
+            isVerifying={isVerifying}
+            bcConnectionId={bcConnectionId}
+            isPushingToBC={isPushingToBC}
+            onPushToBusinessCentral={handlePushToBusinessCentral}
+            t={t} 
+          />
 
           {/* Vendor Details */}
           <VendorDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} onSave={handleSaveInvoice} />
@@ -766,6 +825,125 @@ const InvoiceDetail = () => {
           }}
           t={t}
         />
+      )}
+
+      {/* Push to Business Central Result Modal */}
+      {showPushResultModal && pushResult && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPushResultModal(false);
+              setPushResult(null);
+            }
+          }}
+        >
+          <div
+            className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            style={{
+              background: 'var(--card)',
+              borderColor: 'var(--border)',
+            }}
+          >
+            <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+              <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                Push to Business Central - Results
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPushResultModal(false);
+                  setPushResult(null);
+                }}
+                className="text-2xl hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--foreground)' }}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {pushResult.success_count}
+                  </div>
+                  <div className="text-sm text-green-700 dark:text-green-300">Success</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-red-50 dark:bg-red-900/20">
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {pushResult.failed_count}
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">Failed</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                  <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                    {pushResult.skipped_count}
+                  </div>
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300">Skipped</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {pushResult.details.map((detail) => (
+                  <div
+                    key={detail.invoice_id}
+                    className={`p-3 rounded-md border ${
+                      detail.status === 'SUCCESS'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : detail.status === 'FAILED'
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-medium" style={{ color: 'var(--foreground)' }}>
+                          Invoice #{detail.invoice_id} {detail.invoice_no && `(${detail.invoice_no})`}
+                        </div>
+                        <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                          Status: <span className="font-semibold">{detail.status}</span>
+                        </div>
+                        {detail.error_message && (
+                          <div className="text-sm mt-1 text-red-600 dark:text-red-400">
+                            {detail.error_message}
+                          </div>
+                        )}
+                        {detail.bc_invoice_id && (
+                          <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                            BC Invoice ID: {detail.bc_invoice_id}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-md font-semibold ${
+                        detail.status === 'SUCCESS'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                          : detail.status === 'FAILED'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                      }`}>
+                        {detail.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
+              <button
+                onClick={() => {
+                  setShowPushResultModal(false);
+                  setPushResult(null);
+                }}
+                className="px-6 py-2 rounded-md transition-colors hover:opacity-90"
+                style={{
+                  background: 'var(--primary)',
+                  color: 'white',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppLayout>
   );
@@ -935,7 +1113,18 @@ function VerificationModal({ result, onClose, t }: { result: VerifyInvoiceRespon
 
 // Sub-components (keeping them in the same file for now for simplicity)
 
-function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange, onVerify, isVerifying, t }: any) {
+function InvoiceInformationCard({ 
+  invoice, 
+  isEditMode, 
+  onSave, 
+  onStatusChange, 
+  onVerify, 
+  isVerifying,
+  bcConnectionId,
+  isPushingToBC,
+  onPushToBusinessCentral,
+  t 
+}: any) {
   const [formData, setFormData] = useState(invoice);
 
   useEffect(() => {
@@ -1000,6 +1189,15 @@ function InvoiceInformationCard({ invoice, isEditMode, onSave, onStatusChange, o
                 className="px-3 py-1.5 border border-[var(--border)] rounded-md text-xs font-medium hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
               >
                 {t.documents.invoiceDetailPage.revertToValidated}
+              </button>
+            )}
+            {bcConnectionId && (
+              <button
+                onClick={onPushToBusinessCentral}
+                disabled={isPushingToBC || isEditMode}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPushingToBC ? 'Pushing...' : '📊 Push to Business Central'}
               </button>
             )}
             <button

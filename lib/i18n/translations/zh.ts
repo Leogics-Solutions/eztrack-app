@@ -523,6 +523,23 @@ export const zh: Translations = {
       entertainmentMedia: '娱乐与媒体',
       other: '其他',
     },
+    integrations: {
+      title: '集成',
+      description: '管理第三方集成并启用功能',
+      businessCentral: {
+        title: 'Dynamics 365 Business Central',
+        description: '启用与Dynamics 365 Business Central的集成以推送采购发票',
+        enabled: 'Business Central集成已启用',
+        disabled: 'Business Central集成已禁用',
+        enableToggle: '启用Business Central集成',
+        disableToggle: '禁用Business Central集成',
+        saving: '保存中...',
+        saved: '设置保存成功',
+        saveFailed: '保存设置失败',
+        loading: '加载设置中...',
+        note: '启用后，您可以连接到Business Central并推送发票。禁用后，所有Business Central功能将被隐藏。',
+      },
+    },
   },
 };
 

@@ -523,6 +523,23 @@ export const en: Translations = {
       entertainmentMedia: 'Entertainment & Media',
       other: 'Other',
     },
+    integrations: {
+      title: 'Integrations',
+      description: 'Manage third-party integrations and enable features',
+      businessCentral: {
+        title: 'Dynamics 365 Business Central',
+        description: 'Enable integration with Dynamics 365 Business Central to push purchase invoices',
+        enabled: 'Business Central integration is enabled',
+        disabled: 'Business Central integration is disabled',
+        enableToggle: 'Enable Business Central Integration',
+        disableToggle: 'Disable Business Central Integration',
+        saving: 'Saving...',
+        saved: 'Settings saved successfully',
+        saveFailed: 'Failed to save settings',
+        loading: 'Loading settings...',
+        note: 'When enabled, you can connect to Business Central and push invoices. When disabled, all Business Central features will be hidden.',
+      },
+    },
   },
 };
 
