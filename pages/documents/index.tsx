@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus } from "lucide-react";
+import { Plus, CheckCircle2, Circle } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -902,6 +902,7 @@ const DocumentsListing = () => {
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Bank Recon</th>
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
                 )}
@@ -1022,6 +1023,19 @@ const DocumentsListing = () => {
                         </span>
                       );
                     })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {invoice.bank_recon_status === 'reconciled' ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-[var(--success)]/10 text-[var(--success)] dark:bg-[var(--success)]/20 dark:text-[var(--success)]">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Reconciled
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        <Circle className="h-3 w-3" />
+                        Pending
+                      </span>
+                    )}
                   </td>
                   {!needsHorizontalScroll && (
                     <td className="px-4 py-3">

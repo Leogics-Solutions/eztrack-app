@@ -102,6 +102,10 @@ export async function getCurrentUser(): Promise<GetUserProfileResponse> {
   const token = getAccessToken();
 
   if (!token) {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      const { redirectToLogin } = await import('@/lib/auth/authHelpers');
+      redirectToLogin(window.location.pathname);
+    }
     throw new Error('No access token found');
   }
 
@@ -114,6 +118,13 @@ export async function getCurrentUser(): Promise<GetUserProfileResponse> {
   });
 
   if (!response.ok) {
+    // Check for auth errors and redirect
+    if (response.status === 401 || response.status === 403) {
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const { redirectToLogin } = await import('@/lib/auth/authHelpers');
+        redirectToLogin(window.location.pathname);
+      }
+    }
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to get user information');
   }

@@ -19,6 +19,20 @@ export interface InvoiceLineItem {
   account_name?: string;
 }
 
+export interface BankReconciliation {
+  status: 'reconciled';
+  transaction_id: number;
+  statement_id: number;
+  account_number: string;
+  transaction_date: string;
+  transaction_amount: number;
+  transaction_description: string;
+  match_score: number;
+  match_type: 'auto' | 'manual' | 'suggested';
+  reconciled_at: string;
+  notes?: string | null;
+}
+
 export interface Invoice {
   id: number;
   invoice_no: string;
@@ -39,6 +53,10 @@ export interface Invoice {
   // URLs for each uploaded page (when provided by multi-page endpoints)
   page_files?: string[];
   lines?: InvoiceLineItem[];
+  // Bank reconciliation status (for list endpoint)
+  bank_recon_status?: 'reconciled' | null;
+  // Bank reconciliation details (for detail endpoint)
+  bank_reconciliation?: BankReconciliation | null;
 }
 
 export interface UploadInvoiceResponse {

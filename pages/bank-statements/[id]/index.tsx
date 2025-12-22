@@ -1,0 +1,593 @@
+'use client';
+
+import { AppLayout } from "@/components/layout";
+import { useLanguage } from "@/lib/i18n";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import { ArrowLeft, Trash2, RefreshCw } from "lucide-react";
+import {
+  getBankStatement,
+  getStatementTransactions,
+  deleteBankStatement,
+  getStatementLinks,
+  reprocessTransactions,
+  type BankStatement,
+  type BankTransaction,
+  type TransactionInvoiceLink,
+} from "@/services";
+import { useToast } from "@/lib/toast";
+import { API_BASE_URL } from "@/services/config";
+
+const BankStatementDetail = () => {
+  const router = useRouter();
+  const { id } = router.query;
+  const { t } = useLanguage();
+  const { showToast } = useToast();
+
+  // State
+  const [statement, setStatement] = useState<BankStatement | null>(null);
+  const [transactions, setTransactions] = useState<BankTransaction[]>([]);
+  const [links, setLinks] = useState<TransactionInvoiceLink[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(100);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [fileContentType, setFileContentType] = useState<string | null>(null);
+
+  // Filters
+  const [filters, setFilters] = useState({
+    transaction_type: '' as '' | 'DEBIT' | 'CREDIT',
+    date_from: '',
+    date_to: '',
+  });
+
+  useEffect(() => {
+    if (id) {
+      loadStatement();
+      loadLinks();
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      loadTransactions();
+    }
+  }, [id, currentPage, filters]);
+
+  const loadStatement = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await getBankStatement(Number(id));
+      setStatement(response.data);
+      
+      // Set file URL and content type for preview
+      if (response.data?.file_url) {
+        // Construct full URL if it's a relative path
+        const url = response.data.file_url.startsWith('http') 
+          ? response.data.file_url 
+          : `${API_BASE_URL}${response.data.file_url}`;
+        setFileUrl(url);
+        // Determine content type from file extension
+        const fileName = response.data.file_name || response.data.file_url;
+        if (fileName?.toLowerCase().endsWith('.pdf')) {
+          setFileContentType('application/pdf');
+        } else if (fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+          setFileContentType('image/' + fileName.split('.').pop()?.toLowerCase());
+        } else {
+          setFileContentType(null);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load bank statement');
+      showToast(err instanceof Error ? err.message : 'Failed to load bank statement', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadTransactions = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    setIsLoadingTransactions(true);
+    try {
+      const response = await getStatementTransactions(Number(id), {
+        page: currentPage,
+        page_size: pageSize,
+        transaction_type: filters.transaction_type || undefined,
+        date_from: filters.date_from || undefined,
+        date_to: filters.date_to || undefined,
+      });
+
+      // API returns data as array directly, with pagination in separate object
+      if (Array.isArray(response.data)) {
+        setTransactions(response.data);
+        setTotalTransactions(response.pagination?.total_items || response.data.length);
+        setTotalPages(response.pagination?.total_pages || 1);
+      } else {
+        // Fallback for old structure (if any)
+        setTransactions([]);
+        setTotalTransactions(0);
+        setTotalPages(1);
+      }
+    } catch (err) {
+      console.error('Failed to load transactions', err);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
+  const loadLinks = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    try {
+      const response = await getStatementLinks(Number(id));
+      setLinks(response.data || []);
+    } catch (err) {
+      console.error('Failed to load links', err);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    if (!confirm(t.bankStatements.detail.deleteConfirm || 'Are you sure you want to delete this bank statement?')) {
+      return;
+    }
+
+    try {
+      await deleteBankStatement(Number(id));
+      showToast(
+        t.bankStatements.detail.deleteSuccess || 'Bank statement deleted successfully',
+        'success'
+      );
+      router.push('/bank-statements');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete bank statement';
+      showToast(errorMessage, 'error');
+    }
+  };
+
+  const handleReprocess = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    if (!confirm(t.bankStatements.detail.reprocessConfirm || 'Reprocess transactions from stored file?')) {
+      return;
+    }
+
+    try {
+      await reprocessTransactions(Number(id));
+      showToast(
+        t.bankStatements.detail.reprocessSuccess || 'Transactions reprocessed successfully',
+        'success'
+      );
+      await loadStatement();
+      await loadTransactions();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reprocess transactions';
+      showToast(errorMessage, 'error');
+    }
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatCurrency = (amount?: number | null) => {
+    if (amount === undefined || amount === null) return '-';
+    return `MYR ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const getLinkedInvoiceIds = () => {
+    return new Set(links.map(link => link.invoice_id));
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout pageName={t.bankStatements.detail.title || 'Bank Statement Detail'}>
+        <div className="p-8 text-center" style={{ color: 'var(--muted-foreground)' }}>
+          {t.common.loading || 'Loading...'}
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !statement) {
+    return (
+      <AppLayout pageName={t.bankStatements.detail.title || 'Bank Statement Detail'}>
+        <div className="p-8 text-center">
+          <p style={{ color: 'var(--error)' }}>{error || 'Bank statement not found'}</p>
+          <button
+            onClick={() => router.push('/bank-statements')}
+            className="mt-4 px-4 py-2 rounded-lg border"
+            style={{
+              background: 'var(--background)',
+              borderColor: 'var(--border)',
+              color: 'var(--foreground)',
+            }}
+          >
+            {t.bankStatements.detail.backToList || 'Back to List'}
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const linkedInvoiceIds = getLinkedInvoiceIds();
+
+  return (
+    <AppLayout pageName={t.bankStatements.detail.title || 'Bank Statement Detail'}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push('/bank-statements')}
+            className="p-2 rounded hover:bg-[var(--muted)]"
+            style={{ color: 'var(--foreground)' }}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+              {t.bankStatements.detail.title || 'Bank Statement'}
+            </h1>
+            <p style={{ color: 'var(--muted-foreground)' }}>
+              {statement.bank_name || 'Bank Statement'} - {statement.account_number || 'N/A'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleReprocess}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border"
+              style={{
+                background: 'var(--background)',
+                borderColor: 'var(--border)',
+                color: 'var(--foreground)',
+              }}
+            >
+              <RefreshCw className="h-5 w-5" />
+              {t.bankStatements.detail.reprocess || 'Reprocess'}
+            </button>
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border"
+              style={{
+                background: 'var(--background)',
+                borderColor: 'var(--border)',
+                color: 'var(--error)',
+              }}
+            >
+              <Trash2 className="h-5 w-5" />
+              {t.common.delete || 'Delete'}
+            </button>
+          </div>
+        </div>
+
+        {/* Statement Summary */}
+        <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+          <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+            {t.bankStatements.detail.summary || 'Statement Summary'}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.bankName || 'Bank Name'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {statement.bank_name || '-'}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.accountNumber || 'Account Number'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {statement.account_number || '-'}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.period || 'Period'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {formatDate(statement.statement_date_from)} - {formatDate(statement.statement_date_to)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.transactions || 'Transactions'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {statement.transaction_count || 0}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.openingBalance || 'Opening Balance'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {formatCurrency(statement.opening_balance)}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                {t.bankStatements.detail.closingBalance || 'Closing Balance'}
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                {formatCurrency(statement.closing_balance)}
+              </div>
+            </div>
+            {links.length > 0 && (
+              <div>
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                  {t.bankStatements.detail.linkedInvoices || 'Linked Invoices'}
+                </div>
+                <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                  {links.length}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* File Preview */}
+        {fileUrl && (
+          <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+              {t.bankStatements.detail.documentPreview || 'Document Preview'}
+            </h3>
+            <div className="w-full">
+              {fileContentType?.startsWith('application/pdf') ? (
+                <iframe
+                  src={fileUrl}
+                  className="w-full h-[600px] border border-[var(--border)] rounded-md"
+                  title="Bank Statement Preview"
+                />
+              ) : fileContentType?.startsWith('image/') ? (
+                <img
+                  src={fileUrl}
+                  alt="Bank Statement"
+                  className="w-full border border-[var(--border)] rounded-md"
+                />
+              ) : (
+                <div className="text-sm text-[var(--muted-foreground)] p-4 border border-[var(--border)] rounded-md">
+                  Preview not available for this file type.{' '}
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--primary)] hover:underline"
+                  >
+                    Open file
+                  </a>
+                </div>
+              )}
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block mt-4 text-sm text-[var(--primary)] hover:underline"
+              >
+                {t.bankStatements.detail.openInNewTab || 'Open in new tab'}
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+          <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+            {t.bankStatements.detail.filters || 'Filter Transactions'}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                {t.bankStatements.detail.transactionType || 'Transaction Type'}
+              </label>
+              <select
+                value={filters.transaction_type}
+                onChange={(e) => setFilters({ ...filters, transaction_type: e.target.value as '' | 'DEBIT' | 'CREDIT' })}
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  background: 'var(--background)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                }}
+              >
+                <option value="">{t.bankStatements.detail.allTypes || 'All Types'}</option>
+                <option value="DEBIT">{t.bankStatements.detail.debit || 'Debit'}</option>
+                <option value="CREDIT">{t.bankStatements.detail.credit || 'Credit'}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                {t.bankStatements.detail.dateFrom || 'Date From'}
+              </label>
+              <input
+                type="date"
+                value={filters.date_from}
+                onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  background: 'var(--background)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                {t.bankStatements.detail.dateTo || 'Date To'}
+              </label>
+              <input
+                type="date"
+                value={filters.date_to}
+                onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  background: 'var(--background)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Transactions Table */}
+        <div className="rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+          <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              {t.bankStatements.detail.transactions || 'Transactions'}
+            </h3>
+          </div>
+          {isLoadingTransactions ? (
+            <div className="p-8 text-center" style={{ color: 'var(--muted-foreground)' }}>
+              {t.common.loading || 'Loading...'}
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="p-8 text-center" style={{ color: 'var(--muted-foreground)' }}>
+              {t.bankStatements.detail.noTransactions || 'No transactions found'}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.date || 'Date'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.description || 'Description'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.type || 'Type'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.debit || 'Debit'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.credit || 'Credit'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.balance || 'Balance'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.linked || 'Linked'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((transaction) => {
+                      const isLinked = links.some(link => link.bank_transaction_id === transaction.id);
+                      return (
+                        <tr
+                          key={transaction.id}
+                          style={{ borderBottom: '1px solid var(--border)' }}
+                          className={isLinked ? 'bg-green-500/10' : ''}
+                        >
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatDate(transaction.transaction_date)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {transaction.description}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className="px-2 py-1 rounded text-xs font-medium"
+                              style={{
+                                background: transaction.transaction_type === 'DEBIT' ? 'var(--error)' : 'var(--success)',
+                                color: 'white',
+                              }}
+                            >
+                              {transaction.transaction_type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatCurrency(transaction.debit_amount)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatCurrency(transaction.credit_amount)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatCurrency(transaction.balance)}
+                          </td>
+                          <td className="py-3 px-4">
+                            {isLinked ? (
+                              <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--success)', color: 'white' }}>
+                                {t.bankStatements.detail.linked || 'Linked'}
+                              </span>
+                            ) : (
+                              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                -
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="p-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between">
+                    <div style={{ color: 'var(--muted-foreground)' }}>
+                      {t.bankStatements.detail.showing || 'Showing'} {(currentPage - 1) * pageSize + 1} {t.bankStatements.detail.to || 'to'}{' '}
+                      {Math.min(currentPage * pageSize, totalTransactions)} {t.bankStatements.detail.of || 'of'} {totalTransactions}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: 'var(--background)',
+                          borderColor: 'var(--border)',
+                          color: 'var(--foreground)',
+                        }}
+                      >
+                        {t.bankStatements.detail.previous || 'Previous'}
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: 'var(--background)',
+                          borderColor: 'var(--border)',
+                          color: 'var(--foreground)',
+                        }}
+                      >
+                        {t.bankStatements.detail.next || 'Next'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </AppLayout>
+  );
+};
+
+export default BankStatementDetail;
+
+

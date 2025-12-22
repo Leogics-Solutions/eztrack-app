@@ -1,6 +1,7 @@
 import { AuthAdapter, User } from './types';
 import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/services/AuthService';
 import { getCurrentUser as getUserProfile } from '@/services/UserService';
+import { redirectToLogin } from './authHelpers';
 
 /**
  * =====================================================
@@ -365,7 +366,13 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
     if (typeof window === 'undefined') return null;
     
     const token = localStorage.getItem('access_token');
-    if (!token) return null;
+    if (!token) {
+      // No token - redirect to login if not already on login page
+      if (window.location.pathname !== '/login') {
+        redirectToLogin(window.location.pathname);
+      }
+      return null;
+    }
 
     try {
       const response = await getUserProfile();
@@ -384,8 +391,16 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
         };
         return user;
       }
+      // Failed to get user - token might be invalid
+      if (window.location.pathname !== '/login') {
+        redirectToLogin(window.location.pathname);
+      }
       return null;
     } catch (error) {
+      // Error getting user - token invalid or expired
+      if (window.location.pathname !== '/login') {
+        redirectToLogin(window.location.pathname);
+      }
       return null;
     }
   }

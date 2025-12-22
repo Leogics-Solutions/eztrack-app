@@ -12,6 +12,7 @@ import {
   BarChart3,
   FileText,
   Menu,
+  CreditCard,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,6 +26,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
   const navItems = [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
     { href: '/documents', label: t.nav.documents, icon: FileCheck },
+    { href: '/bank-statements', label: t.nav.bankStatements, icon: CreditCard },
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
     { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
@@ -81,7 +83,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
         <ul className="space-y-1 px-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = router.pathname === item.href;
+            const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
 
             return (
               <li key={item.href}>

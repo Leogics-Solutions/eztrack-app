@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authAdapter } from './adapter';
 import { AuthState, User } from './types';
+import { redirectToLogin } from './authHelpers';
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
@@ -35,6 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isAuthenticated: !!user,
         });
 
+        // If no user and not on login page, redirect will be handled by getCurrentUser
+        if (!user && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          // getCurrentUser already handles redirect, but ensure state is updated
+          return;
+        }
+
         // Subscribe to auth state changes
         unsubscribe = authAdapter.onAuthStateChange((user) => {
           setState({
@@ -42,6 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isLoading: false,
             isAuthenticated: !!user,
           });
+          
+          // If user becomes null and not on login page, redirect
+          if (!user && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            redirectToLogin(window.location.pathname);
+          }
         });
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -50,6 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isLoading: false,
           isAuthenticated: false,
         });
+        
+        // If initialization fails and not on login page, redirect
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          redirectToLogin(window.location.pathname);
+        }
       }
     };
 

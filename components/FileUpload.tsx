@@ -12,6 +12,7 @@ interface FileUploadProps {
   label?: string;
   helpText?: string;
   requiredText?: string;
+  autoUpload?: boolean; // If false, files are only selected, not uploaded immediately
 }
 
 export function FileUpload({
@@ -23,6 +24,7 @@ export function FileUpload({
   label,
   helpText,
   requiredText,
+  autoUpload = true,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -46,13 +48,24 @@ export function FileUpload({
     const fileArray = Array.from(files);
     setSelectedFiles(fileArray);
 
-    if (multiple && onFilesSelect) {
-      onFilesSelect(fileArray);
-    } else if (!multiple && onFileSelect) {
-      onFileSelect(fileArray[0] || null);
-    } else if (multiple && !onFilesSelect && onFileSelect) {
-      // Fallback: if multiple is true but only onFileSelect is provided, use first file
-      onFileSelect(fileArray[0] || null);
+    // Only call callbacks if autoUpload is true (default behavior)
+    if (autoUpload) {
+      if (multiple && onFilesSelect) {
+        onFilesSelect(fileArray);
+      } else if (!multiple && onFileSelect) {
+        onFileSelect(fileArray[0] || null);
+      } else if (multiple && !onFilesSelect && onFileSelect) {
+        // Fallback: if multiple is true but only onFileSelect is provided, use first file
+        onFileSelect(fileArray[0] || null);
+      }
+    } else {
+      // If autoUpload is false, just update selected files state
+      // Callbacks will be called manually when upload button is clicked
+      if (multiple && onFilesSelect) {
+        onFilesSelect(fileArray);
+      } else if (!multiple && onFileSelect) {
+        onFileSelect(fileArray[0] || null);
+      }
     }
   };
 

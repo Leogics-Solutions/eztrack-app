@@ -2,7 +2,9 @@
 
 import { AppLayout } from "@/components/layout";
 import { InvoiceHeader } from "@/components/invoice/InvoiceHeader";
+import { PaymentValidationResult } from "./PaymentValidationResult";
 import { useLanguage } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import {
@@ -17,6 +19,7 @@ import {
   addPayment as apiAddPayment,
   getSettings,
   pushInvoicesToBusinessCentral,
+  matchInvoicesAcrossStatements,
   type Invoice as ApiInvoice,
   type UpdateInvoiceRequest,
   type AddLineItemRequest,
@@ -26,6 +29,7 @@ import {
   type VerifyInvoiceResponse,
   type InvoicePayment,
   type PushInvoicesResponse,
+  type MatchInvoicesAcrossStatementsResponse,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 
@@ -96,6 +100,7 @@ const InvoiceDetail = () => {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useLanguage();
+  const { showToast } = useToast();
 
   // State
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -117,6 +122,9 @@ const InvoiceDetail = () => {
   const [isPushingToBC, setIsPushingToBC] = useState(false);
   const [showPushResultModal, setShowPushResultModal] = useState(false);
   const [pushResult, setPushResult] = useState<PushInvoicesResponse | null>(null);
+  const [isValidatingPayment, setIsValidatingPayment] = useState(false);
+  const [paymentValidationResult, setPaymentValidationResult] = useState<MatchInvoicesAcrossStatementsResponse | null>(null);
+  const [showPaymentValidationResult, setShowPaymentValidationResult] = useState(false);
 
   // Load invoice data
   useEffect(() => {
@@ -136,6 +144,47 @@ const InvoiceDetail = () => {
       }
     } catch (error) {
       console.error('Failed to load Business Central connection', error);
+    }
+  };
+
+  const handleValidatePayment = async () => {
+    if (!invoice) return;
+
+    setIsValidatingPayment(true);
+    setPaymentValidationResult(null);
+    setShowPaymentValidationResult(false);
+
+    try {
+      const result = await matchInvoicesAcrossStatements(
+        [invoice.id],
+        {
+          date_tolerance_days: 7,
+          amount_tolerance_percentage: 2.0,
+          currency_tolerance_percentage: 5.0,
+          min_match_score: 60.0,
+          exclude_linked: true,
+        }
+      );
+
+      setPaymentValidationResult(result);
+      setShowPaymentValidationResult(true);
+      
+      if (result.matched_invoices === 0) {
+        showToast(
+          `No matching transactions found across ${result.statements_searched} statement(s)`,
+          'info'
+        );
+      } else {
+        showToast(
+          `Found matches in ${result.statement_matches?.length || 0} statement(s)`,
+          'success'
+        );
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to validate payment';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsValidatingPayment(false);
     }
   };
 
@@ -786,8 +835,133 @@ const InvoiceDetail = () => {
             bcConnectionId={bcConnectionId}
             isPushingToBC={isPushingToBC}
             onPushToBusinessCentral={handlePushToBusinessCentral}
+            onValidatePayment={handleValidatePayment}
+            isValidatingPayment={isValidatingPayment}
             t={t} 
           />
+
+          {/* Invoice Payment Validation Results */}
+          {showPaymentValidationResult && paymentValidationResult && (
+            <PaymentValidationResult
+              result={paymentValidationResult}
+              invoiceNo={invoice.invoice_no}
+              onClose={() => {
+                setShowPaymentValidationResult(false);
+                setPaymentValidationResult(null);
+              }}
+              onLinksCreated={async () => {
+                // Reload invoice data to reflect the new links
+                await loadInvoiceData();
+                // Optionally refresh the validation results
+                // You could re-run the validation here if needed
+              }}
+            />
+          )}
+
+          {/* Bank Reconciliation Status */}
+          {invoice.bank_reconciliation && (
+            <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+              <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+                Bank Reconciliation
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    ✓ Reconciled
+                  </span>
+                  <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    Matched on {new Date(invoice.bank_reconciliation.reconciled_at).toLocaleDateString()}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Bank Account
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      {invoice.bank_reconciliation.account_number}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Transaction Date
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      {new Date(invoice.bank_reconciliation.transaction_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Transaction Amount
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      {invoice.bank_reconciliation.transaction_amount.toLocaleString('en-MY', {
+                        style: 'currency',
+                        currency: 'MYR',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Match Score
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      {invoice.bank_reconciliation.match_score.toFixed(1)}%
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Match Type
+                    </div>
+                    <div className="text-sm font-medium capitalize" style={{ color: 'var(--foreground)' }}>
+                      {invoice.bank_reconciliation.match_type}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Statement ID
+                    </div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      <button
+                        onClick={() => router.push(`/bank-statements/${invoice.bank_reconciliation.statement_id}`)}
+                        className="text-[var(--primary)] hover:underline"
+                      >
+                        #{invoice.bank_reconciliation.statement_id}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                    Transaction Description
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--foreground)' }}>
+                    {invoice.bank_reconciliation.transaction_description}
+                  </div>
+                </div>
+                
+                {invoice.bank_reconciliation.notes && (
+                  <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Notes
+                    </div>
+                    <div className="text-sm" style={{ color: 'var(--foreground)' }}>
+                      {invoice.bank_reconciliation.notes}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Vendor Details */}
           <VendorDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} onSave={handleSaveInvoice} />
@@ -1123,6 +1297,8 @@ function InvoiceInformationCard({
   bcConnectionId,
   isPushingToBC,
   onPushToBusinessCentral,
+  onValidatePayment,
+  isValidatingPayment,
   t 
 }: any) {
   const [formData, setFormData] = useState(invoice);
@@ -1207,6 +1383,30 @@ function InvoiceInformationCard({
             >
               {isVerifying ? 'Verifying...' : '✓ Verify Totals'}
             </button>
+            {onValidatePayment && (
+              <button
+                onClick={onValidatePayment}
+                disabled={isValidatingPayment}
+                className="px-3 py-1.5 bg-purple-600 text-white rounded-md text-xs font-medium hover:bg-purple-700 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isValidatingPayment ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Validate Payment
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
