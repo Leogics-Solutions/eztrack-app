@@ -539,6 +539,23 @@ export interface Translations {
       entertainmentMedia: string;
       other: string;
     };
+    integrations: {
+      title: string;
+      description: string;
+      businessCentral: {
+        title: string;
+        description: string;
+        enabled: string;
+        disabled: string;
+        enableToggle: string;
+        disableToggle: string;
+        saving: string;
+        saved: string;
+        saveFailed: string;
+        loading: string;
+        note: string;
+      };
+    };
   };
 
   // Bank Statements
@@ -609,6 +626,7 @@ export interface Translations {
       closingBalance: string;
       ocrConfidence: string;
       linkedInvoices: string;
+      documentPreview: string;
       filters: string;
       transactionType: string;
       allTypes: string;
@@ -625,6 +643,9 @@ export interface Translations {
       previous: string;
       next: string;
       noTransactions: string;
+      openInNewTab: string;
+      dateFrom: string;
+      dateTo: string;
     };
     reconcile: {
       title: string;
@@ -662,6 +683,7 @@ export interface Translations {
       actions: string;
       existingLinks: string;
       matchType: string;
+      linked: string;
     };
   };
 }

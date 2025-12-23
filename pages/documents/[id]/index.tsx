@@ -175,12 +175,12 @@ const InvoiceDetail = () => {
       if (result.matched_invoices === 0) {
         showToast(
           `No matching transactions found across ${result.statements_searched} statement(s)`,
-          'info'
+          { type: 'info' }
         );
       } else {
         showToast(
           `Found matches in ${result.statement_matches?.length || 0} statement(s)`,
-          'success'
+          { type: 'success' }
         );
       }
     } catch (err) {
@@ -862,109 +862,112 @@ const InvoiceDetail = () => {
           )}
 
           {/* Bank Reconciliation Status */}
-          {invoice.bank_reconciliation && (
-            <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-              <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-                Bank Reconciliation
-              </h3>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                    ✓ Reconciled
-                  </span>
-                  <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Matched on {new Date(invoice.bank_reconciliation.reconciled_at).toLocaleDateString()}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Bank Account
+          {invoice.bank_reconciliation && (() => {
+            const bankRecon = invoice.bank_reconciliation;
+            return (
+              <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+                <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+                  Bank Reconciliation
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                      ✓ Reconciled
+                    </span>
+                    <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                      Matched on {new Date(bankRecon.reconciled_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Bank Account
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                        {bankRecon.account_number}
+                      </div>
                     </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                      {invoice.bank_reconciliation.account_number}
+                    
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Transaction Date
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                        {new Date(bankRecon.transaction_date).toLocaleDateString()}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Transaction Amount
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                        {bankRecon.transaction_amount.toLocaleString('en-MY', {
+                          style: 'currency',
+                          currency: 'MYR',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Match Score
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                        {bankRecon.match_score.toFixed(1)}%
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Match Type
+                      </div>
+                      <div className="text-sm font-medium capitalize" style={{ color: 'var(--foreground)' }}>
+                        {bankRecon.match_type}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Statement ID
+                      </div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                        <button
+                          onClick={() => router.push(`/bank-statements/${bankRecon.statement_id}`)}
+                          className="text-[var(--primary)] hover:underline"
+                        >
+                          #{bankRecon.statement_id}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Transaction Date
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                      {new Date(invoice.bank_reconciliation.transaction_date).toLocaleDateString()}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Transaction Amount
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                      {invoice.bank_reconciliation.transaction_amount.toLocaleString('en-MY', {
-                        style: 'currency',
-                        currency: 'MYR',
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Match Score
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                      {invoice.bank_reconciliation.match_score.toFixed(1)}%
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Match Type
-                    </div>
-                    <div className="text-sm font-medium capitalize" style={{ color: 'var(--foreground)' }}>
-                      {invoice.bank_reconciliation.match_type}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Statement ID
-                    </div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                      <button
-                        onClick={() => router.push(`/bank-statements/${invoice.bank_reconciliation.statement_id}`)}
-                        className="text-[var(--primary)] hover:underline"
-                      >
-                        #{invoice.bank_reconciliation.statement_id}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-                  <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                    Transaction Description
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--foreground)' }}>
-                    {invoice.bank_reconciliation.transaction_description}
-                  </div>
-                </div>
-                
-                {invoice.bank_reconciliation.notes && (
                   <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
                     <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                      Notes
+                      Transaction Description
                     </div>
                     <div className="text-sm" style={{ color: 'var(--foreground)' }}>
-                      {invoice.bank_reconciliation.notes}
+                      {bankRecon.transaction_description}
                     </div>
                   </div>
-                )}
+                  
+                  {bankRecon.notes && (
+                    <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                      <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                        Notes
+                      </div>
+                      <div className="text-sm" style={{ color: 'var(--foreground)' }}>
+                        {bankRecon.notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Vendor Details */}
           <VendorDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} onSave={handleSaveInvoice} />

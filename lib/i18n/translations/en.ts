@@ -609,6 +609,7 @@ export const en: Translations = {
       closingBalance: 'Closing Balance',
       ocrConfidence: 'OCR Confidence',
       linkedInvoices: 'Linked Invoices',
+      documentPreview: 'Document Preview',
       filters: 'Filter Transactions',
       transactionType: 'Transaction Type',
       allTypes: 'All Types',
@@ -625,6 +626,9 @@ export const en: Translations = {
       previous: 'Previous',
       next: 'Next',
       noTransactions: 'No transactions found',
+      openInNewTab: 'Open in new tab',
+      dateFrom: 'Date From',
+      dateTo: 'Date To',
     },
     reconcile: {
       title: 'Bank Reconciliation',
@@ -662,6 +666,7 @@ export const en: Translations = {
       actions: 'Actions',
       existingLinks: 'Existing Links',
       matchType: 'Match Type',
+      linked: 'Linked',
     },
   },
 };

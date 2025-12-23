@@ -323,7 +323,6 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
                         style={{
                           background: 'var(--card)',
                           borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
-                          ringColor: 'var(--primary)',
                         }}
                       >
                         <div className="flex items-start gap-3">

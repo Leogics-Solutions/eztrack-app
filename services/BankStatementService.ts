@@ -793,7 +793,7 @@ export async function createLinksBulk(
   links: Array<{
     bank_transaction_id: number;
     invoice_id: number;
-    match_type?: 'auto' | 'manual';
+    match_type: 'auto' | 'manual';
     match_score?: number;
     notes?: string;
   }>

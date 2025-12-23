@@ -556,7 +556,7 @@ const BankReconciliation = () => {
                   })}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
         </div>
 

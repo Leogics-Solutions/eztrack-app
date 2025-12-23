@@ -609,6 +609,7 @@ export const zh: Translations = {
       closingBalance: '期末余额',
       ocrConfidence: 'OCR置信度',
       linkedInvoices: '已链接发票',
+      documentPreview: '文档预览',
       filters: '筛选交易',
       transactionType: '交易类型',
       allTypes: '所有类型',
@@ -625,6 +626,9 @@ export const zh: Translations = {
       previous: '上一页',
       next: '下一页',
       noTransactions: '未找到交易',
+      openInNewTab: '在新标签页中打开',
+      dateFrom: '开始日期',
+      dateTo: '结束日期',
     },
     reconcile: {
       title: '银行对账',
@@ -662,6 +666,7 @@ export const zh: Translations = {
       actions: '操作',
       existingLinks: '现有链接',
       matchType: '匹配类型',
+      linked: '已链接',
     },
   },
 };
