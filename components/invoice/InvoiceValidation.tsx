@@ -98,7 +98,7 @@ export function InvoiceValidation({
           );
         } else {
           showToast(
-            `Found matches in ${response.statements_with_matches} statement(s) (${response.matched_invoices} matched, ${response.unmatched_invoices} unmatched)`,
+            `Found matches in ${response.statement_matches.length} statement(s) (${response.matched_invoices} matched, ${response.unmatched_invoices} unmatched)`,
             { type: 'success' }
           );
         }
@@ -482,7 +482,7 @@ export function InvoiceValidation({
                       With Matches
                     </div>
                     <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                      {crossStatementResults.statements_with_matches}
+                      {crossStatementResults.statement_matches.length}
                     </div>
                   </div>
                   <div>
