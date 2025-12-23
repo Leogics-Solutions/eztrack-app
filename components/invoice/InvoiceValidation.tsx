@@ -137,7 +137,7 @@ export function InvoiceValidation({
     }
   };
 
-  const formatDate = (dateString?: string) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return '-';
     try {
       return new Date(dateString).toLocaleDateString();
