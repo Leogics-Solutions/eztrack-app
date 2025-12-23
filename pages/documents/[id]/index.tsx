@@ -185,7 +185,7 @@ const InvoiceDetail = () => {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to validate payment';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     } finally {
       setIsValidatingPayment(false);
     }

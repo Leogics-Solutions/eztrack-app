@@ -87,7 +87,7 @@ const BankStatementDetail = () => {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bank statement');
-      showToast(err instanceof Error ? err.message : 'Failed to load bank statement', 'error');
+      showToast(err instanceof Error ? err.message : 'Failed to load bank statement', { type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -146,12 +146,12 @@ const BankStatementDetail = () => {
       await deleteBankStatement(Number(id));
       showToast(
         t.bankStatements.detail.deleteSuccess || 'Bank statement deleted successfully',
-        'success'
+        { type: 'success' }
       );
       router.push('/bank-statements');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete bank statement';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     }
   };
 
@@ -166,13 +166,13 @@ const BankStatementDetail = () => {
       await reprocessTransactions(Number(id));
       showToast(
         t.bankStatements.detail.reprocessSuccess || 'Transactions reprocessed successfully',
-        'success'
+        { type: 'success' }
       );
       await loadStatement();
       await loadTransactions();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reprocess transactions';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     }
   };
 

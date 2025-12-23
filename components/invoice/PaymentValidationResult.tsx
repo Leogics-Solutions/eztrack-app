@@ -112,7 +112,7 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
 
   const handleSaveLinks = async () => {
     if (selectedMatches.size === 0) {
-      showToast('Please select at least one match to link', 'error');
+      showToast('Please select at least one match to link', { type: 'error' });
       return;
     }
 
@@ -131,7 +131,7 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
       
       showToast(
         `Successfully created ${response.data?.created_count || linksToCreate.length} link(s)`,
-        'success'
+        { type: 'success' }
       );
       
       // Clear selection
@@ -143,7 +143,7 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create links';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     } finally {
       setIsSaving(false);
     }

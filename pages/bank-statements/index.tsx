@@ -83,7 +83,7 @@ const BankStatementsList = () => {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bank statements');
-      showToast(err instanceof Error ? err.message : 'Failed to load bank statements', 'error');
+      showToast(err instanceof Error ? err.message : 'Failed to load bank statements', { type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -121,13 +121,13 @@ const BankStatementsList = () => {
               if (job.status === 'SUCCESS') {
                 showToast(
                   `${t.bankStatements.upload.success || 'Bank statement processed successfully'}: ${job.original_filename}`,
-                  'success'
+                  { type: 'success' }
                 );
               } else {
                 const errorMsg = job.error_message || 'Bank statement processing failed';
                 showToast(
                   `${t.bankStatements.upload.failed || 'Failed'}: ${job.original_filename} - ${errorMsg}`,
-                  'error'
+                  { type: 'error' }
                 );
               }
             }
@@ -144,7 +144,7 @@ const BankStatementsList = () => {
         if (attempts >= maxAttempts) {
           showToast(
             t.bankStatements.upload.timeout || 'Processing is taking longer than expected. Please check back later.',
-            'info'
+            { type: 'info' }
           );
           setShowUploadModal(false);
           setSelectedFiles([]);
@@ -163,7 +163,7 @@ const BankStatementsList = () => {
         if (attempts >= maxAttempts) {
           showToast(
             t.bankStatements.upload.pollError || 'Failed to check processing status. Please refresh the page.',
-            'error'
+            { type: 'error' }
           );
           setShowUploadModal(false);
           setSelectedFiles([]);
@@ -185,7 +185,7 @@ const BankStatementsList = () => {
 
   const handleUpload = async () => {
     if (selectedFiles.length === 0) {
-      showToast(t.bankStatements.upload.selectFile || 'Please select at least one file', 'error');
+      showToast(t.bankStatements.upload.selectFile || 'Please select at least one file', { type: 'error' });
       return;
     }
 
@@ -208,14 +208,14 @@ const BankStatementsList = () => {
 
       showToast(
         `${t.bankStatements.upload.batchAccepted || 'Upload accepted. Processing'} ${response.data.total_files} ${t.bankStatements.upload.file || 'file'}(s) ${t.bankStatements.upload.processing || 'in the background'}...`,
-        'info'
+        { type: 'info' }
       );
       
       // Start polling for job statuses
       await pollJobStatuses(jobIds);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to upload bank statements';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
       setIsUploading(false);
       setCurrentJobIds([]);
       setJobStatuses({});
@@ -231,12 +231,12 @@ const BankStatementsList = () => {
       await deleteBankStatement(id);
       showToast(
         t.bankStatements.list.deleteSuccess || 'Bank statement deleted successfully',
-        'success'
+        { type: 'success' }
       );
       await loadStatements();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete bank statement';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     }
   };
 

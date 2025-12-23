@@ -62,7 +62,7 @@ export function InvoiceValidation({
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : 'Failed to load bank statements',
-        'error'
+        { type: 'error' }
       );
     } finally {
       setIsLoading(false);
@@ -71,7 +71,7 @@ export function InvoiceValidation({
 
   const handleValidate = async () => {
     if (!searchAllStatements && !selectedStatementId) {
-      showToast('Please select a bank statement or enable "Search All Statements"', 'error');
+      showToast('Please select a bank statement or enable "Search All Statements"', { type: 'error' });
       return;
     }
 
@@ -94,12 +94,12 @@ export function InvoiceValidation({
         if (response.matched_invoices === 0) {
           showToast(
             `No matching transactions found across ${response.statements_searched} statement(s)`,
-            'info'
+            { type: 'info' }
           );
         } else {
           showToast(
             `Found matches in ${response.statements_with_matches} statement(s) (${response.matched_invoices} matched, ${response.unmatched_invoices} unmatched)`,
-            'success'
+            { type: 'success' }
           );
         }
       } else {
@@ -114,7 +114,7 @@ export function InvoiceValidation({
         setHasValidated(true);
 
         if (response.transactions.length === 0) {
-          showToast('No matching transactions found for this invoice', 'info');
+          showToast('No matching transactions found for this invoice', { type: 'info' });
         } else {
           const totalMatches = response.transactions.reduce(
             (sum, t) => sum + t.matches.length,
@@ -122,14 +122,14 @@ export function InvoiceValidation({
           );
           showToast(
             `Found ${totalMatches} match(es) across ${response.transactions.length} transaction(s)`,
-            'success'
+            { type: 'success' }
           );
         }
       }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to validate invoice';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     } finally {
       setIsValidating(false);
     }

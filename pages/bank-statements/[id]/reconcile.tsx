@@ -76,7 +76,7 @@ const BankReconciliation = () => {
       setStatement(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bank statement');
-      showToast(err instanceof Error ? err.message : 'Failed to load bank statement', 'error');
+      showToast(err instanceof Error ? err.message : 'Failed to load bank statement', { type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +121,7 @@ const BankReconciliation = () => {
     if (!id || typeof id !== 'string') return;
 
     if (selectedInvoiceIds.size === 0) {
-      showToast(t.bankStatements.reconcile.selectInvoices || 'Please select at least one invoice', 'error');
+      showToast(t.bankStatements.reconcile.selectInvoices || 'Please select at least one invoice', { type: 'error' });
       return;
     }
 
@@ -138,16 +138,16 @@ const BankReconciliation = () => {
       setMatchResults(response.transactions || []);
       
       if (response.transactions.length === 0) {
-        showToast(t.bankStatements.reconcile.noMatches || 'No matching transactions found', 'info');
+        showToast(t.bankStatements.reconcile.noMatches || 'No matching transactions found', { type: 'info' });
       } else {
         showToast(
           t.bankStatements.reconcile.matchesFound || `Found matches for ${response.transactions.length} transaction(s)`,
-          'success'
+          { type: 'success' }
         );
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to match invoices';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     } finally {
       setIsMatching(false);
     }
@@ -179,7 +179,7 @@ const BankReconciliation = () => {
     });
 
     if (linksToCreate.length === 0) {
-      showToast(t.bankStatements.reconcile.noLinksToCreate || 'No links to create. Select high or medium confidence matches.', 'info');
+      showToast(t.bankStatements.reconcile.noLinksToCreate || 'No links to create. Select high or medium confidence matches.', { type: 'info' });
       return;
     }
 
@@ -188,14 +188,14 @@ const BankReconciliation = () => {
       await createLinksBulk(linksToCreate);
       showToast(
         t.bankStatements.reconcile.linksCreated || `Created ${linksToCreate.length} link(s) successfully`,
-        'success'
+        { type: 'success' }
       );
       await loadLinks();
       setMatchResults([]);
       setSelectedInvoiceIds(new Set());
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create links';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     } finally {
       setIsLinking(false);
     }
@@ -209,23 +209,23 @@ const BankReconciliation = () => {
         match_type: 'manual',
         match_score: matchScore,
       });
-      showToast(t.bankStatements.reconcile.linkCreated || 'Link created successfully', 'success');
+      showToast(t.bankStatements.reconcile.linkCreated || 'Link created successfully', { type: 'success' });
       await loadLinks();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create link';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     }
   };
 
   const handleDeleteLink = async (linkId: number) => {
     try {
       await deleteLink(linkId);
-      showToast(t.bankStatements.reconcile.linkDeleted || 'Link deleted successfully', 'success');
+      showToast(t.bankStatements.reconcile.linkDeleted || 'Link deleted successfully', { type: 'success' });
       await loadLinks();
       await loadInvoices(); // Reload to show previously linked invoices
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete link';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, { type: 'error' });
     }
   };
 
