@@ -46,25 +46,31 @@ export function FileUpload({
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
-    setSelectedFiles(fileArray);
+    
+    // If multiple is true, append to existing files; otherwise replace
+    const updatedFiles = multiple 
+      ? [...selectedFiles, ...fileArray] 
+      : fileArray;
+    
+    setSelectedFiles(updatedFiles);
 
     // Only call callbacks if autoUpload is true (default behavior)
     if (autoUpload) {
       if (multiple && onFilesSelect) {
-        onFilesSelect(fileArray);
+        onFilesSelect(updatedFiles);
       } else if (!multiple && onFileSelect) {
-        onFileSelect(fileArray[0] || null);
+        onFileSelect(updatedFiles[0] || null);
       } else if (multiple && !onFilesSelect && onFileSelect) {
         // Fallback: if multiple is true but only onFileSelect is provided, use first file
-        onFileSelect(fileArray[0] || null);
+        onFileSelect(updatedFiles[0] || null);
       }
     } else {
       // If autoUpload is false, just update selected files state
       // Callbacks will be called manually when upload button is clicked
       if (multiple && onFilesSelect) {
-        onFilesSelect(fileArray);
+        onFilesSelect(updatedFiles);
       } else if (!multiple && onFileSelect) {
-        onFileSelect(fileArray[0] || null);
+        onFileSelect(updatedFiles[0] || null);
       }
     }
   };

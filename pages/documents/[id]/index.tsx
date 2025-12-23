@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { InvoiceHeader } from "@/components/invoice/InvoiceHeader";
-import { PaymentValidationResult } from "./PaymentValidationResult";
+import { PaymentValidationResult } from "@/components/invoice/PaymentValidationResult";
 import { useLanguage } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
