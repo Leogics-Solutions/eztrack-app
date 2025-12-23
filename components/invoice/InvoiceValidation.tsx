@@ -11,6 +11,8 @@ import {
   type TransactionInvoiceMatch,
   type MatchInvoicesAcrossStatementsResponse,
   type StatementMatchSummary,
+  type StatementTransactionMatch,
+  type MatchedInvoiceDetail,
 } from '@/services';
 import { useToast } from '@/lib/toast';
 
@@ -505,7 +507,7 @@ export function InvoiceValidation({
               </div>
 
               {/* Results by Statement */}
-              {crossStatementResults.results.length === 0 ? (
+              {crossStatementResults.statement_matches.length === 0 ? (
                 <div
                   className="rounded-lg p-6 text-center border"
                   style={{
@@ -524,9 +526,17 @@ export function InvoiceValidation({
               ) : (
                 <div className="space-y-4">
                   <h4 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                    Matches by Statement ({crossStatementResults.results.length} statement(s))
+                    Matches by Statement ({crossStatementResults.statement_matches.length} statement(s))
                   </h4>
-                  {crossStatementResults.results.map((statementResult) => (
+                  {crossStatementResults.statement_matches.map((statementResult) => {
+                    // Filter to only show transactions with matches
+                    const matchedTransactions = statementResult.matches.filter(
+                      (t) => t.matched && t.matched_invoices.length > 0
+                    );
+
+                    if (matchedTransactions.length === 0) return null;
+
+                    return (
                     <div
                       key={statementResult.statement_id}
                       className="rounded-lg p-4 border"
@@ -537,19 +547,19 @@ export function InvoiceValidation({
                     >
                       <div className="mb-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
                         <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                          {statementResult.bank_name || 'Bank'} - {statementResult.account_number || 'N/A'}
+                          Account: {statementResult.account_number || 'N/A'}
                         </div>
                         <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
                           {formatDate(statementResult.statement_date_from)} to {formatDate(statementResult.statement_date_to)}
                         </div>
                         <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                          {statementResult.transactions.length} matching transaction(s)
+                          {statementResult.matched_transactions} matched transaction(s) out of {statementResult.total_transactions} total
                         </div>
                       </div>
-                      {statementResult.transactions.map((transaction) =>
-                        transaction.matches.map((match, idx) => (
+                      {matchedTransactions.map((transaction) =>
+                        transaction.matched_invoices.map((invoice, idx) => (
                           <div
-                            key={`${transaction.transaction_id}-${match.invoice_id}-${idx}`}
+                            key={`${transaction.transaction_id}-${invoice.invoice_id}-${idx}`}
                             className="mb-3 last:mb-0 p-3 rounded border"
                             style={{
                               background: 'var(--card)',
@@ -570,7 +580,29 @@ export function InvoiceValidation({
                                     {transaction.description}
                                   </div>
                                   <div className="text-sm font-semibold mt-1" style={{ color: 'var(--foreground)' }}>
-                                    {formatCurrency(transaction.amount)}
+                                    {formatCurrency(parseFloat(transaction.transaction_amount))}
+                                  </div>
+                                </div>
+
+                                {/* Invoice Info */}
+                                <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                                  <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                    Matched Invoice
+                                  </div>
+                                  <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                                    {invoice.invoice_no}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {invoice.vendor_name}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {formatDate(invoice.invoice_date)}
+                                  </div>
+                                  <div className="text-xs font-semibold mt-1" style={{ color: 'var(--foreground)' }}>
+                                    {invoice.invoice_currency} {parseFloat(invoice.invoice_total).toLocaleString('en-MY', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </div>
                                 </div>
 
@@ -583,25 +615,25 @@ export function InvoiceValidation({
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Amount: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {match.score_breakdown.amount_score.toFixed(1)}
+                                        {parseFloat(invoice.score_breakdown.amount_score).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Date: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {match.score_breakdown.date_score.toFixed(1)}
+                                        {parseFloat(invoice.score_breakdown.date_score).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Text: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {match.score_breakdown.text_score.toFixed(1)}
+                                        {parseFloat(invoice.score_breakdown.text_score).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Reference: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {match.score_breakdown.reference_bonus.toFixed(1)}
+                                        {parseFloat(invoice.score_breakdown.reference_bonus).toFixed(1)}
                                       </span>
                                     </div>
                                   </div>
@@ -613,15 +645,15 @@ export function InvoiceValidation({
                                 <div
                                   className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium capitalize"
                                   style={{
-                                    background: getConfidenceColor(match.confidence),
+                                    background: getConfidenceColor(invoice.match_confidence),
                                     color: 'white',
                                   }}
                                 >
-                                  {getConfidenceIcon(match.confidence)}
-                                  {match.confidence}
+                                  {getConfidenceIcon(invoice.match_confidence)}
+                                  {invoice.match_confidence}
                                 </div>
                                 <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                                  {match.match_score.toFixed(1)}%
+                                  {parseFloat(invoice.match_score).toFixed(1)}%
                                 </div>
                               </div>
                             </div>
@@ -629,7 +661,8 @@ export function InvoiceValidation({
                         ))
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
