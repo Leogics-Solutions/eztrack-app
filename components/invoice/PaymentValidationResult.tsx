@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, CheckCircle2, XCircle, AlertCircle, Loader2, Link2 } from 'lucide-react';
+import { X, CheckCircle2, XCircle, AlertCircle, Loader2, Link2, ExternalLink } from 'lucide-react';
 import { 
   MatchInvoicesAcrossStatementsResponse, 
   StatementMatchSummary, 
@@ -419,17 +419,27 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
                               </div>
                             </div>
 
-                            {/* Confidence Badge */}
+                            {/* Confidence Badge and Actions */}
                             <div className="flex flex-col items-end gap-2">
-                              <div
-                                className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium capitalize"
-                                style={{
-                                  background: getConfidenceColor(invoice.match_confidence),
-                                  color: 'white',
-                                }}
-                              >
-                                {getConfidenceIcon(invoice.match_confidence)}
-                                {invoice.match_confidence}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => window.open(`/bank-statements/${statementResult.statement_id}`, '_blank')}
+                                  className="p-1.5 rounded hover:bg-[var(--muted)] transition-colors"
+                                  style={{ color: 'var(--muted-foreground)' }}
+                                  title="View bank statement details"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </button>
+                                <div
+                                  className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium capitalize"
+                                  style={{
+                                    background: getConfidenceColor(invoice.match_confidence),
+                                    color: 'white',
+                                  }}
+                                >
+                                  {getConfidenceIcon(invoice.match_confidence)}
+                                  {invoice.match_confidence}
+                                </div>
                               </div>
                               <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
                                 {parseFloat(invoice.match_score).toFixed(1)}%

@@ -20,6 +20,9 @@ import {
   getSettings,
   pushInvoicesToBusinessCentral,
   matchInvoicesAcrossStatements,
+  listChartOfAccounts,
+  deleteLink,
+  getStatementLinks,
   type Invoice as ApiInvoice,
   type UpdateInvoiceRequest,
   type AddLineItemRequest,
@@ -30,6 +33,7 @@ import {
   type InvoicePayment,
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
+  type ChartOfAccount,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 
@@ -85,6 +89,7 @@ interface LineItem {
   discount?: number;
   tax_rate?: number;
   line_total?: number;
+  account_id?: number;
   account_name?: string;
   account_type?: string;
   account_confidence?: number;
@@ -128,6 +133,8 @@ const InvoiceDetail = () => {
   const [isValidatingPayment, setIsValidatingPayment] = useState(false);
   const [paymentValidationResult, setPaymentValidationResult] = useState<MatchInvoicesAcrossStatementsResponse | null>(null);
   const [showPaymentValidationResult, setShowPaymentValidationResult] = useState(false);
+  const [reconciliationLinkId, setReconciliationLinkId] = useState<number | null>(null);
+  const [isUnlinking, setIsUnlinking] = useState(false);
 
   // Load invoice data
   useEffect(() => {
@@ -136,6 +143,49 @@ const InvoiceDetail = () => {
     }
     loadBusinessCentralConnection();
   }, [id]);
+
+  // Load reconciliation link ID when invoice has bank reconciliation
+  useEffect(() => {
+    const loadReconciliationLink = async () => {
+      if (invoice?.bank_reconciliation && invoice.id) {
+        try {
+          const linksResponse = await getStatementLinks(invoice.bank_reconciliation.statement_id);
+          
+          // Debug logging
+          console.log('Loading reconciliation link...');
+          console.log('Bank Reconciliation:', invoice.bank_reconciliation);
+          console.log('Invoice ID:', invoice.id);
+          console.log('All Links:', linksResponse.data);
+          
+          const matchingLink = linksResponse.data?.find(
+            (link) => {
+              const matchesTransaction = link.bank_transaction_id === invoice.bank_reconciliation?.transaction_id;
+              const matchesInvoice = link.invoice_id === invoice.id;
+              if (matchesInvoice) {
+                console.log(`Found invoice match: Link ${link.id}, transaction_id=${link.bank_transaction_id}, expected=${invoice.bank_reconciliation?.transaction_id}`);
+              }
+              return matchesTransaction && matchesInvoice;
+            }
+          );
+          
+          if (matchingLink) {
+            console.log('Found matching link ID:', matchingLink.id);
+            setReconciliationLinkId(matchingLink.id);
+          } else {
+            console.warn('No matching link found');
+            setReconciliationLinkId(null);
+          }
+        } catch (err) {
+          console.error('Failed to load reconciliation link', err);
+          setReconciliationLinkId(null);
+        }
+      } else {
+        setReconciliationLinkId(null);
+      }
+    };
+
+    loadReconciliationLink();
+  }, [invoice?.bank_reconciliation, invoice?.id]);
 
   const loadBusinessCentralConnection = async () => {
     try {
@@ -161,10 +211,10 @@ const InvoiceDetail = () => {
       const result = await matchInvoicesAcrossStatements(
         [invoice.id],
         {
-          date_tolerance_days: 7,
-          amount_tolerance_percentage: 2.0,
-          currency_tolerance_percentage: 5.0,
-          min_match_score: 60.0,
+          date_tolerance_days: 90,
+          amount_tolerance_percentage: 5.0,
+          currency_tolerance_percentage: 10.0,
+          min_match_score: 50.0,
           exclude_linked: true,
         }
       );
@@ -188,6 +238,94 @@ const InvoiceDetail = () => {
       showToast(errorMessage, { type: 'error' });
     } finally {
       setIsValidatingPayment(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    if (!invoice?.bank_reconciliation || !invoice.id) {
+      showToast('No reconciliation found to unlink', { type: 'error' });
+      return;
+    }
+
+    if (!confirm('Are you sure you want to unlink this invoice from the bank transaction? This will remove the reconciliation.')) {
+      return;
+    }
+
+    setIsUnlinking(true);
+    try {
+      // If we don't have the link ID, try to find it first
+      let linkIdToDelete = reconciliationLinkId;
+      
+      if (!linkIdToDelete) {
+        try {
+          const linksResponse = await getStatementLinks(invoice.bank_reconciliation.statement_id);
+          
+          // Debug logging
+          console.log('Bank Reconciliation:', invoice.bank_reconciliation);
+          console.log('Invoice ID:', invoice.id);
+          console.log('All Links:', linksResponse.data);
+          console.log('Looking for transaction_id:', invoice.bank_reconciliation.transaction_id);
+          
+          const matchingLink = linksResponse.data?.find(
+            (link) => {
+              const matchesTransaction = link.bank_transaction_id === invoice.bank_reconciliation?.transaction_id;
+              const matchesInvoice = link.invoice_id === invoice.id;
+              console.log(`Link ${link.id}: transaction_id=${link.bank_transaction_id} (match: ${matchesTransaction}), invoice_id=${link.invoice_id} (match: ${matchesInvoice})`);
+              return matchesTransaction && matchesInvoice;
+            }
+          );
+          
+          if (matchingLink) {
+            linkIdToDelete = matchingLink.id;
+            console.log('Found matching link ID:', linkIdToDelete);
+          } else {
+            // Try to find by invoice_id only as a fallback (since an invoice should only have one link)
+            const invoiceMatch = linksResponse.data?.find(link => link.invoice_id === invoice.id);
+            if (invoiceMatch) {
+              console.warn('Found link by invoice_id only, but transaction_id mismatch:', {
+                expected: invoice.bank_reconciliation.transaction_id,
+                actual: invoiceMatch.bank_transaction_id,
+                linkId: invoiceMatch.id
+              });
+              // Use this link anyway since it's the only link for this invoice
+              linkIdToDelete = invoiceMatch.id;
+              console.log('Using link found by invoice_id:', linkIdToDelete);
+            } else {
+              // No link found at all
+              console.error('No link found for invoice:', {
+                invoiceId: invoice.id,
+                statementId: invoice.bank_reconciliation.statement_id,
+                transactionId: invoice.bank_reconciliation.transaction_id,
+                availableLinks: linksResponse.data?.map(l => ({
+                  id: l.id,
+                  transaction_id: l.bank_transaction_id,
+                  invoice_id: l.invoice_id
+                }))
+              });
+              showToast('Could not find the reconciliation link. It may have already been deleted.', { type: 'error' });
+              setIsUnlinking(false);
+              await loadInvoiceData(); // Refresh to update the UI
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load reconciliation link', err);
+          showToast('Failed to find the reconciliation link', { type: 'error' });
+          setIsUnlinking(false);
+          return;
+        }
+      }
+
+      await deleteLink(linkIdToDelete);
+      showToast('Invoice unlinked successfully', { type: 'success' });
+      // Reload invoice data to refresh the bank reconciliation status
+      await loadInvoiceData();
+      setReconciliationLinkId(null); // Clear the link ID
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to unlink invoice';
+      showToast(errorMessage, { type: 'error' });
+    } finally {
+      setIsUnlinking(false);
     }
   };
 
@@ -309,6 +447,9 @@ const InvoiceDetail = () => {
           qty: line.qty ?? line.quantity,
           // Map classification confidence if provided by API
           account_confidence: line.account_confidence ?? line.classification_confidence,
+          // Explicitly preserve account fields
+          account_name: line.account_name,
+          account_type: line.account_type,
         }))
       );
 
@@ -964,6 +1105,46 @@ const InvoiceDetail = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Unlink Button */}
+                  <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <button
+                      onClick={handleUnlink}
+                      disabled={isUnlinking}
+                      className="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'var(--error)',
+                        color: 'white',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isUnlinking) {
+                          e.currentTarget.style.opacity = '0.9';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isUnlinking) {
+                          e.currentTarget.style.opacity = '1';
+                        }
+                      }}
+                    >
+                      {isUnlinking ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Unlinking...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Unlink Payment
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -1380,11 +1561,12 @@ function InvoiceInformationCard({
             >
               {isVerifying ? 'Verifying...' : '✓ Verify Totals'}
             </button>
-            {false && onValidatePayment && (
+            {onValidatePayment && (
               <button
                 onClick={onValidatePayment}
-                disabled={isValidatingPayment}
+                disabled={isValidatingPayment || invoice.bank_reconciliation !== null}
                 className="px-3 py-1.5 bg-purple-600 text-white rounded-md text-xs font-medium hover:bg-purple-700 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={invoice.bank_reconciliation ? 'Payment already validated' : undefined}
               >
                 {isValidatingPayment ? (
                   <>
@@ -1982,6 +2164,13 @@ function LineItemsCard({
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // Account selection modal state
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [selectedLineItemId, setSelectedLineItemId] = useState<number | null>(null);
+  const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
+  const [accountSearchTerm, setAccountSearchTerm] = useState("");
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
+
   const computeLineTotal = (quantity?: number | "", unitPrice?: number | "") => {
     const q = typeof quantity === "string" ? parseFloat(quantity || "0") : quantity ?? 0;
     const p = typeof unitPrice === "string" ? parseFloat(unitPrice || "0") : unitPrice ?? 0;
@@ -2122,6 +2311,87 @@ function LineItemsCard({
     }
   };
 
+  const openAccountModal = async (lineItemId: number) => {
+    setSelectedLineItemId(lineItemId);
+    setIsAccountModalOpen(true);
+    setAccountSearchTerm("");
+    
+    // Load accounts when modal opens
+    if (accounts.length === 0) {
+      setIsLoadingAccounts(true);
+      try {
+        const response = await listChartOfAccounts({ active_only: true });
+        setAccounts(response.data || []);
+      } catch (error) {
+        console.error("Failed to load chart of accounts", error);
+        alert("Failed to load chart of accounts");
+      } finally {
+        setIsLoadingAccounts(false);
+      }
+    }
+  };
+
+  const closeAccountModal = () => {
+    setIsAccountModalOpen(false);
+    setSelectedLineItemId(null);
+    setAccountSearchTerm("");
+  };
+
+  const handleAccountSelect = async (account: ChartOfAccount) => {
+    if (!selectedLineItemId) return;
+
+    try {
+      setIsSaving(true);
+      await onUpdateLineItem(selectedLineItemId, {
+        account_id: account.id,
+      });
+      // onUpdateLineItem already calls loadInvoiceData() to refresh the data
+      closeAccountModal();
+    } catch (error) {
+      console.error("Failed to update account", error);
+      alert(error instanceof Error ? error.message : "Failed to update account");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemoveAccount = async () => {
+    if (!selectedLineItemId) return;
+
+    try {
+      setIsSaving(true);
+      await onUpdateLineItem(selectedLineItemId, {
+        account_id: null,
+      });
+      // onUpdateLineItem already calls loadInvoiceData() to refresh the data
+      closeAccountModal();
+    } catch (error) {
+      console.error("Failed to remove account", error);
+      alert(error instanceof Error ? error.message : "Failed to remove account");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Filter accounts based on search term
+  const filteredAccounts = accounts.filter((account) => {
+    const searchLower = accountSearchTerm.toLowerCase();
+    return (
+      account.account_name.toLowerCase().includes(searchLower) ||
+      account.account_type.toLowerCase().includes(searchLower) ||
+      (account.description || "").toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Group accounts by type
+  const groupedAccounts = filteredAccounts.reduce((acc, account) => {
+    if (!acc[account.account_type]) {
+      acc[account.account_type] = [];
+    }
+    acc[account.account_type].push(account);
+    return acc;
+  }, {} as Record<string, ChartOfAccount[]>);
+
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
       <div className="flex items-center justify-between mb-4">
@@ -2194,7 +2464,11 @@ function LineItemsCard({
                       <td className="px-3 py-2 text-right align-top text-sm whitespace-nowrap">
                         {computeLineTotal(editingItem?.quantity, editingItem?.unit_price).toFixed(2)}
                       </td>
-                      <td className="px-3 py-2 text-sm align-top">
+                      <td 
+                        className="px-3 py-2 text-sm align-top cursor-pointer hover:bg-[var(--muted)] transition-colors"
+                        onClick={() => openAccountModal(item.id)}
+                        title="Click to edit account"
+                      >
                         {item.account_name || <span className="text-[var(--muted-foreground)]">-</span>}
                       </td>
                       <td className="px-3 py-2 text-xs text-right space-x-1 align-top whitespace-nowrap">
@@ -2228,7 +2502,11 @@ function LineItemsCard({
                           computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0)
                         ).toFixed(2)}
                       </td>
-                      <td className="px-3 py-2 text-sm align-top">
+                      <td 
+                        className="px-3 py-2 text-sm align-top cursor-pointer hover:bg-[var(--muted)] transition-colors"
+                        onClick={() => openAccountModal(item.id)}
+                        title="Click to edit account"
+                      >
                         {item.account_name || <span className="text-[var(--muted-foreground)]">-</span>}
                       </td>
                       <td className="px-3 py-2 text-xs text-right space-x-1 align-top whitespace-nowrap">
@@ -2319,6 +2597,103 @@ function LineItemsCard({
           {isClassifying ? t.documents.invoiceDetailPage.aiThinking : t.documents.invoiceDetailPage.aiClassifyAccount}
         </button>
       </div> */}
+
+      {/* Account Selection Modal */}
+      {isAccountModalOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={closeAccountModal}
+        >
+          <div
+            className="bg-white dark:bg-[var(--card)] rounded-lg shadow-lg border border-[var(--border)] w-full max-w-2xl max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-[var(--border)] flex items-center justify-between">
+              <h2 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                Select Account
+              </h2>
+              <button
+                onClick={closeAccountModal}
+                className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-4 border-b border-[var(--border)]">
+              <input
+                type="text"
+                placeholder="Search accounts..."
+                value={accountSearchTerm}
+                onChange={(e) => setAccountSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-[var(--border)] rounded-lg bg-white dark:bg-[var(--input)] text-[var(--foreground)]"
+                autoFocus
+              />
+            </div>
+
+            {/* Accounts List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {isLoadingAccounts ? (
+                <div className="text-center py-8 text-[var(--muted-foreground)]">Loading accounts...</div>
+              ) : filteredAccounts.length === 0 ? (
+                <div className="text-center py-8 text-[var(--muted-foreground)]">
+                  {accountSearchTerm ? "No accounts found" : "No accounts available"}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {Object.entries(groupedAccounts).map(([accountType, accountsInType]) => (
+                    <div key={accountType}>
+                      <h3 className="text-sm font-semibold mb-2 text-[var(--muted-foreground)] uppercase tracking-wide">
+                        {accountType}
+                      </h3>
+                      <div className="space-y-1">
+                        {accountsInType.map((account) => (
+                          <button
+                            key={account.id}
+                            onClick={() => handleAccountSelect(account)}
+                            disabled={isSaving}
+                            className="w-full text-left px-4 py-3 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] hover:border-[var(--primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            <div className="font-medium">{account.account_name}</div>
+                            {account.description && (
+                              <div className="text-sm text-[var(--muted-foreground)] mt-1">
+                                {account.description}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-[var(--border)] flex justify-end gap-2">
+              <button
+                onClick={handleRemoveAccount}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] disabled:opacity-50"
+                style={{ color: 'var(--foreground)' }}
+              >
+                Remove Account
+              </button>
+              <button
+                onClick={closeAccountModal}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] disabled:opacity-50"
+                style={{ color: 'var(--foreground)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

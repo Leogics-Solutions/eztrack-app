@@ -1051,6 +1051,20 @@ const DocumentsListing = () => {
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
+                      // Check bank reconciliation status first - it takes priority
+                      if (invoice.bank_recon_status === 'reconciled') {
+                        return (
+                          <span 
+                            className="px-2 py-1 text-xs rounded-md font-semibold text-white"
+                            style={{
+                              background: 'var(--success)',
+                            }}
+                          >
+                            Reconciled
+                          </span>
+                        );
+                      }
+
                       const rawStatus = invoice.status || 'draft';
                       const status = rawStatus.toLowerCase();
                       const isDraft = status === 'draft';

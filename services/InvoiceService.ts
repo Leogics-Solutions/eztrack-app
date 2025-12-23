@@ -313,6 +313,7 @@ export interface UpdateLineItemRequest {
   uom?: string;
   tax_rate?: number;
   line_total?: number;
+  account_id?: number | null;
 }
 
 export interface UpdateLineItemResponse {

@@ -849,7 +849,19 @@ export async function getStatementLinks(
     throw new Error(error.message || error.error || 'Failed to get links');
   }
 
-  return response.json();
+  const jsonResponse = await response.json();
+  
+  // Handle both formats: array directly or wrapped in data property
+  if (Array.isArray(jsonResponse)) {
+    return {
+      success: true,
+      message: 'Links retrieved successfully',
+      data: jsonResponse,
+    };
+  }
+  
+  // If already wrapped, return as is
+  return jsonResponse;
 }
 
 /**
