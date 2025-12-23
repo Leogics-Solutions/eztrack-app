@@ -48,6 +48,9 @@ interface Invoice extends ApiInvoice {
   shopee_voucher?: number;
   shop_voucher?: number;
   coin_discount?: number;
+  // Handwriting detection fields (already in ApiInvoice, but explicitly included for clarity)
+  is_handwritten?: boolean | null;
+  handwriting_clarity?: 'clear' | 'unclear' | 'mixed' | null;
   // Vendor details
   tax_id?: string;
   tin_number?: string;
@@ -1367,15 +1370,6 @@ function InvoiceInformationCard({
                 {t.documents.invoiceDetailPage.revertToValidated}
               </button>
             )}
-            {bcConnectionId && (
-              <button
-                onClick={onPushToBusinessCentral}
-                disabled={isPushingToBC || isEditMode}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isPushingToBC ? 'Pushing...' : '📊 Push to Business Central'}
-              </button>
-            )}
             <button
               onClick={onVerify}
               disabled={isVerifying}
@@ -1383,7 +1377,7 @@ function InvoiceInformationCard({
             >
               {isVerifying ? 'Verifying...' : '✓ Verify Totals'}
             </button>
-            {onValidatePayment && (
+            {false && onValidatePayment && (
               <button
                 onClick={onValidatePayment}
                 disabled={isValidatingPayment}
@@ -1443,6 +1437,46 @@ function InvoiceInformationCard({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {renderValue('STATUS:', (invoice.status || 'draft').toUpperCase())}
         </div>
+
+        {/* Row 2.5: Handwriting Information */}
+        {(invoice.is_handwritten !== null && invoice.is_handwritten !== undefined) && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {renderValue('HANDWRITING:', (() => {
+              if (invoice.is_handwritten === true) {
+                const clarity = invoice.handwriting_clarity;
+                if (clarity === 'unclear') {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400">
+                      ✍️ Handwritten - Unclear (needs review)
+                    </span>
+                  );
+                } else if (clarity === 'mixed') {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400">
+                      ✍️ Handwritten - Mixed clarity
+                    </span>
+                  );
+                } else if (clarity === 'clear') {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                      ✍️ Handwritten - Clear
+                    </span>
+                  );
+                } else {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                      ✍️ Handwritten
+                    </span>
+                  );
+                }
+              } else {
+                return (
+                  <span className="text-sm text-[var(--muted-foreground)]">Printed/Computer-generated</span>
+                );
+              }
+            })())}
+          </div>
+        )}
 
         {/* Row 3: Creditor / Invoice No / PO No */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

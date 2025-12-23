@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus, CheckCircle2, Circle } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -39,6 +39,11 @@ interface Invoice extends ApiInvoice {
   remarks?: string;
   created_by_name?: string;
   created_by_email?: string;
+  // Duplicate detection fields (already in ApiInvoice, but explicitly included for clarity)
+  is_duplicate?: boolean;
+  original_invoice_id?: number | null;
+  duplicate_group_id?: string | null;
+  duplicate_count?: number | null;
 }
 
 interface VerifyStatus {
@@ -897,12 +902,12 @@ const DocumentsListing = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.remarkTag}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Handwriting</th>
                 {orgRole === 'admin' && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Bank Recon</th>
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
                 )}
@@ -965,6 +970,58 @@ const DocumentsListing = () => {
                       <span className="text-[var(--muted-foreground)]">-</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      if (invoice.is_handwritten === true) {
+                        const clarity = invoice.handwriting_clarity;
+                        if (clarity === 'unclear') {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"
+                              title="Handwritten invoice with unclear handwriting - needs review"
+                            >
+                              ✍️ Unclear
+                            </span>
+                          );
+                        } else if (clarity === 'mixed') {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400"
+                              title="Handwritten invoice with mixed clarity"
+                            >
+                              ✍️ Mixed
+                            </span>
+                          );
+                        } else if (clarity === 'clear') {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
+                              title="Handwritten invoice with clear handwriting"
+                            >
+                              ✍️ Clear
+                            </span>
+                          );
+                        } else {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                              title="Handwritten invoice"
+                            >
+                              ✍️
+                            </span>
+                          );
+                        }
+                      } else if (invoice.is_handwritten === false) {
+                        return (
+                          <span className="text-[var(--muted-foreground)] text-xs">Printed</span>
+                        );
+                      } else {
+                        return (
+                          <span className="text-[var(--muted-foreground)]">-</span>
+                        );
+                      }
+                    })()}
+                  </td>
                   {orgRole === 'admin' && (
                     <td className="px-4 py-3">
                       <div className="text-sm">
@@ -1017,25 +1074,29 @@ const DocumentsListing = () => {
                           ? 'bg-[var(--info)] text-white'
                           : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
 
+                      if (invoice.is_duplicate) {
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"
+                            title={
+                              invoice.original_invoice_id
+                                ? `Duplicate of invoice #${invoice.original_invoice_id}`
+                                : invoice.duplicate_group_id
+                                ? `Part of duplicate group ${invoice.duplicate_group_id}`
+                                : 'Duplicate invoice'
+                            }
+                          >
+                            Dup
+                          </span>
+                        );
+                      }
+
                       return (
                         <span className={`inline-block px-2 py-1 text-xs rounded-md ${cls}`}>
                           {label}
                         </span>
                       );
                     })()}
-                  </td>
-                  <td className="px-4 py-3">
-                    {invoice.bank_recon_status === 'reconciled' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-[var(--success)]/10 text-[var(--success)] dark:bg-[var(--success)]/20 dark:text-[var(--success)]">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Reconciled
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                        <Circle className="h-3 w-3" />
-                        Pending
-                      </span>
-                    )}
                   </td>
                   {!needsHorizontalScroll && (
                     <td className="px-4 py-3">

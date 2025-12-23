@@ -230,50 +230,7 @@ const BankStatementDetail = () => {
   return (
     <AppLayout pageName={t.bankStatements.detail.title || 'Bank Statement Detail'}>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/bank-statements')}
-            className="p-2 rounded hover:bg-[var(--muted)]"
-            style={{ color: 'var(--foreground)' }}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-              {t.bankStatements.detail.title || 'Bank Statement'}
-            </h1>
-            <p style={{ color: 'var(--muted-foreground)' }}>
-              {statement.bank_name || 'Bank Statement'} - {statement.account_number || 'N/A'}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleReprocess}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border"
-              style={{
-                background: 'var(--background)',
-                borderColor: 'var(--border)',
-                color: 'var(--foreground)',
-              }}
-            >
-              <RefreshCw className="h-5 w-5" />
-              {t.bankStatements.detail.reprocess || 'Reprocess'}
-            </button>
-            <button
-              onClick={handleDelete}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border"
-              style={{
-                background: 'var(--background)',
-                borderColor: 'var(--border)',
-                color: 'var(--error)',
-              }}
-            >
-              <Trash2 className="h-5 w-5" />
-              {t.common.delete || 'Delete'}
-            </button>
-          </div>
-        </div>
+        {/* Header (hidden menu bar) */}
 
         {/* Statement Summary */}
         <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>

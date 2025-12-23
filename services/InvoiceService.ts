@@ -57,6 +57,14 @@ export interface Invoice {
   bank_recon_status?: 'reconciled' | null;
   // Bank reconciliation details (for detail endpoint)
   bank_reconciliation?: BankReconciliation | null;
+  // Duplicate detection fields
+  is_duplicate?: boolean;
+  original_invoice_id?: number | null;
+  duplicate_group_id?: string | null;
+  duplicate_count?: number | null;
+  // Handwriting detection fields
+  is_handwritten?: boolean | null;
+  handwriting_clarity?: 'clear' | 'unclear' | 'mixed' | null;
 }
 
 export interface UploadInvoiceResponse {

@@ -1285,155 +1285,41 @@ const SettingsPage = () => {
                         </div>
                     )}
 
-                    {/* Integrations Card */}
-                    <div
-                        className="rounded-lg border lg:col-span-2"
-                        style={{
-                            background: 'var(--card)',
-                            borderColor: 'var(--border)',
-                        }}
-                    >
-                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="text-3xl">🔌</div>
-                                <div>
-                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        {t.settings.integrations.title}
-                                    </h3>
-                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        {t.settings.integrations.description}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            {isLoadingSettings ? (
-                                <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
-                                    {t.settings.integrations.businessCentral.loading}
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {/* Business Central Integration */}
-                                    <div className="p-4 border rounded-lg" style={{ borderColor: 'var(--border)' }}>
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-3 mb-2">
-                                                    <div className="text-2xl">📊</div>
-                                                    <h4 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                                        {t.settings.integrations.businessCentral.title}
-                                                    </h4>
-                                                </div>
-                                                <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
-                                                    {t.settings.integrations.businessCentral.description}
-                                                </p>
-                                                
-                                                {/* Status Badge */}
-                                                <div className="mb-3">
-                                                    <span className={`inline-block px-3 py-1 text-xs rounded-md font-semibold ${
-                                                        businessCentralEnabled
-                                                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                                                    }`}>
-                                                        {businessCentralEnabled
-                                                            ? t.settings.integrations.businessCentral.enabled
-                                                            : t.settings.integrations.businessCentral.disabled}
-                                                    </span>
-                                                    {businessCentralConnectionCount > 0 && (
-                                                        <span className="ml-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                                            ({businessCentralConnectionCount} {businessCentralConnectionCount === 1 ? 'connection' : 'connections'})
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                {/* Connection Details */}
-                                                {businessCentralConnections.length > 0 && (
-                                                    <div className="mt-4 space-y-2">
-                                                        <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground)' }}>
-                                                            Active Connections:
-                                                        </div>
-                                                        {businessCentralConnections.map((connection: BusinessCentralConnection) => (
-                                                            <div
-                                                                key={connection.id}
-                                                                className="p-3 rounded-md border"
-                                                                style={{
-                                                                    borderColor: 'var(--border)',
-                                                                    backgroundColor: 'var(--muted)',
-                                                                }}
-                                                            >
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="flex-1">
-                                                                        <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                                                                            {connection.environment}
-                                                                        </div>
-                                                                        <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                                                                            Company ID: {connection.company_id.substring(0, 8)}...
-                                                                        </div>
-                                                                        {connection.last_sync_at && (
-                                                                            <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                                                                                Last sync: {new Date(connection.last_sync_at).toLocaleDateString()}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <button
-                                                                            onClick={() => handleTestConnection(connection.id)}
-                                                                            disabled={isTestingConnection}
-                                                                            className="px-3 py-1 text-xs rounded-md transition-colors hover:opacity-90 border"
-                                                                            style={{
-                                                                                borderColor: 'var(--border)',
-                                                                                background: 'var(--card)',
-                                                                                color: 'var(--foreground)',
-                                                                            }}
-                                                                        >
-                                                                            {isTestingConnection ? 'Testing...' : 'Test'}
-                                                                        </button>
-                                                                        <span className={`px-2 py-1 text-xs rounded-md ${
-                                                                            connection.is_active
-                                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                                                                        }`}>
-                                                                            {connection.is_active ? 'Active' : 'Inactive'}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {businessCentralConnectionCount === 0 && (
-                                                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>
-                                                        {t.settings.integrations.businessCentral.note}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {!businessCentralEnabled ? (
-                                                    <button
-                                                        onClick={openEnableBCModal}
-                                                        className="px-4 py-2 rounded-md transition-colors hover:opacity-90 text-sm font-medium"
-                                                        style={{
-                                                            background: 'var(--primary)',
-                                                            color: 'white',
-                                                        }}
-                                                    >
-                                                        {t.settings.integrations.businessCentral.enableToggle}
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={openDisableBCModal}
-                                                        className="px-4 py-2 rounded-md transition-colors hover:opacity-90 text-sm font-medium bg-red-600 text-white"
-                                                    >
-                                                        {t.settings.integrations.businessCentral.disableToggle}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
+                    {/* Integrations Card - hidden (Business Central UI disabled) */}
+                    {false && (
+                        <div
+                            className="rounded-lg border lg:col-span-2"
+                            style={{
+                                background: 'var(--card)',
+                                borderColor: 'var(--border)',
+                            }}
+                        >
+                            <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-3xl">🔌</div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                            {t.settings.integrations.title}
+                                        </h3>
+                                        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                            {t.settings.integrations.description}
+                                        </p>
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                            <div className="p-6">
+                                {isLoadingSettings ? (
+                                    <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.integrations.businessCentral.loading}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Business Central Integration */}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
 
