@@ -226,7 +226,9 @@ const DocumentsListing = () => {
         : Array.isArray(rawData?.invoices)
         ? rawData.invoices
         : [];
-      setInvoices(data as Invoice[]);
+      // Sort by ID in descending order (largest to smallest)
+      const sortedData = [...data].sort((a, b) => b.id - a.id);
+      setInvoices(sortedData as Invoice[]);
 
       // Use backend pagination metadata when available
       const total = typeof rawData?.total === 'number' ? rawData.total : data.length;
