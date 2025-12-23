@@ -21,8 +21,6 @@ const nextConfig: NextConfig = {
   ],
   
   // Turbopack configuration for dev mode (Next.js 16 uses Turbopack by default)
-  // Note: The middleware deprecation warning is a known Turbopack issue and can be safely ignored
-  // Middleware is still fully supported in Next.js 16
   turbopack: {},
   
   // Webpack configuration for production builds (used by Amplify)

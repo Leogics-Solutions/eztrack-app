@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Check if dev mode is enabled
   const isDevMode = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEV === 'true';
 
-  // Bypass middleware if in dev mode
+  // Bypass proxy if in dev mode
   if (isDevMode) {
     return NextResponse.next();
   }
@@ -45,7 +45,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Configure which routes the middleware should run on
+// Configure which routes the proxy should run on
 export const config = {
   matcher: [
     /*
