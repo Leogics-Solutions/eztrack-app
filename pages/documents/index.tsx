@@ -85,6 +85,7 @@ const DocumentsListing = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [bcConnectionId, setBcConnectionId] = useState<number | null>(null);
+  const [isBusinessCentralEnabled, setIsBusinessCentralEnabled] = useState(false);
   const [isPushingToBC, setIsPushingToBC] = useState(false);
   const [showPushResultModal, setShowPushResultModal] = useState(false);
   const [pushResult, setPushResult] = useState<PushInvoicesResponse | null>(null);
@@ -113,13 +114,18 @@ const DocumentsListing = () => {
   const loadBusinessCentralConnection = async () => {
     try {
       const settings = await getSettings();
-      const connections = settings?.integrations?.business_central?.connections || [];
+      const bcIntegration = settings?.integrations?.business_central;
+      const isEnabled = bcIntegration?.enabled ?? false;
+      setIsBusinessCentralEnabled(isEnabled);
+      
+      const connections = bcIntegration?.connections || [];
       const activeConnection = connections.find((c) => c.is_active);
       if (activeConnection) {
         setBcConnectionId(activeConnection.id);
       }
     } catch (error) {
       console.error('Failed to load Business Central connection', error);
+      setIsBusinessCentralEnabled(false);
     }
   };
 
@@ -870,6 +876,17 @@ const DocumentsListing = () => {
                     selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
                   }`}
             </button>
+            {isBusinessCentralEnabled && (
+              <button
+                onClick={handlePushToBusinessCentral}
+                disabled={selectedInvoices.size === 0 || isPushingToBC}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="mr-2">📤</span>
+                {isPushingToBC ? 'Pushing...' : 'Push to Business Central'}
+                {selectedInvoices.size > 0 && ` (${selectedInvoices.size})`}
+              </button>
+            )}
             <button
               onClick={bulkDelete}
               disabled={selectedInvoices.size === 0}
