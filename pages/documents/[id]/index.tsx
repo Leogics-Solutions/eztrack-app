@@ -1178,6 +1178,7 @@ const InvoiceDetail = () => {
             onDeleteLineItem={handleDeleteLineItem}
             onAutoClassify={handleAutoClassify}
             isClassifying={isClassifying}
+            currency={invoice.currency || 'MYR'}
             t={t}
           />
         </div>
@@ -2168,6 +2169,7 @@ function LineItemsCard({
   onDeleteLineItem,
   onAutoClassify,
   isClassifying,
+  currency,
   t,
 }: any) {
   const [newItem, setNewItem] = useState<{
@@ -2202,6 +2204,15 @@ function LineItemsCard({
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [accountSearchTerm, setAccountSearchTerm] = useState("");
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
+
+  // Format amount with thousand separators
+  const formatAmount = (value?: number | null) => {
+    if (value === undefined || value === null) return '0.00';
+    return value.toLocaleString('en-US', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+  };
 
   const computeLineTotal = (quantity?: number | "", unitPrice?: number | "") => {
     const q = typeof quantity === "string" ? parseFloat(quantity || "0") : quantity ?? 0;
@@ -2426,94 +2437,110 @@ function LineItemsCard({
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">{t.documents.invoiceDetailPage.lineItems}</h3>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.lineItems}</h3>
       </div>
 
-      {lineItems.length > 0 ? (
-        <div className="overflow-x-auto mb-4">
-          <table className="w-full table-fixed">
-            <thead className="bg-[var(--muted)]">
-              <tr className="text-xs md:text-sm">
-                <th className="px-3 py-2 text-left font-semibold text-[var(--foreground)] w-[32%]">
-                  {t.documents.invoiceDetailPage.description}
-                </th>
-                <th className="px-3 py-2 text-right font-semibold text-[var(--foreground)] w-[9%]">
-                  {t.documents.invoiceDetailPage.qty}
-                </th>
-                <th className="px-3 py-2 text-left font-semibold text-[var(--foreground)] w-[10%]">
-                  {t.documents.invoiceDetailPage.uom}
-                </th>
-                <th className="px-3 py-2 text-right font-semibold text-[var(--foreground)] w-[14%]">
-                  {t.documents.invoiceDetailPage.unitPrice}
-                </th>
-                <th className="px-3 py-2 text-right font-semibold text-[var(--foreground)] w-[14%]">
-                  {t.documents.invoiceDetailPage.lineTotal}
-                </th>
-                <th className="px-3 py-2 text-left font-semibold text-[var(--foreground)] w-[13%]">
-                  {t.documents.invoiceDetailPage.account}
-                </th>
-                <th className="px-3 py-2 text-right font-semibold text-[var(--foreground)] w-[8%]">
-                  Actions
-                </th>
+      <div className="overflow-x-auto mb-4">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b-2 border-[var(--border)] bg-[var(--muted)]/50">
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[32%]">
+                {t.documents.invoiceDetailPage.description}
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[9%]">
+                {t.documents.invoiceDetailPage.qty}
+              </th>
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[10%]">
+                {t.documents.invoiceDetailPage.uom}
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[14%]">
+                {t.documents.invoiceDetailPage.unitPrice}
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[14%]">
+                {t.documents.invoiceDetailPage.lineTotal}
+              </th>
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[13%]">
+                {t.documents.invoiceDetailPage.account}
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[8%]">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {lineItems.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                  {t.documents.invoiceDetailPage.noLineItems}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)] align-middle">
-              {lineItems.map((item: LineItem) => (
-                <tr key={item.id}>
+            )}
+            {lineItems.map((item: LineItem) => (
+                <tr key={item.id} className="hover:bg-[var(--muted)]/30 transition-colors">
                   {editingItemId === item.id ? (
                     <>
-                      <td className="px-3 py-2 align-top">
+                      <td className="px-4 py-3 align-top">
                         <input
-                          className="w-full px-2 py-1.5 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)]"
+                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                           value={editingItem?.description ?? ""}
                           onChange={(e) => handleEditingItemChange("description", e.target.value)}
+                          autoFocus
                         />
                       </td>
-                      <td className="px-3 py-2 text-right align-top">
+                      <td className="px-4 py-3 text-right align-top">
                         <input
                           type="number"
-                          className="w-full px-2 py-1.5 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)]"
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                           value={editingItem?.quantity ?? ""}
                           onChange={(e) => handleEditingItemChange("quantity", e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td className="px-4 py-3 align-top">
                         <input
-                          className="w-full px-2 py-1.5 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)]"
+                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                           value={editingItem?.uom ?? ""}
                           onChange={(e) => handleEditingItemChange("uom", e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2 text-right align-top">
+                      <td className="px-4 py-3 text-right align-top">
                         <input
                           type="number"
-                          className="w-full px-2 py-1.5 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)]"
+                          step="0.01"
+                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                           value={editingItem?.unit_price ?? ""}
                           onChange={(e) => handleEditingItemChange("unit_price", e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2 text-right align-top text-sm whitespace-nowrap">
-                        {computeLineTotal(editingItem?.quantity, editingItem?.unit_price).toFixed(2)}
+                      <td className="px-4 py-3 text-right align-top text-sm font-medium text-[var(--foreground)] whitespace-nowrap">
+                        {currency} {formatAmount(computeLineTotal(editingItem?.quantity, editingItem?.unit_price))}
                       </td>
                       <td 
-                        className="px-3 py-2 text-sm align-top cursor-pointer hover:bg-[var(--muted)] transition-colors"
+                        className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
                         onClick={() => openAccountModal(item.id)}
                         title="Click to edit account"
                       >
-                        {item.account_name || <span className="text-[var(--muted-foreground)]">-</span>}
+                        {item.account_name ? (
+                          <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
+                            {item.account_name}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted-foreground)]">-</span>
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-right space-x-1 align-top whitespace-nowrap">
+                      <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
                         <button
                           onClick={handleUpdate}
                           disabled={isSaving}
-                          className="px-2.5 py-1 rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+                          className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          Save
+                          {isSaving ? 'Saving...' : 'Save'}
                         </button>
                         <button
                           onClick={cancelEditing}
-                          className="px-2.5 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)]"
+                          disabled={isSaving}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           Cancel
                         </button>
@@ -2521,37 +2548,41 @@ function LineItemsCard({
                     </>
                   ) : (
                     <>
-                      <td className="px-3 py-2 text-sm align-top break-words">{item.description}</td>
-                      <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
-                        {item.quantity ?? item.qty}
+                      <td className="px-4 py-3 text-sm align-top break-words text-[var(--foreground)]">{item.description}</td>
+                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
+                        {item.quantity ?? item.qty ?? 0}
                       </td>
-                      <td className="px-3 py-2 text-sm align-top whitespace-nowrap">{item.uom || '-'}</td>
-                      <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
-                        {(item.unit_price || 0).toFixed(2)}
+                      <td className="px-4 py-3 text-sm align-top whitespace-nowrap text-[var(--foreground)]">{item.uom || <span className="text-[var(--muted-foreground)]">-</span>}</td>
+                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
+                        {currency} {formatAmount(item.unit_price)}
                       </td>
-                      <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
-                        {(item.line_total ??
-                          computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0)
-                        ).toFixed(2)}
+                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-semibold">
+                        {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0))}
                       </td>
                       <td 
-                        className="px-3 py-2 text-sm align-top cursor-pointer hover:bg-[var(--muted)] transition-colors"
+                        className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
                         onClick={() => openAccountModal(item.id)}
                         title="Click to edit account"
                       >
-                        {item.account_name || <span className="text-[var(--muted-foreground)]">-</span>}
+                        {item.account_name ? (
+                          <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
+                            {item.account_name}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted-foreground)]">-</span>
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-right space-x-1 align-top whitespace-nowrap">
+                      <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
                         <button
                           onClick={() => startEditing(item)}
-                          className="px-2.5 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)]"
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
                           disabled={deletingId === item.id}
-                          className="px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {deletingId === item.id ? 'Deleting...' : 'Delete'}
                         </button>
@@ -2561,52 +2592,74 @@ function LineItemsCard({
                 </tr>
               ))}
               {/* New line item row */}
-              <tr>
-                <td className="px-3 py-2 text-sm align-top">
+              <tr className="bg-[var(--muted)]/20 border-t-2 border-[var(--border)]">
+                <td className="px-4 py-3 text-sm align-top">
                   <input
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)]"
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                     placeholder={t.documents.invoiceDetailPage.description}
                     value={newItem.description}
                     onChange={(e) => handleNewItemChange("description", e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newItem.description.trim()) {
+                        handleCreate();
+                      }
+                    }}
                   />
                 </td>
-                <td className="px-3 py-2 text-sm text-right align-top">
+                <td className="px-4 py-3 text-sm text-right align-top">
                   <input
                     type="number"
-                    className="w-full px-2 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)]"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                     placeholder="0"
                     value={newItem.quantity}
                     onChange={(e) => handleNewItemChange("quantity", e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newItem.description.trim()) {
+                        handleCreate();
+                      }
+                    }}
                   />
                 </td>
-                <td className="px-3 py-2 text-sm align-top">
+                <td className="px-4 py-3 text-sm align-top">
                   <input
-                    className="w-full px-2 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)]"
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                     placeholder={t.documents.invoiceDetailPage.uom}
                     value={newItem.uom}
                     onChange={(e) => handleNewItemChange("uom", e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newItem.description.trim()) {
+                        handleCreate();
+                      }
+                    }}
                   />
                 </td>
-                <td className="px-3 py-2 text-sm text-right align-top">
+                <td className="px-4 py-3 text-sm text-right align-top">
                   <input
                     type="number"
-                    className="w-full px-2 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)]"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                     placeholder="0.00"
                     value={newItem.unit_price}
                     onChange={(e) => handleNewItemChange("unit_price", e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newItem.description.trim()) {
+                        handleCreate();
+                      }
+                    }}
                   />
                 </td>
-                <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
-                  {computeLineTotal(newItem.quantity, newItem.unit_price).toFixed(2)}
+                <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap font-medium text-[var(--foreground)]">
+                  {currency} {formatAmount(computeLineTotal(newItem.quantity, newItem.unit_price))}
                 </td>
-                <td className="px-3 py-2 text-sm align-top">
+                <td className="px-4 py-3 text-sm align-top">
                   <span className="text-[var(--muted-foreground)]">-</span>
                 </td>
-                <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
+                <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
                   <button
                     onClick={handleCreate}
-                    disabled={isSaving}
-                    className="px-4 py-2 text-xs rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+                    disabled={isSaving || !newItem.description.trim()}
+                    className="px-4 py-2 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isSaving ? 'Saving...' : t.documents.invoiceDetailPage.addLineItem}
                   </button>
@@ -2615,9 +2668,6 @@ function LineItemsCard({
             </tbody>
           </table>
         </div>
-      ) : (
-        <div className="text-sm text-[var(--muted-foreground)] mb-4">{t.documents.invoiceDetailPage.noLineItems}</div>
-      )}
 
       {/* AI Classify button hidden for now */}
       {/* <div className="flex gap-3">
