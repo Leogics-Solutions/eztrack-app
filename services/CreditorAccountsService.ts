@@ -20,8 +20,9 @@ export interface CreditorAccount {
 }
 
 export interface ListCreditorAccountsParams {
-  skip?: number;
-  limit?: number;
+  page?: number;
+  page_size?: number;
+  search?: string;
   active_only?: boolean;
 }
 
@@ -29,6 +30,17 @@ export interface ListCreditorAccountsResponse {
   success: boolean;
   data: CreditorAccount[];
   message: string;
+  pagination?: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  meta?: {
+    timestamp: string;
+  };
 }
 
 export interface CreateCreditorAccountRequest {
@@ -84,14 +96,26 @@ export interface CreditorAccountInvoice {
 }
 
 export interface ListCreditorAccountInvoicesParams {
-  skip?: number;
-  limit?: number;
+  page?: number;
+  page_size?: number;
+  search?: string;
 }
 
 export interface ListCreditorAccountInvoicesResponse {
   success: boolean;
   data: CreditorAccountInvoice[];
   message: string;
+  pagination?: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  meta?: {
+    timestamp: string;
+  };
 }
 
 /**
@@ -116,11 +140,14 @@ export async function listCreditorAccounts(
   }
 
   const queryParams = new URLSearchParams();
-  if (params?.skip !== undefined) {
-    queryParams.append('skip', params.skip.toString());
+  if (params?.page !== undefined) {
+    queryParams.append('page', params.page.toString());
   }
-  if (params?.limit !== undefined) {
-    queryParams.append('limit', params.limit.toString());
+  if (params?.page_size !== undefined) {
+    queryParams.append('page_size', params.page_size.toString());
+  }
+  if (params?.search) {
+    queryParams.append('search', params.search);
   }
   if (params?.active_only !== undefined) {
     queryParams.append('active_only', params.active_only.toString());
@@ -278,11 +305,14 @@ export async function getCreditorAccountInvoices(
   }
 
   const queryParams = new URLSearchParams();
-  if (params?.skip !== undefined) {
-    queryParams.append('skip', params.skip.toString());
+  if (params?.page !== undefined) {
+    queryParams.append('page', params.page.toString());
   }
-  if (params?.limit !== undefined) {
-    queryParams.append('limit', params.limit.toString());
+  if (params?.page_size !== undefined) {
+    queryParams.append('page_size', params.page_size.toString());
+  }
+  if (params?.search) {
+    queryParams.append('search', params.search);
   }
 
   const url = `${BASE_URL}/creditor-accounts/${accountId}/invoices${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -302,6 +332,7 @@ export async function getCreditorAccountInvoices(
 
   return response.json();
 }
+
 
 
 

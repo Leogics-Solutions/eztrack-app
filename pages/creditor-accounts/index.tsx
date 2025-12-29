@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import { Plus, Upload, Edit, Trash2, FileText, Loader2, Eye, X } from "lucide-react";
+import { Plus, Upload, Edit, Trash2, FileText, Loader2, Eye, X, Search } from "lucide-react";
 import {
     listCreditorAccounts,
     createCreditorAccount,
@@ -34,23 +34,53 @@ const CreditorAccounts = () => {
         vendor_link: '',
         description: '',
     });
+    // Pagination and search state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
+    const [search, setSearch] = useState('');
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
     // Invoice modal state
     const [isInvoicesModalOpen, setIsInvoicesModalOpen] = useState(false);
     const [selectedCreditorAccount, setSelectedCreditorAccount] = useState<CreditorAccount | null>(null);
     const [invoices, setInvoices] = useState<CreditorAccountInvoice[]>([]);
     const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+    // Invoice pagination state
+    const [invoicePage, setInvoicePage] = useState(1);
+    const [invoicePageSize, setInvoicePageSize] = useState(20);
+    const [invoiceSearch, setInvoiceSearch] = useState('');
+    const [invoiceTotalCount, setInvoiceTotalCount] = useState(0);
+    const [invoiceTotalPages, setInvoiceTotalPages] = useState(1);
 
     // Load creditors data
     useEffect(() => {
-        loadCreditors();
         loadVendors();
     }, []);
+
+    useEffect(() => {
+        loadCreditors();
+    }, [currentPage, pageSize, search]);
 
     const loadCreditors = async () => {
         try {
             setIsLoading(true);
-            const response = await listCreditorAccounts({ active_only: true });
+            const response = await listCreditorAccounts({
+                page: currentPage,
+                page_size: pageSize,
+                search: search || undefined,
+                active_only: true,
+            });
             setCreditors(response.data);
+            
+            // Update pagination metadata
+            if (response.pagination) {
+                setTotalCount(response.pagination.total_items);
+                setTotalPages(response.pagination.total_pages);
+            } else {
+                // Fallback if pagination metadata is not available
+                setTotalCount(response.data.length);
+                setTotalPages(1);
+            }
         } catch (error) {
             console.error('Failed to load creditor accounts:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to load creditor accounts');
@@ -122,6 +152,8 @@ const CreditorAccounts = () => {
             }
 
             closeCreditorModal();
+            // Reset to first page when creating/updating
+            setCurrentPage(1);
             await loadCreditors();
         } catch (error) {
             console.error('Failed to save creditor account:', error);
@@ -140,7 +172,12 @@ const CreditorAccounts = () => {
             setIsLoading(true);
             await deleteCreditorAccount(id);
             toast.success(t.creditors.accountDeleted || 'Creditor account deleted successfully');
-            await loadCreditors();
+            // Reset to first page if current page becomes empty
+            if (creditors.length === 1 && currentPage > 1) {
+                setCurrentPage(1);
+            } else {
+                await loadCreditors();
+            }
         } catch (error) {
             console.error('Failed to delete creditor account:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to delete creditor account');
@@ -157,14 +194,30 @@ const CreditorAccounts = () => {
     const viewInvoices = async (creditor: CreditorAccount) => {
         setSelectedCreditorAccount(creditor);
         setIsInvoicesModalOpen(true);
-        await loadInvoices(creditor.id);
+        setInvoicePage(1);
+        setInvoiceSearch('');
+        await loadInvoices(creditor.id, 1, invoicePageSize, '');
     };
 
-    const loadInvoices = async (accountId: number) => {
+    const loadInvoices = async (accountId: number, page: number = invoicePage, pageSize: number = invoicePageSize, search: string = invoiceSearch) => {
         try {
             setIsLoadingInvoices(true);
-            const response = await getCreditorAccountInvoices(accountId);
+            const response = await getCreditorAccountInvoices(accountId, {
+                page,
+                page_size: pageSize,
+                search: search || undefined,
+            });
             setInvoices(response.data);
+            
+            // Update pagination metadata
+            if (response.pagination) {
+                setInvoiceTotalCount(response.pagination.total_items);
+                setInvoiceTotalPages(response.pagination.total_pages);
+            } else {
+                // Fallback if pagination metadata is not available
+                setInvoiceTotalCount(response.data.length);
+                setInvoiceTotalPages(1);
+            }
         } catch (error) {
             console.error('Failed to load invoices:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to load invoices');
@@ -177,7 +230,16 @@ const CreditorAccounts = () => {
         setIsInvoicesModalOpen(false);
         setSelectedCreditorAccount(null);
         setInvoices([]);
+        setInvoicePage(1);
+        setInvoiceSearch('');
     };
+
+    // Load invoices when pagination or search changes
+    useEffect(() => {
+        if (isInvoicesModalOpen && selectedCreditorAccount) {
+            loadInvoices(selectedCreditorAccount.id, invoicePage, invoicePageSize, invoiceSearch);
+        }
+    }, [invoicePage, invoicePageSize, invoiceSearch]);
 
     const formatDate = (dateString: string) => {
         try {
@@ -229,6 +291,32 @@ const CreditorAccounts = () => {
                                 <Plus className="h-4 w-4 mr-2" />
                                 {t.creditors.addCreditorAccount}
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Search and Filters */}
+                <div className="p-4 md:p-6 border-b border-[var(--border)]">
+                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                        <div className="flex-1 w-full md:w-auto">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => {
+                                        setSearch(e.target.value);
+                                        setCurrentPage(1); // Reset to first page when searching
+                                    }}
+                                    placeholder="Search by name, code, or vendor..."
+                                    className="w-full pl-10 pr-3 py-2 border border-[var(--border)] rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -325,6 +413,103 @@ const CreditorAccounts = () => {
                             }}
                         >
                             <p className="text-sm italic">{t.creditors.noCreditorAccounts}</p>
+                        </div>
+                    )}
+
+                    {/* Pagination */}
+                    {creditors.length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-[var(--border)] flex flex-wrap justify-between items-center gap-4">
+                            <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} accounts
+                            </div>
+
+                            <div className="flex gap-2 items-center">
+                                {/* Previous */}
+                                <button
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                >
+                                    <span className="mr-1">←</span>
+                                    Previous
+                                </button>
+
+                                {/* Page Numbers */}
+                                <div className="flex gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        let pageNum: number;
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i;
+                                        } else {
+                                            pageNum = currentPage - 2 + i;
+                                        }
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setCurrentPage(pageNum)}
+                                                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                                                    pageNum === currentPage
+                                                        ? 'bg-[var(--primary)] text-white'
+                                                        : 'border border-[var(--border)] hover:bg-[var(--hover-bg)]'
+                                                }`}
+                                                style={{
+                                                    backgroundColor: pageNum === currentPage ? undefined : 'var(--background)',
+                                                    borderColor: 'var(--border)',
+                                                }}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Next */}
+                                <button
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                >
+                                    Next
+                                    <span className="ml-1">→</span>
+                                </button>
+                            </div>
+
+                            {/* Items per page */}
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Items per page:</label>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => {
+                                        setPageSize(Number(e.target.value));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="px-2 py-1 border border-[var(--border)] rounded-md focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                >
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -532,7 +717,7 @@ const CreditorAccounts = () => {
                                     Invoices - {selectedCreditorAccount.name}
                                 </h3>
                                 <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                                    {invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'}
+                                    {invoiceTotalCount} {invoiceTotalCount === 1 ? 'invoice' : 'invoices'}
                                 </p>
                             </div>
                             <button
@@ -542,6 +727,28 @@ const CreditorAccounts = () => {
                             >
                                 <X className="h-5 w-5" />
                             </button>
+                        </div>
+
+                        {/* Search */}
+                        <div className="p-4 md:p-6 border-b border-[var(--border)]">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
+                                <input
+                                    type="text"
+                                    value={invoiceSearch}
+                                    onChange={(e) => {
+                                        setInvoiceSearch(e.target.value);
+                                        setInvoicePage(1); // Reset to first page when searching
+                                    }}
+                                    placeholder="Search by invoice number or vendor..."
+                                    className="w-full pl-10 pr-3 py-2 border border-[var(--border)] rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                    style={{
+                                        backgroundColor: 'var(--background)',
+                                        borderColor: 'var(--border)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
                         </div>
 
                         {/* Invoices Table */}
@@ -637,6 +844,103 @@ const CreditorAccounts = () => {
                                     }}
                                 >
                                     <p className="text-sm italic">No invoices found for this creditor account</p>
+                                </div>
+                            )}
+
+                            {/* Pagination */}
+                            {invoices.length > 0 && (
+                                <div className="mt-6 pt-6 border-t border-[var(--border)] flex flex-wrap justify-between items-center gap-4">
+                                    <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                        Showing {(invoicePage - 1) * invoicePageSize + 1} to {Math.min(invoicePage * invoicePageSize, invoiceTotalCount)} of {invoiceTotalCount} invoices
+                                    </div>
+
+                                    <div className="flex gap-2 items-center">
+                                        {/* Previous */}
+                                        <button
+                                            onClick={() => setInvoicePage(prev => Math.max(1, prev - 1))}
+                                            disabled={invoicePage === 1}
+                                            className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            style={{
+                                                backgroundColor: 'var(--background)',
+                                                borderColor: 'var(--border)',
+                                                color: 'var(--foreground)',
+                                            }}
+                                        >
+                                            <span className="mr-1">←</span>
+                                            Previous
+                                        </button>
+
+                                        {/* Page Numbers */}
+                                        <div className="flex gap-1">
+                                            {Array.from({ length: Math.min(5, invoiceTotalPages) }, (_, i) => {
+                                                let pageNum: number;
+                                                if (invoiceTotalPages <= 5) {
+                                                    pageNum = i + 1;
+                                                } else if (invoicePage <= 3) {
+                                                    pageNum = i + 1;
+                                                } else if (invoicePage >= invoiceTotalPages - 2) {
+                                                    pageNum = invoiceTotalPages - 4 + i;
+                                                } else {
+                                                    pageNum = invoicePage - 2 + i;
+                                                }
+                                                return (
+                                                    <button
+                                                        key={pageNum}
+                                                        onClick={() => setInvoicePage(pageNum)}
+                                                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                                                            pageNum === invoicePage
+                                                                ? 'bg-[var(--primary)] text-white'
+                                                                : 'border border-[var(--border)] hover:bg-[var(--hover-bg)]'
+                                                        }`}
+                                                        style={{
+                                                            backgroundColor: pageNum === invoicePage ? undefined : 'var(--background)',
+                                                            borderColor: 'var(--border)',
+                                                        }}
+                                                    >
+                                                        {pageNum}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Next */}
+                                        <button
+                                            onClick={() => setInvoicePage(prev => Math.min(invoiceTotalPages, prev + 1))}
+                                            disabled={invoicePage === invoiceTotalPages}
+                                            className="px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            style={{
+                                                backgroundColor: 'var(--background)',
+                                                borderColor: 'var(--border)',
+                                                color: 'var(--foreground)',
+                                            }}
+                                        >
+                                            Next
+                                            <span className="ml-1">→</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Items per page */}
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Items per page:</label>
+                                        <select
+                                            value={invoicePageSize}
+                                            onChange={(e) => {
+                                                setInvoicePageSize(Number(e.target.value));
+                                                setInvoicePage(1);
+                                            }}
+                                            className="px-2 py-1 border border-[var(--border)] rounded-md focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                                            style={{
+                                                backgroundColor: 'var(--background)',
+                                                borderColor: 'var(--border)',
+                                                color: 'var(--foreground)',
+                                            }}
+                                        >
+                                            <option value="10">10</option>
+                                            <option value="20">20</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                    </div>
                                 </div>
                             )}
                         </div>
