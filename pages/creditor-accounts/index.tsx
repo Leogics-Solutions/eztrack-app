@@ -191,21 +191,25 @@ const CreditorAccounts = () => {
         alert(t.creditors.csvImportMessage);
     };
 
-    const viewInvoices = async (creditor: CreditorAccount) => {
+    const viewInvoices = (creditor: CreditorAccount) => {
         setSelectedCreditorAccount(creditor);
-        setIsInvoicesModalOpen(true);
         setInvoicePage(1);
         setInvoiceSearch('');
-        await loadInvoices(creditor.id, 1, invoicePageSize, '');
+        setIsInvoicesModalOpen(true);
+        // useEffect will handle loading when modal opens and state changes
     };
 
-    const loadInvoices = async (accountId: number, page: number = invoicePage, pageSize: number = invoicePageSize, search: string = invoiceSearch) => {
+    const loadInvoices = async (accountId: number, page?: number, pageSize?: number, search?: string) => {
         try {
             setIsLoadingInvoices(true);
+            const currentPage = page !== undefined ? page : invoicePage;
+            const currentPageSize = pageSize !== undefined ? pageSize : invoicePageSize;
+            const currentSearch = search !== undefined ? search : invoiceSearch;
+            
             const response = await getCreditorAccountInvoices(accountId, {
-                page,
-                page_size: pageSize,
-                search: search || undefined,
+                page: currentPage,
+                page_size: currentPageSize,
+                search: currentSearch || undefined,
             });
             setInvoices(response.data);
             
@@ -234,12 +238,13 @@ const CreditorAccounts = () => {
         setInvoiceSearch('');
     };
 
-    // Load invoices when pagination or search changes
+    // Load invoices when pagination or search changes (only when modal is open)
     useEffect(() => {
         if (isInvoicesModalOpen && selectedCreditorAccount) {
-            loadInvoices(selectedCreditorAccount.id, invoicePage, invoicePageSize, invoiceSearch);
+            loadInvoices(selectedCreditorAccount.id);
         }
-    }, [invoicePage, invoicePageSize, invoiceSearch]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [invoicePage, invoicePageSize, invoiceSearch, isInvoicesModalOpen]);
 
     const formatDate = (dateString: string) => {
         try {
