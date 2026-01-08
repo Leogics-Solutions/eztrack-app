@@ -46,6 +46,7 @@ export type {
 // Invoice Service
 export {
   uploadInvoice,
+  uploadInvoiceViaS3,
   listInvoices,
   getInvoice,
   updateInvoice,

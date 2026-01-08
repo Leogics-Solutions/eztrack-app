@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import { LanguageSwitcher } from './LanguageSwitcher';
 // import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {

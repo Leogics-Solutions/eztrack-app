@@ -124,7 +124,7 @@ const InvoiceDetail = () => {
   const [verificationResult, setVerificationResult] = useState<VerifyInvoiceResponse['data'] | null>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  
+
   // Business Central push state
   const [bcConnectionId, setBcConnectionId] = useState<number | null>(null);
   const [isBusinessCentralEnabled, setIsBusinessCentralEnabled] = useState(false);
@@ -151,13 +151,13 @@ const InvoiceDetail = () => {
       if (invoice?.bank_reconciliation && invoice.id) {
         try {
           const linksResponse = await getStatementLinks(invoice.bank_reconciliation.statement_id);
-          
+
           // Debug logging
           console.log('Loading reconciliation link...');
           console.log('Bank Reconciliation:', invoice.bank_reconciliation);
           console.log('Invoice ID:', invoice.id);
           console.log('All Links:', linksResponse.data);
-          
+
           const matchingLink = linksResponse.data?.find(
             (link) => {
               const matchesTransaction = link.bank_transaction_id === invoice.bank_reconciliation?.transaction_id;
@@ -168,7 +168,7 @@ const InvoiceDetail = () => {
               return matchesTransaction && matchesInvoice;
             }
           );
-          
+
           if (matchingLink) {
             console.log('Found matching link ID:', matchingLink.id);
             setReconciliationLinkId(matchingLink.id);
@@ -194,7 +194,7 @@ const InvoiceDetail = () => {
       const bcIntegration = settings?.integrations?.business_central;
       const isEnabled = bcIntegration?.enabled ?? false;
       setIsBusinessCentralEnabled(isEnabled);
-      
+
       const connections = bcIntegration?.connections || [];
       const activeConnection = connections.find((c) => c.is_active);
       if (activeConnection) {
@@ -227,7 +227,7 @@ const InvoiceDetail = () => {
 
       setPaymentValidationResult(result);
       setShowPaymentValidationResult(true);
-      
+
       if (result.matched_invoices === 0) {
         showToast(
           `No matching transactions found across ${result.statements_searched} statement(s)`,
@@ -261,17 +261,17 @@ const InvoiceDetail = () => {
     try {
       // If we don't have the link ID, try to find it first
       let linkIdToDelete = reconciliationLinkId;
-      
+
       if (!linkIdToDelete) {
         try {
           const linksResponse = await getStatementLinks(invoice.bank_reconciliation.statement_id);
-          
+
           // Debug logging
           console.log('Bank Reconciliation:', invoice.bank_reconciliation);
           console.log('Invoice ID:', invoice.id);
           console.log('All Links:', linksResponse.data);
           console.log('Looking for transaction_id:', invoice.bank_reconciliation.transaction_id);
-          
+
           const matchingLink = linksResponse.data?.find(
             (link) => {
               const matchesTransaction = link.bank_transaction_id === invoice.bank_reconciliation?.transaction_id;
@@ -280,7 +280,7 @@ const InvoiceDetail = () => {
               return matchesTransaction && matchesInvoice;
             }
           );
-          
+
           if (matchingLink) {
             linkIdToDelete = matchingLink.id;
             console.log('Found matching link ID:', linkIdToDelete);
@@ -349,7 +349,7 @@ const InvoiceDetail = () => {
       });
       setPushResult(result);
       setShowPushResultModal(true);
-      
+
       // Reload invoice to get updated BC status
       await loadInvoiceData();
     } catch (error: any) {
@@ -772,6 +772,8 @@ const InvoiceDetail = () => {
     );
   }
 
+  console.log("url",pageFiles[selectedPageIndex].url);
+
   return (
     <AppLayout pageName={`${t.documents.invoiceDetailPage.title} #${invoice.id}`}>
       {/* Invoice Header */}
@@ -887,7 +889,7 @@ const InvoiceDetail = () => {
         <div>
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 sticky top-24 max-h-[calc(100vh-7rem)] overflow-auto">
             <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.documentPreview}</h3>
-            
+
             {/* Multi-page files display */}
             {pageFiles.length > 0 ? (
               <>
@@ -898,18 +900,17 @@ const InvoiceDetail = () => {
                       <button
                         key={index}
                         onClick={() => setSelectedPageIndex(index)}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                          selectedPageIndex === index
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${selectedPageIndex === index
                             ? 'bg-[var(--primary)] text-white'
                             : 'bg-[var(--muted)] text-[var(--foreground)] hover:bg-[var(--muted)]/80'
-                        }`}
+                          }`}
                       >
                         Page {pageFile.index}
                       </button>
                     ))}
                   </div>
                 )}
-                
+
                 {/* Current page preview */}
                 {pageFiles[selectedPageIndex] && (
                   <>
@@ -975,12 +976,12 @@ const InvoiceDetail = () => {
         {/* Invoice Data - Right Column (scrollable) */}
         <div className="space-y-6 lg:max-h-[calc(100vh-7rem)] lg:overflow-auto lg:pr-2">
           {/* Invoice Information */}
-          <InvoiceInformationCard 
-            invoice={invoice} 
-            isEditMode={isEditMode} 
-            onSave={handleSaveInvoice} 
-            onStatusChange={handleStatusChange} 
-            onVerify={handleVerifyInvoice} 
+          <InvoiceInformationCard
+            invoice={invoice}
+            isEditMode={isEditMode}
+            onSave={handleSaveInvoice}
+            onStatusChange={handleStatusChange}
+            onVerify={handleVerifyInvoice}
             isVerifying={isVerifying}
             bcConnectionId={bcConnectionId}
             isBusinessCentralEnabled={isBusinessCentralEnabled}
@@ -988,7 +989,7 @@ const InvoiceDetail = () => {
             onPushToBusinessCentral={handlePushToBusinessCentral}
             onValidatePayment={handleValidatePayment}
             isValidatingPayment={isValidatingPayment}
-            t={t} 
+            t={t}
           />
 
           {/* Invoice Payment Validation Results */}
@@ -1026,7 +1027,7 @@ const InvoiceDetail = () => {
                       Matched on {new Date(bankRecon.reconciled_at).toLocaleDateString()}
                     </span>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -1036,7 +1037,7 @@ const InvoiceDetail = () => {
                         {bankRecon.account_number}
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                         Transaction Date
@@ -1045,7 +1046,7 @@ const InvoiceDetail = () => {
                         {new Date(bankRecon.transaction_date).toLocaleDateString()}
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                         Transaction Amount
@@ -1059,7 +1060,7 @@ const InvoiceDetail = () => {
                         })}
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                         Match Score
@@ -1068,7 +1069,7 @@ const InvoiceDetail = () => {
                         {bankRecon.match_score.toFixed(1)}%
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                         Match Type
@@ -1077,7 +1078,7 @@ const InvoiceDetail = () => {
                         {bankRecon.match_type}
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                         Statement ID
@@ -1092,7 +1093,7 @@ const InvoiceDetail = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
                     <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
                       Transaction Description
@@ -1101,7 +1102,7 @@ const InvoiceDetail = () => {
                       {bankRecon.transaction_description}
                     </div>
                   </div>
-                  
+
                   {bankRecon.notes && (
                     <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
                       <div className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -1255,13 +1256,12 @@ const InvoiceDetail = () => {
                 {pushResult.details.map((detail) => (
                   <div
                     key={detail.invoice_id}
-                    className={`p-3 rounded-md border ${
-                      detail.status === 'SUCCESS'
+                    className={`p-3 rounded-md border ${detail.status === 'SUCCESS'
                         ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                         : detail.status === 'FAILED'
-                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-                    }`}
+                          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                          : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      }`}
                   >
                     <div className="flex items-start justify-between">
                       <div>
@@ -1282,13 +1282,12 @@ const InvoiceDetail = () => {
                           </div>
                         )}
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded-md font-semibold ${
-                        detail.status === 'SUCCESS'
+                      <span className={`px-2 py-1 text-xs rounded-md font-semibold ${detail.status === 'SUCCESS'
                           ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
                           : detail.status === 'FAILED'
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-                      }`}>
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                        }`}>
                         {detail.status}
                       </span>
                     </div>
@@ -1358,8 +1357,8 @@ function VerificationModal({ result, onClose, t }: { result: VerifyInvoiceRespon
                   {verification.ok ? 'Verification Passed' : 'Verification Failed'}
                 </h3>
                 <p className="text-sm text-gray-900 dark:text-white">
-                  {verification.ok 
-                    ? 'All totals match correctly' 
+                  {verification.ok
+                    ? 'All totals match correctly'
                     : `${verification.errors.length} error(s) and ${verification.warnings.length} warning(s) found`}
                 </p>
               </div>
@@ -1482,12 +1481,12 @@ function VerificationModal({ result, onClose, t }: { result: VerifyInvoiceRespon
 
 // Sub-components (keeping them in the same file for now for simplicity)
 
-function InvoiceInformationCard({ 
-  invoice, 
-  isEditMode, 
-  onSave, 
-  onStatusChange, 
-  onVerify, 
+function InvoiceInformationCard({
+  invoice,
+  isEditMode,
+  onSave,
+  onStatusChange,
+  onVerify,
   isVerifying,
   bcConnectionId,
   isBusinessCentralEnabled,
@@ -1495,7 +1494,7 @@ function InvoiceInformationCard({
   onPushToBusinessCentral,
   onValidatePayment,
   isValidatingPayment,
-  t 
+  t
 }: any) {
   const [formData, setFormData] = useState(invoice);
 
@@ -2208,9 +2207,9 @@ function LineItemsCard({
   // Format amount with thousand separators
   const formatAmount = (value?: number | null) => {
     if (value === undefined || value === null) return '0.00';
-    return value.toLocaleString('en-US', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     });
   };
 
@@ -2358,7 +2357,7 @@ function LineItemsCard({
     setSelectedLineItemId(lineItemId);
     setIsAccountModalOpen(true);
     setAccountSearchTerm("");
-    
+
     // Load accounts when modal opens
     if (accounts.length === 0) {
       setIsLoadingAccounts(true);
@@ -2477,197 +2476,197 @@ function LineItemsCard({
               </tr>
             )}
             {lineItems.map((item: LineItem) => (
-                <tr key={item.id} className="hover:bg-[var(--muted)]/30 transition-colors">
-                  {editingItemId === item.id ? (
-                    <>
-                      <td className="px-4 py-3 align-top">
-                        <input
-                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                          value={editingItem?.description ?? ""}
-                          onChange={(e) => handleEditingItemChange("description", e.target.value)}
-                          autoFocus
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                          value={editingItem?.quantity ?? ""}
-                          onChange={(e) => handleEditingItemChange("quantity", e.target.value)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <input
-                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                          value={editingItem?.uom ?? ""}
-                          onChange={(e) => handleEditingItemChange("uom", e.target.value)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                          value={editingItem?.unit_price ?? ""}
-                          onChange={(e) => handleEditingItemChange("unit_price", e.target.value)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right align-top text-sm font-medium text-[var(--foreground)] whitespace-nowrap">
-                        {currency} {formatAmount(computeLineTotal(editingItem?.quantity, editingItem?.unit_price))}
-                      </td>
-                      <td 
-                        className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
-                        onClick={() => openAccountModal(item.id)}
-                        title="Click to edit account"
+              <tr key={item.id} className="hover:bg-[var(--muted)]/30 transition-colors">
+                {editingItemId === item.id ? (
+                  <>
+                    <td className="px-4 py-3 align-top">
+                      <input
+                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        value={editingItem?.description ?? ""}
+                        onChange={(e) => handleEditingItemChange("description", e.target.value)}
+                        autoFocus
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right align-top">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        value={editingItem?.quantity ?? ""}
+                        onChange={(e) => handleEditingItemChange("quantity", e.target.value)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <input
+                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        value={editingItem?.uom ?? ""}
+                        onChange={(e) => handleEditingItemChange("uom", e.target.value)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right align-top">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        value={editingItem?.unit_price ?? ""}
+                        onChange={(e) => handleEditingItemChange("unit_price", e.target.value)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right align-top text-sm font-medium text-[var(--foreground)] whitespace-nowrap">
+                      {currency} {formatAmount(computeLineTotal(editingItem?.quantity, editingItem?.unit_price))}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
+                      onClick={() => openAccountModal(item.id)}
+                      title="Click to edit account"
+                    >
+                      {item.account_name ? (
+                        <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
+                          {item.account_name}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
+                      <button
+                        onClick={handleUpdate}
+                        disabled={isSaving}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
-                        {item.account_name ? (
-                          <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
-                            {item.account_name}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--muted-foreground)]">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
-                        <button
-                          onClick={handleUpdate}
-                          disabled={isSaving}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {isSaving ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          onClick={cancelEditing}
-                          disabled={isSaving}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-4 py-3 text-sm align-top break-words text-[var(--foreground)]">{item.description}</td>
-                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
-                        {item.quantity ?? item.qty ?? 0}
-                      </td>
-                      <td className="px-4 py-3 text-sm align-top whitespace-nowrap text-[var(--foreground)]">{item.uom || <span className="text-[var(--muted-foreground)]">-</span>}</td>
-                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
-                        {currency} {formatAmount(item.unit_price)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-semibold">
-                        {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0))}
-                      </td>
-                      <td 
-                        className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
-                        onClick={() => openAccountModal(item.id)}
-                        title="Click to edit account"
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        disabled={isSaving}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
-                        {item.account_name ? (
-                          <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
-                            {item.account_name}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--muted-foreground)]">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
-                        <button
-                          onClick={() => startEditing(item)}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          disabled={deletingId === item.id}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {deletingId === item.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {/* New line item row */}
-              <tr className="bg-[var(--muted)]/20 border-t-2 border-[var(--border)]">
-                <td className="px-4 py-3 text-sm align-top">
-                  <input
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                    placeholder={t.documents.invoiceDetailPage.description}
-                    value={newItem.description}
-                    onChange={(e) => handleNewItemChange("description", e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newItem.description.trim()) {
-                        handleCreate();
-                      }
-                    }}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm text-right align-top">
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                    placeholder="0"
-                    value={newItem.quantity}
-                    onChange={(e) => handleNewItemChange("quantity", e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newItem.description.trim()) {
-                        handleCreate();
-                      }
-                    }}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm align-top">
-                  <input
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                    placeholder={t.documents.invoiceDetailPage.uom}
-                    value={newItem.uom}
-                    onChange={(e) => handleNewItemChange("uom", e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newItem.description.trim()) {
-                        handleCreate();
-                      }
-                    }}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm text-right align-top">
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
-                    placeholder="0.00"
-                    value={newItem.unit_price}
-                    onChange={(e) => handleNewItemChange("unit_price", e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newItem.description.trim()) {
-                        handleCreate();
-                      }
-                    }}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap font-medium text-[var(--foreground)]">
-                  {currency} {formatAmount(computeLineTotal(newItem.quantity, newItem.unit_price))}
-                </td>
-                <td className="px-4 py-3 text-sm align-top">
-                  <span className="text-[var(--muted-foreground)]">-</span>
-                </td>
-                <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
-                  <button
-                    onClick={handleCreate}
-                    disabled={isSaving || !newItem.description.trim()}
-                    className="px-4 py-2 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {isSaving ? 'Saving...' : t.documents.invoiceDetailPage.addLineItem}
-                  </button>
-                </td>
+                        Cancel
+                      </button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-3 text-sm align-top break-words text-[var(--foreground)]">{item.description}</td>
+                    <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
+                      {item.quantity ?? item.qty ?? 0}
+                    </td>
+                    <td className="px-4 py-3 text-sm align-top whitespace-nowrap text-[var(--foreground)]">{item.uom || <span className="text-[var(--muted-foreground)]">-</span>}</td>
+                    <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
+                      {currency} {formatAmount(item.unit_price)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-semibold">
+                      {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0))}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
+                      onClick={() => openAccountModal(item.id)}
+                      title="Click to edit account"
+                    >
+                      {item.account_name ? (
+                        <span className="inline-block px-2 py-1 bg-[var(--primary)]/10 text-[var(--primary)] rounded text-xs font-medium">
+                          {item.account_name}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
+                      <button
+                        onClick={() => startEditing(item)}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
+                  </>
+                )}
               </tr>
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {/* New line item row */}
+            <tr className="bg-[var(--muted)]/20 border-t-2 border-[var(--border)]">
+              <td className="px-4 py-3 text-sm align-top">
+                <input
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  placeholder={t.documents.invoiceDetailPage.description}
+                  value={newItem.description}
+                  onChange={(e) => handleNewItemChange("description", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newItem.description.trim()) {
+                      handleCreate();
+                    }
+                  }}
+                />
+              </td>
+              <td className="px-4 py-3 text-sm text-right align-top">
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  placeholder="0"
+                  value={newItem.quantity}
+                  onChange={(e) => handleNewItemChange("quantity", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newItem.description.trim()) {
+                      handleCreate();
+                    }
+                  }}
+                />
+              </td>
+              <td className="px-4 py-3 text-sm align-top">
+                <input
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  placeholder={t.documents.invoiceDetailPage.uom}
+                  value={newItem.uom}
+                  onChange={(e) => handleNewItemChange("uom", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newItem.description.trim()) {
+                      handleCreate();
+                    }
+                  }}
+                />
+              </td>
+              <td className="px-4 py-3 text-sm text-right align-top">
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  placeholder="0.00"
+                  value={newItem.unit_price}
+                  onChange={(e) => handleNewItemChange("unit_price", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newItem.description.trim()) {
+                      handleCreate();
+                    }
+                  }}
+                />
+              </td>
+              <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap font-medium text-[var(--foreground)]">
+                {currency} {formatAmount(computeLineTotal(newItem.quantity, newItem.unit_price))}
+              </td>
+              <td className="px-4 py-3 text-sm align-top">
+                <span className="text-[var(--muted-foreground)]">-</span>
+              </td>
+              <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
+                <button
+                  onClick={handleCreate}
+                  disabled={isSaving || !newItem.description.trim()}
+                  className="px-4 py-2 text-xs font-medium rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? 'Saving...' : t.documents.invoiceDetailPage.addLineItem}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {/* AI Classify button hidden for now */}
       {/* <div className="flex gap-3">

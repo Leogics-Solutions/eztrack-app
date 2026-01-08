@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
-import { batchUploadInvoices, getBatchJobStatus, BatchJobStatusData } from "@/services";
+import { batchUploadInvoices, getBatchJobStatus } from "@/services";
 
 interface JobProgress {
   jobId: string;
@@ -59,25 +59,53 @@ const BatchUpload = () => {
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [jobProgresses, setJobProgresses] = useState<JobProgress[]>([]);
+
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const currentFileStartTimeRef = useRef<number>(0);
 
+  // prevent overlapping polls if one poll takes longer than interval
+  const isPollingRef = useRef(false);
+
+  // ignore late/in-flight poll results after we "stop"
+  const pollingActiveRef = useRef(false);
+  const pollGenerationRef = useRef(0);
+
+  // NEW: keep latest known progresses to avoid "downgrading" SUCCESS/FAILED on late 404/error
+  const latestJobProgressesRef = useRef<JobProgress[]>([]);
+  useEffect(() => {
+    latestJobProgressesRef.current = jobProgresses;
+  }, [jobProgresses]);
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-      if (timingIntervalRef.current) {
-        clearInterval(timingIntervalRef.current);
-      }
+      pollingActiveRef.current = false;
+      pollGenerationRef.current += 1;
+
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      if (timingIntervalRef.current) clearInterval(timingIntervalRef.current);
     };
   }, []);
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles(files);
+  };
+
+  const stopTimersAndPolling = () => {
+    pollingActiveRef.current = false;
+    pollGenerationRef.current += 1;
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (timingIntervalRef.current) {
+      clearInterval(timingIntervalRef.current);
+      timingIntervalRef.current = null;
+    }
+    isPollingRef.current = false;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -109,22 +137,20 @@ const BatchUpload = () => {
     }, 100);
 
     try {
-      // Upload files using batch upload API
       setProgressText(t.documents.batchUploadPage.preparingUpload);
       setProgressDetails('Uploading files...');
-      
+
       const uploadResponse = await batchUploadInvoices(selectedFiles, {
         auto_classify: autoClassify,
         remark: batchRemark || undefined,
       });
-      
+
       if (!uploadResponse.success || !uploadResponse.data) {
         throw new Error('Upload failed');
       }
 
       const jobs = uploadResponse.data.jobs;
-      
-      // Initialize job progresses
+
       const initialProgresses: JobProgress[] = jobs.map(job => ({
         jobId: job.job_id,
         filename: job.filename,
@@ -134,128 +160,187 @@ const BatchUpload = () => {
       }));
       setJobProgresses(initialProgresses);
 
-      // Start polling for job statuses
+      pollingActiveRef.current = true;
+      pollGenerationRef.current += 1;
+      const myGen = pollGenerationRef.current;
+
       const pollJobs = async () => {
-        const updatedProgresses: JobProgress[] = [];
-        let allCompleted = true;
-        let runningCount = 0;
-        let successCount = 0;
-        let failedCount = 0;
+        if (!pollingActiveRef.current) return;
+        if (pollGenerationRef.current !== myGen) return;
+        if (isPollingRef.current) return;
 
-        for (const job of jobs) {
-          try {
-            const statusResponse = await getBatchJobStatus(job.job_id);
-            if (statusResponse.success && statusResponse.data) {
-              const jobData = statusResponse.data;
-              updatedProgresses.push({
-                jobId: job.job_id,
-                filename: jobData.original_filename,
-                status: jobData.status,
-                invoiceId: jobData.invoice_id,
-                errorMessage: jobData.error_message,
-              });
+        isPollingRef.current = true;
 
-              if (jobData.status === 'RUNNING') {
-                allCompleted = false;
-                runningCount++;
-                currentFileStartTimeRef.current = Date.now();
-                setShowFileTiming(true);
-              } else if (jobData.status === 'SUCCESS') {
-                successCount++;
-              } else if (jobData.status === 'FAILED') {
-                failedCount++;
-              } else if (jobData.status === 'PENDING') {
-                allCompleted = false;
+        try {
+          // Build a lookup of last known status so we don't downgrade terminal jobs.
+          const prevMap = new Map<string, JobProgress>(
+            (latestJobProgressesRef.current || []).map(jp => [jp.jobId, jp])
+          );
+
+          const updatedProgresses: JobProgress[] = [];
+
+          for (const job of jobs) {
+            if (!pollingActiveRef.current || pollGenerationRef.current !== myGen) return;
+
+            const prev = prevMap.get(job.job_id);
+
+            try {
+              const statusResponse = await getBatchJobStatus(job.job_id);
+
+
+              if (!pollingActiveRef.current || pollGenerationRef.current !== myGen) return;
+
+              if (statusResponse && statusResponse.success) {
+                const jobData = statusResponse.data?.data;
+
+                updatedProgresses.push({
+                  jobId: job.job_id,
+                  filename: jobData.original_filename ?? job.filename,
+                  status: jobData.status,
+                  invoiceId: jobData.invoice_id ?? null,
+                  errorMessage: jobData.error_message ?? null,
+                });
+
+                if (jobData.status === 'RUNNING') {
+                  currentFileStartTimeRef.current = Date.now();
+                  setShowFileTiming(true);
+                }
+              } else {
+                // Non-throwing error shape (if you implement it in service)
+                // If we already have terminal status, keep it.
+                if (prev && (prev.status === 'SUCCESS' || prev.status === 'FAILED')) {
+                  updatedProgresses.push(prev);
+                } else {
+                  const msg =
+                    (statusResponse as any)?.error?.message ||
+                    'Failed to get batch job status';
+
+                  updatedProgresses.push({
+                    jobId: job.job_id,
+                    filename: prev?.filename ?? job.filename,
+                    status: 'FAILED',
+                    invoiceId: prev?.invoiceId ?? null,
+                    errorMessage: msg,
+                  });
+                }
+              }
+            } catch (error) {
+              // If we already have terminal status, keep it (this is the key fix for your 404-after-done issue)
+              if (prev && (prev.status === 'SUCCESS' || prev.status === 'FAILED')) {
+                updatedProgresses.push(prev);
+              } else {
+                updatedProgresses.push({
+                  jobId: job.job_id,
+                  filename: prev?.filename ?? job.filename,
+                  status: 'FAILED',
+                  invoiceId: prev?.invoiceId ?? null,
+                  errorMessage: error instanceof Error ? error.message : 'Unknown error',
+                });
               }
             }
-          } catch (error) {
-            console.error(`Error polling job ${job.job_id}:`, error);
-            updatedProgresses.push({
-              jobId: job.job_id,
-              filename: job.filename,
-              status: 'FAILED',
-              invoiceId: null,
-              errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            });
-            failedCount++;
           }
-        }
 
-        setJobProgresses(updatedProgresses);
+          if (!pollingActiveRef.current || pollGenerationRef.current !== myGen) return;
 
-        // Update progress percentage
-        const total = jobs.length;
-        const completed = successCount + failedCount;
-        const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
-        setProgress(progressPercent);
+          console.log("updatedProgresses", updatedProgresses);
 
-        // Update progress text
-        if (runningCount > 0) {
-          setProgressText(`${t.documents.batchUploadPage.processing} ${completed + 1} of ${total} files`);
-          setProgressDetails(`Processing ${runningCount} file(s)...`);
-        } else if (allCompleted) {
-          setProgress(100);
-          setProgressStatus('completed');
-          setProgressText(t.documents.batchUploadPage.uploadCompleted);
-          setProgressDetails(`Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+          // ✅ derive counts from the merged list (not from "what happened this cycle")
+          const successCount = updatedProgresses.filter(jp => jp.status === 'SUCCESS').length;
+          const failedCount = updatedProgresses.filter(jp => jp.status === 'FAILED').length;
+          const runningCount = updatedProgresses.filter(jp => jp.status === 'RUNNING').length;
+          const pendingCount = updatedProgresses.filter(jp => jp.status === 'PENDING').length;
+
+          const allCompleted = (runningCount === 0 && pendingCount === 0);
+
+          setJobProgresses(updatedProgresses);
+
+          const total = jobs.length;
+          const completed = successCount + failedCount;
+          const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
+          setProgress(progressPercent);
+
+          if (runningCount > 0) {
+            setProgressText(`${t.documents.batchUploadPage.processing} ${Math.min(completed + 1, total)} of ${total} files`);
+            setProgressDetails(`Processing ${runningCount} file(s)...`);
+          } else if (allCompleted) {
+            console.log('[BatchUpload] allCompleted = true');
+            console.log('[BatchUpload] updatedProgresses.length:', updatedProgresses.length);
+            console.log('[BatchUpload] updatedProgresses statuses:', updatedProgresses.map(jp => jp.status));
+            console.log('[BatchUpload] successCount:', successCount);
+            console.log('[BatchUpload] failedCount:', failedCount);
+            console.log('[BatchUpload] runningCount:', runningCount);
+            console.log('[BatchUpload] pendingCount:', pendingCount);
           
-          // Build result summary
-          const failedFiles: ResultSummary['failed_files'] = updatedProgresses
-            .filter(jp => jp.status === 'FAILED')
-            .map(jp => ({
-              file: jp.filename,
-              type: 'error' as const,
-              reason: jp.errorMessage || 'Processing failed',
-            }));
+            const failedFiles: ResultSummary['failed_files'] = updatedProgresses
+              .filter(jp => jp.status === 'FAILED')
+              .map(jp => ({
+                file: jp.filename,
+                type: 'error' as const,
+                reason: jp.errorMessage || 'Processing failed',
+              }));
           
-          setResultSummary({
-            created: successCount,
-            failed: failedCount,
-            failed_files: failedFiles,
-          });
-          setShowResultActions(true);
+            console.log('[BatchUpload] failedFiles.length:', failedFiles.length);
+            console.log('[BatchUpload] failedFiles sample:', failedFiles.slice(0, 5));
+          
+            setProgress(100);
+            setProgressStatus('completed');
+            setProgressText(t.documents.batchUploadPage.uploadCompleted);
+          
+            const progressDetailsMsg =
+              `Successfully processed ${successCount} file(s)` +
+              (failedCount > 0 ? `, ${failedCount} failed` : '');
+          
+            console.log('[BatchUpload] progressDetailsMsg:', progressDetailsMsg);
+          
+            setProgressDetails(progressDetailsMsg);
+          
+            const summaryToSet: ResultSummary = {
+              created: successCount,
+              failed: failedCount,
+              failed_files: failedFiles,
+            };
+          
+            console.log('[BatchUpload] resultSummary being set:', summaryToSet);
+          
+            setResultSummary(summaryToSet);
+            setShowResultActions(true);
+          
+            console.log('[BatchUpload] stopping timers/polling + setting isUploading=false');
+            stopTimersAndPolling();
+            setIsUploading(false);
+          }
+        } catch (err) {
+          if (!pollingActiveRef.current || pollGenerationRef.current !== myGen) return;
 
-          // Stop polling and timing
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-          }
-          if (timingIntervalRef.current) {
-            clearInterval(timingIntervalRef.current);
-            timingIntervalRef.current = null;
-          }
+          console.error('pollJobs fatal error:', err);
+          setProgressText(t.documents.batchUploadPage.uploadFailed);
+          setProgressDetails(err instanceof Error ? err.message : 'Unknown error');
+          setProgressStatus('error');
+
+          stopTimersAndPolling();
           setIsUploading(false);
+        } finally {
+          isPollingRef.current = false;
         }
       };
 
-      // Poll immediately, then every 2 seconds
       await pollJobs();
-      pollingIntervalRef.current = setInterval(pollJobs, 2000);
+      pollingIntervalRef.current = setInterval(() => {
+        void pollJobs();
+      }, 2000);
 
     } catch (error) {
       setProgressText(t.documents.batchUploadPage.uploadFailed);
       setProgressDetails(error instanceof Error ? error.message : 'Unknown error');
       setProgressStatus('error');
 
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      if (timingIntervalRef.current) {
-        clearInterval(timingIntervalRef.current);
-        timingIntervalRef.current = null;
-      }
-
+      stopTimersAndPolling();
       setIsUploading(false);
     }
   };
 
   const duplicates = resultSummary?.failed_files?.filter(ff => ff && ff.type === 'duplicate') || [];
   const errors = resultSummary?.failed_files?.filter(ff => !ff || ff.type !== 'duplicate') || [];
-  
-  // Get failed jobs from jobProgresses for display
-  const failedJobs = jobProgresses.filter(jp => jp.status === 'FAILED');
-  const successfulJobs = jobProgresses.filter(jp => jp.status === 'SUCCESS');
 
   return (
     <AppLayout pageName={t.documents.batchUploadPage.title}>
@@ -334,7 +419,6 @@ const BatchUpload = () => {
           </button>
         </form>
 
-        {/* Progress Bar */}
         {showProgress && (
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
             <h3 className="text-lg font-semibold mb-3">{t.documents.batchUploadPage.uploadProgress}</h3>
@@ -352,12 +436,11 @@ const BatchUpload = () => {
             <div className="mb-2 text-sm">{progressText}</div>
             <div className="text-[var(--muted-foreground)] text-sm mb-4">{progressDetails}</div>
 
-            {/* Individual Job Statuses */}
             {jobProgresses.length > 0 && (
               <div className="mt-4 mb-4">
                 <h4 className="font-semibold mb-2 text-sm">File Status</h4>
                 <div className="space-y-2">
-                  {jobProgresses.map((job, idx) => (
+                  {jobProgresses.map((job) => (
                     <div
                       key={job.jobId}
                       className="flex items-center justify-between p-2 rounded border border-[var(--border)] text-xs"
@@ -387,14 +470,12 @@ const BatchUpload = () => {
               </div>
             )}
 
-            {/* Result Summary */}
             {resultSummary && (
               <div className="mt-4">
                 <div className="mb-2 text-sm">
                   {t.documents.batchUploadPage.created}: {resultSummary.created ?? 0} • {t.documents.batchUploadPage.failed}: {resultSummary.failed ?? 0}
                 </div>
 
-                {/* Duplicate Invoices */}
                 {duplicates.length > 0 && (
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.duplicateInvoices}</h4>
@@ -453,7 +534,6 @@ const BatchUpload = () => {
                   </div>
                 )}
 
-                {/* Other Errors */}
                 {errors.length > 0 && (
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.otherErrors}</h4>
@@ -469,7 +549,6 @@ const BatchUpload = () => {
               </div>
             )}
 
-            {/* Result Actions */}
             {showResultActions && (
               <div className="mt-4 flex gap-2">
                 <button
@@ -487,7 +566,6 @@ const BatchUpload = () => {
               </div>
             )}
 
-            {/* Timing Information */}
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
               <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.processingTime}</h4>
               <div className="text-sm">
