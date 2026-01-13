@@ -365,6 +365,41 @@ export interface ReprocessTransactionsResponse {
   };
 }
 
+// S3 Upload Types
+export interface UploadIntentRequest {
+  filename: string;
+  content_type: string;
+  size_bytes?: number;
+}
+
+export interface UploadIntentResponse {
+  success: boolean;
+  data: {
+    document_id: number;
+    upload_url: string;
+    s3_key: string;
+    s3_bucket: string;
+    required_headers: Record<string, string>;
+    expires_in: number;
+  };
+  message: string;
+}
+
+export interface ConfirmUploadResponse {
+  success: boolean;
+  data: {
+    document_id: number;
+    status: string;
+    size_bytes: number;
+    content_type: string;
+    processing_started: boolean;
+    bank_name?: string;
+    account_number?: string;
+    transaction_count?: number;
+  };
+  message: string;
+}
+
 /**
  * Get access token from localStorage
  */
@@ -374,9 +409,10 @@ function getAccessToken(): string | null {
 }
 
 /**
- * Upload and process a bank statement file (PDF/image)
+ * Upload and process a bank statement file (PDF/image) - Legacy multipart upload
  * POST /bank-statements/upload
  * 
+ * @deprecated Use uploadBankStatementViaS3() for new implementations
  * @param file - The bank statement file to upload
  * @param asyncProcess - If true, processes asynchronously and returns job_id. If false, processes synchronously.
  */
@@ -416,6 +452,117 @@ export async function uploadBankStatement(
   }
 
   return response.json();
+}
+
+/**
+ * Step 1: Create upload intent and get presigned S3 PUT URL
+ * POST /bank-statements/upload-intent
+ */
+export async function createBankStatementUploadIntent(
+  file: File
+): Promise<UploadIntentResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: UploadIntentRequest = {
+    filename: file.name,
+    content_type: file.type || 'application/octet-stream',
+    size_bytes: file.size,
+  };
+
+  const response = await fetch(`${BASE_URL}/bank-statements/upload-intent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to create upload intent');
+  }
+
+  return response.json();
+}
+
+/**
+ * Step 2: Upload file directly to S3 using presigned PUT URL
+ */
+export async function uploadFileToS3(
+  uploadUrl: string,
+  file: File,
+  requiredHeaders?: Record<string, string>
+): Promise<void> {
+  const headers: Record<string, string> = {
+    'Content-Type': file.type || 'application/octet-stream',
+    ...requiredHeaders,
+  };
+
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers,
+    body: file,
+  });
+
+  if (!response.ok) {
+    throw new Error(`S3 upload failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
+ * Step 3: Confirm upload and trigger OCR processing
+ * POST /bank-statements/{statement_id}/confirm-upload
+ */
+export async function confirmBankStatementUpload(
+  statementId: number
+): Promise<ConfirmUploadResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/bank-statements/${statementId}/confirm-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to confirm upload');
+  }
+
+  return response.json();
+}
+
+/**
+ * Upload and process a bank statement using S3 presigned URLs (recommended)
+ * 
+ * This is a convenience function that combines the 3-step S3 upload flow:
+ * 1. Create upload intent (get presigned PUT URL)
+ * 2. Upload file directly to S3
+ * 3. Confirm upload and trigger OCR processing
+ */
+export async function uploadBankStatementViaS3(
+  file: File
+): Promise<ConfirmUploadResponse> {
+  // Step 1: Create upload intent
+  const intentResponse = await createBankStatementUploadIntent(file);
+  const { document_id, upload_url, required_headers } = intentResponse.data;
+
+  // Step 2: Upload to S3
+  await uploadFileToS3(upload_url, file, required_headers);
+
+  // Step 3: Confirm and process
+  return confirmBankStatementUpload(document_id);
 }
 
 /**
@@ -475,8 +622,36 @@ export async function listBankStatementJobs(): Promise<ListBankStatementJobsResp
 }
 
 /**
- * Batch upload multiple bank statement files for asynchronous processing
- * POST /bank-statements/batch-upload
+ * Batch upload intent response item for bank statements
+ */
+interface BankStatementBatchUploadIntentItem {
+  index: number;
+  document_id: number;
+  upload_url: string;
+  s3_key: string;
+  filename: string;
+}
+
+/**
+ * Batch upload intent response for bank statements
+ */
+interface BankStatementBatchUploadIntentResponse {
+  success: boolean;
+  data: {
+    items: BankStatementBatchUploadIntentItem[];
+    s3_bucket: string;
+    expires_in: number;
+    total_files: number;
+  };
+}
+
+/**
+ * Batch upload multiple bank statement files using S3 presigned URLs
+ * 
+ * This uses the 3-step S3 upload flow:
+ * 1. POST /bank-statements/batch-upload - Get presigned URLs for all files
+ * 2. PUT each file to S3 using the presigned URLs
+ * 3. POST /bank-statements/batch-confirm - Confirm uploads and start processing
  */
 export async function batchUploadBankStatements(
   files: File[]
@@ -491,25 +666,53 @@ export async function batchUploadBankStatements(
     throw new Error('At least one file is required');
   }
 
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
+  // Step 1: Get presigned URLs for all files
+  const filesMetadata = files.map(f => ({
+    filename: f.name,
+    content_type: f.type || 'application/octet-stream',
+    size_bytes: f.size,
+  }));
 
-  const response = await fetch(`${BASE_URL}/bank-statements/batch-upload`, {
+  const intentResponse = await fetch(`${BASE_URL}/bank-statements/batch-upload`, {
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: formData,
+    body: JSON.stringify({ files: filesMetadata }),
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.message || error.error || 'Failed to upload bank statements');
+  if (!intentResponse.ok) {
+    const error = await intentResponse.json().catch(() => ({ error: intentResponse.statusText }));
+    throw new Error(error.message || error.error || 'Failed to create batch upload intent');
   }
 
-  return response.json();
+  const intentData: BankStatementBatchUploadIntentResponse = await intentResponse.json();
+  const { items } = intentData.data;
+
+  // Step 2: Upload all files to S3 in parallel
+  await Promise.all(
+    items.map((item, index) => 
+      uploadFileToS3(item.upload_url, files[index], { 'Content-Type': files[index].type || 'application/octet-stream' })
+    )
+  );
+
+  // Step 3: Confirm all uploads and start processing
+  const confirmResponse = await fetch(`${BASE_URL}/bank-statements/batch-confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ document_ids: items.map(item => item.document_id) }),
+  });
+
+  if (!confirmResponse.ok) {
+    const error = await confirmResponse.json().catch(() => ({ error: confirmResponse.statusText }));
+    throw new Error(error.message || error.error || 'Failed to confirm batch upload');
+  }
+
+  return confirmResponse.json();
 }
 
 /**
