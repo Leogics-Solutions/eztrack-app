@@ -45,7 +45,7 @@ const BatchUpload = () => {
   const [useOcr, setUseOcr] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
-  const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('s3');
+  const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -67,14 +67,6 @@ const BatchUpload = () => {
 
   // Clean up on unmount
   useEffect(() => {
-    // Default to multipart on localhost to avoid S3 CORS issues in dev
-    try {
-      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-        setUploadMode('multipart');
-      }
-    } catch {
-      // ignore
-    }
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
@@ -294,37 +286,6 @@ const BatchUpload = () => {
         <h1 className="text-3xl font-bold mb-6">{t.documents.batchUploadPage.title}</h1>
 
         <form onSubmit={handleSubmit} className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">
-              Upload mode
-            </label>
-            <div className="flex items-center gap-4 text-sm">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="uploadMode"
-                  value="multipart"
-                  checked={uploadMode === 'multipart'}
-                  onChange={() => setUploadMode('multipart')}
-                />
-                <span>Backend upload (multipart)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="uploadMode"
-                  value="s3"
-                  checked={uploadMode === 's3'}
-                  onChange={() => setUploadMode('s3')}
-                />
-                <span>Direct S3 upload (presigned PUT)</span>
-              </label>
-            </div>
-            <div className="text-xs text-[var(--muted-foreground)] mt-1">
-              Use multipart for local dev if S3 CORS/signing isn&apos;t configured; use S3 mode for production.
-            </div>
-          </div>
-
           <div className="mb-6">
             <label className="flex items-start space-x-2 cursor-pointer">
               <input
