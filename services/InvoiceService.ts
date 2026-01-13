@@ -410,8 +410,52 @@ async function uploadToPresignedUrl(uploadUrl: string, file: File, contentType: 
 
   if (!response.ok) {
     const details = await response.text().catch(() => '');
-    const suffix = details ? `: ${details.slice(0, 500)}` : '';
-    throw new Error(`S3 upload failed (${response.status} ${response.statusText})${suffix}`);
+
+    // Best-effort parse of S3's XML error response:
+    // <Error><Code>...</Code><Message>...</Message>...</Error>
+    let s3Code: string | undefined;
+    let s3Message: string | undefined;
+    try {
+      if (details && typeof DOMParser !== 'undefined') {
+        const doc = new DOMParser().parseFromString(details, 'application/xml');
+        s3Code = doc.querySelector('Code')?.textContent?.trim() || undefined;
+        s3Message = doc.querySelector('Message')?.textContent?.trim() || undefined;
+      }
+    } catch {
+      // ignore parsing errors
+    }
+
+    // Request IDs are very helpful for AWS support / CloudTrail debugging.
+    // Note: they may be unavailable unless S3 CORS ExposeHeaders allows them.
+    const requestId =
+      response.headers.get('x-amz-request-id') ||
+      response.headers.get('x-amz-requestid') ||
+      undefined;
+    const hostId = response.headers.get('x-amz-id-2') || undefined;
+
+    console.error('[S3 PUT] Upload failed', {
+      urlHost: (() => {
+        try { return new URL(uploadUrl).host; } catch { return undefined; }
+      })(),
+      filename: file.name,
+      size: file.size,
+      contentType,
+      status: response.status,
+      statusText: response.statusText,
+      s3Code,
+      s3Message,
+      requestId,
+      hostId,
+      responseBodySnippet: details ? details.slice(0, 1200) : undefined,
+    });
+
+    const parts: string[] = [];
+    if (s3Code) parts.push(s3Code);
+    if (s3Message) parts.push(s3Message);
+    if (requestId) parts.push(`requestId=${requestId}`);
+    const extra = parts.length > 0 ? ` | ${parts.join(' | ')}` : '';
+
+    throw new Error(`S3 upload failed (${response.status} ${response.statusText})${extra}`);
   }
 }
 
@@ -1206,6 +1250,58 @@ export async function batchUploadInvoices(
     },
     message: baseMessage,
   };
+}
+
+/**
+ * Upload multiple invoice files using backend multipart streaming (no S3 direct PUT from browser)
+ * POST /invoices/batch-upload-multipart
+ *
+ * This is useful for local dev when S3 CORS is not configured, or when you want the backend to handle S3 upload.
+ */
+export async function batchUploadInvoicesMultipart(
+  files: File[],
+  options?: {
+    auto_classify?: boolean;
+    remark?: string;
+  }
+): Promise<BatchUploadResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const queryParams = new URLSearchParams();
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.remark) {
+    queryParams.append('remark', options.remark);
+  }
+
+  const url = `${BASE_URL}/invoices/batch-upload-multipart${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload invoices');
+  }
+
+  return response.json();
 }
 
 /**

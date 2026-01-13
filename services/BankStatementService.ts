@@ -476,7 +476,7 @@ export async function listBankStatementJobs(): Promise<ListBankStatementJobsResp
 
 /**
  * Batch upload multiple bank statement files for asynchronous processing
- * POST /bank-statements/batch-upload
+ * POST /bank-statements/batch-upload-multipart
  */
 export async function batchUploadBankStatements(
   files: File[]
@@ -496,7 +496,7 @@ export async function batchUploadBankStatements(
     formData.append('files', file);
   });
 
-  const response = await fetch(`${BASE_URL}/bank-statements/batch-upload`, {
+  const response = await fetch(`${BASE_URL}/bank-statements/batch-upload-multipart`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,

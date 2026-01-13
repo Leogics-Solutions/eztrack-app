@@ -529,9 +529,6 @@ const BankStatementDetail = () => {
                         {t.bankStatements.detail.description || 'Description'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
-                        {t.bankStatements.detail.type || 'Type'}
-                      </th>
-                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.detail.debit || 'Debit'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
@@ -559,17 +556,6 @@ const BankStatementDetail = () => {
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                             {transaction.description}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className="px-2 py-1 rounded text-xs font-medium"
-                              style={{
-                                background: transaction.transaction_type === 'DEBIT' ? 'var(--error)' : 'var(--success)',
-                                color: 'white',
-                              }}
-                            >
-                              {transaction.transaction_type}
-                            </span>
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                             {formatCurrency(transaction.debit_amount)}

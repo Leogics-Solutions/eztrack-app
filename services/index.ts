@@ -58,6 +58,7 @@ export {
   verifyInvoice,
   addPayment,
   batchUploadInvoices,
+  batchUploadInvoicesMultipart,
   getBatchJobStatus,
   listBatchJobs,
   downloadInvoiceFile,
