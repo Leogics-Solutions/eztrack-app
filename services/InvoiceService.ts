@@ -408,9 +408,13 @@ export interface BatchUploadIntentResponse {
   success: boolean;
   data: {
     items: BatchUploadIntentItem[];
+    s3_bucket?: string;
+    expires_in?: number;
+    auto_classify?: boolean;
+    remark?: string;
     total_files?: number;
   };
-  message: string;
+  message?: string;
 }
 
 export interface BatchConfirmResponse {
@@ -1258,31 +1262,6 @@ export async function deleteLineItem(
   return response.json();
 }
 
-/**
- * Batch upload intent response item
- */
-interface BatchUploadIntentItem {
-  index: number;
-  document_id: number;
-  upload_url: string;
-  s3_key: string;
-  filename: string;
-}
-
-/**
- * Batch upload intent response
- */
-interface BatchUploadIntentResponse {
-  success: boolean;
-  data: {
-    items: BatchUploadIntentItem[];
-    s3_bucket: string;
-    expires_in: number;
-    auto_classify: boolean;
-    remark?: string;
-    total_files: number;
-  };
-}
 
 /**
  * Upload multiple invoice files using S3 presigned URLs

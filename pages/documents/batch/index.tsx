@@ -168,8 +168,8 @@ const BatchUpload = () => {
         for (const job of jobs) {
           try {
             const statusResponse = await getBatchJobStatus(job.job_id);
-            if (statusResponse.success && statusResponse.data) {
-              const jobData = statusResponse.data;
+            if (statusResponse.success && statusResponse.data?.data) {
+              const jobData = statusResponse.data.data;
               updatedProgresses.push({
                 jobId: job.job_id,
                 filename: jobData.original_filename,
