@@ -2,15 +2,16 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { ArrowLeft, Trash2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Trash2, RefreshCw, Download, ChevronDown } from "lucide-react";
 import {
   getBankStatement,
   getStatementTransactions,
   deleteBankStatement,
   getStatementLinks,
   reprocessTransactions,
+  exportBankStatementsCsv,
   type BankStatement,
   type BankTransaction,
   type TransactionInvoiceLink,
@@ -37,6 +38,10 @@ const BankStatementDetail = () => {
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileContentType, setFileContentType] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportTemplate, setExportTemplate] = useState<'default' | 'xero_statement'>('default');
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -176,6 +181,54 @@ const BankStatementDetail = () => {
     }
   };
 
+  const handleExport = async (template: 'default' | 'xero_statement' = 'default') => {
+    if (!id || typeof id !== 'string') return;
+
+    try {
+      setIsExporting(true);
+      setIsExportDropdownOpen(false);
+      const { blob, filename } = await exportBankStatementsCsv([Number(id)], template);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date();
+      const fallbackName = `bank_statement_${timestamp
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .slice(0, 15)}.csv`;
+
+      link.download = filename || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast('Bank statement exported successfully', { type: 'success' });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export bank statement';
+      showToast(errorMessage, { type: 'error' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setIsExportDropdownOpen(false);
+      }
+    };
+
+    if (isExportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportDropdownOpen]);
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
     try {
@@ -234,9 +287,54 @@ const BankStatementDetail = () => {
 
         {/* Statement Summary */}
         <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-          <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-            {t.bankStatements.detail.summary || 'Statement Summary'}
-          </h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+              {t.bankStatements.detail.summary || 'Statement Summary'}
+            </h3>
+            <div className="relative" ref={exportDropdownRef}>
+              <button
+                onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                disabled={isExporting}
+                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {isExportDropdownOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg z-50"
+                  style={{
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <button
+                    onClick={() => handleExport('default')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed first:rounded-t-lg"
+                    style={{ color: 'var(--foreground)' }}
+                  >
+                    <div className="font-medium">Default Format</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">Standard CSV export</div>
+                  </button>
+                  <button
+                    onClick={() => handleExport('xero_statement')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t last:rounded-b-lg"
+                    style={{ 
+                      color: 'var(--foreground)',
+                      borderTopColor: 'var(--border)',
+                    }}
+                  >
+                    <div className="font-medium">Xero Statement</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">Xero bank statement import format</div>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>

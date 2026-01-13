@@ -312,6 +312,7 @@ export {
   deleteBankStatement,
   getAccountNumbers,
   reprocessTransactions,
+  exportBankStatementsCsv,
   isAsyncUploadResponse,
 } from './BankStatementService';
 
@@ -352,5 +353,7 @@ export type {
   DeleteBankStatementResponse,
   GetAccountNumbersResponse,
   ReprocessTransactionsResponse,
+  ExportBankStatementsCsvResponse,
+  ExportBankStatementsRequest,
 } from './BankStatementService';
 

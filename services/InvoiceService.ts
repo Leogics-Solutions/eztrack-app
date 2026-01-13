@@ -231,6 +231,7 @@ export interface UpdateInvoiceRequest {
   bank_swift_code?: string;
   payment_terms?: string;
   payment_method?: string;
+  due_date?: string;
 
   // Misc
   remarks?: string;
@@ -331,6 +332,7 @@ export interface DeleteLineItemResponse {
 // Batch Upload Types
 export interface BatchJob {
   job_id: string;
+  invoice_id?: number;
   filename: string;
   file_type: string;
 }
@@ -340,8 +342,77 @@ export interface BatchUploadResponse {
   data: {
     jobs: BatchJob[];
     total_files: number;
+    failures?: Array<{
+      filename: string;
+      file_type: string;
+      reason: string;
+      index?: number;
+    }>;
   };
   message: string;
+}
+
+// S3 Batch Upload Types (presigned URL flow)
+export interface BatchUploadIntentFileMeta {
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface BatchUploadIntentItem {
+  index?: number;
+  document_id: string | number;
+  upload_url: string;
+  s3_key?: string;
+  filename?: string;
+  content_type?: string;
+}
+
+export interface BatchUploadIntentResponse {
+  success: boolean;
+  data: {
+    items: BatchUploadIntentItem[];
+    total_files?: number;
+  };
+  message: string;
+}
+
+export interface BatchConfirmResponse {
+  success: boolean;
+  data: {
+    jobs: BatchJob[];
+    total_files: number;
+  };
+  message: string;
+}
+
+function guessContentTypeFromFilename(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
+}
+
+function getFileContentType(file: File): string {
+  return file.type || guessContentTypeFromFilename(file.name);
+}
+
+async function uploadToPresignedUrl(uploadUrl: string, file: File, contentType: string): Promise<void> {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType,
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    const suffix = details ? `: ${details.slice(0, 500)}` : '';
+    throw new Error(`S3 upload failed (${response.status} ${response.statusText})${suffix}`);
+  }
 }
 
 export type BatchJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
@@ -414,6 +485,7 @@ export interface BulkVerifyInvoicesResponse {
 
 export interface ExportInvoicesRequest {
   invoice_ids: number[];
+  template?: 'default' | 'xero_bill' | 'xero_sales';
 }
 
 export type ExportInvoicesCsvResponse = InvoiceFileDownload;
@@ -988,8 +1060,14 @@ export async function deleteLineItem(
 }
 
 /**
- * Upload multiple invoice files in a single batch request
- * POST /invoices/batch-upload
+ * Upload multiple invoice files (S3 flow)
+ *
+ * Frontend flow:
+ * - Step 1: POST /invoices/batch-upload (application/json) to get presigned URLs + document_ids
+ * - Step 2: PUT file bytes directly to S3 using presigned URLs
+ * - Step 3: POST /invoices/batch-confirm (application/json) with { document_ids: [...] }
+ *
+ * Returns the same BatchUploadResponse shape the UI expects (jobs to poll).
  */
 export async function batchUploadInvoices(
   files: File[],
@@ -1004,11 +1082,6 @@ export async function batchUploadInvoices(
     throw new Error('No access token found');
   }
 
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
   // Build query parameters
   const queryParams = new URLSearchParams();
   if (options?.auto_classify !== undefined) {
@@ -1018,24 +1091,121 @@ export async function batchUploadInvoices(
     queryParams.append('remark', options.remark);
   }
 
-  const url = `${BASE_URL}/invoices/batch-upload${
+  const intentUrl = `${BASE_URL}/invoices/batch-upload${
     queryParams.toString() ? `?${queryParams.toString()}` : ''
   }`;
 
-  const response = await fetch(url, {
+  const fileMetas: BatchUploadIntentFileMeta[] = files.map((file) => ({
+    filename: file.name,
+    content_type: getFileContentType(file),
+    size_bytes: file.size,
+  }));
+
+  const intentResponse = await fetch(intentUrl, {
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: formData,
+    body: JSON.stringify({ files: fileMetas }),
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.message || error.error || 'Failed to upload invoices');
+  if (!intentResponse.ok) {
+    const error = await intentResponse.json().catch(() => ({ error: intentResponse.statusText }));
+    throw new Error(error.message || error.error || 'Failed to create batch upload intent');
   }
 
-  return response.json();
+  const intentJson = (await intentResponse.json()) as BatchUploadIntentResponse;
+  const intentItems = intentJson?.data?.items;
+  if (!Array.isArray(intentItems)) {
+    throw new Error('Invalid batch upload intent response (missing items)');
+  }
+
+  type UploadFailure = { index: number; filename: string; file_type: string; reason: string };
+  const failures: UploadFailure[] = [];
+  const successful: Array<{ index: number; document_id: string | number; filename: string }> = [];
+
+  // Step 2: Upload bytes to S3 (sequential to avoid spiking the network / S3 throttling)
+  for (const rawItem of intentItems) {
+    const item = rawItem ?? ({} as BatchUploadIntentItem);
+    const idx = typeof item.index === 'number' ? item.index : intentItems.indexOf(rawItem);
+    const file = files[idx];
+
+    const filename = item.filename || file?.name || `<file-${idx + 1}>`;
+    const fileType =
+      fileMetas[idx]?.content_type || item.content_type || 'application/octet-stream';
+    const uploadUrl = item.upload_url;
+    const documentId = item.document_id;
+
+    if (!file) {
+      failures.push({ index: idx, filename, file_type: fileType, reason: 'Missing file for intent item' });
+      continue;
+    }
+    if (!uploadUrl || !documentId) {
+      failures.push({
+        index: idx,
+        filename,
+        file_type: fileType,
+        reason: 'Missing upload_url or document_id in intent response',
+      });
+      continue;
+    }
+
+    try {
+      await uploadToPresignedUrl(uploadUrl, file, fileType);
+      successful.push({ index: idx, document_id: documentId, filename });
+    } catch (e) {
+      failures.push({
+        index: idx,
+        filename,
+        file_type: fileType,
+        reason: e instanceof Error ? e.message : 'S3 upload failed',
+      });
+    }
+  }
+
+  // Step 3: Confirm uploads (backend creates batch jobs)
+  let confirmJson: BatchConfirmResponse | null = null;
+  let confirmJobs: BatchJob[] = [];
+
+  if (successful.length > 0) {
+    const confirmUrl = `${BASE_URL}/invoices/batch-confirm${
+      queryParams.toString() ? `?${queryParams.toString()}` : ''
+    }`;
+
+    const confirmResponse = await fetch(confirmUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ document_ids: successful.map((s) => s.document_id) }),
+    });
+
+    if (!confirmResponse.ok) {
+      const error = await confirmResponse.json().catch(() => ({ error: confirmResponse.statusText }));
+      throw new Error(error.message || error.error || 'Failed to confirm batch uploads');
+    }
+
+    confirmJson = (await confirmResponse.json()) as BatchConfirmResponse;
+    confirmJobs = Array.isArray(confirmJson?.data?.jobs) ? confirmJson.data.jobs : [];
+  }
+
+  const baseMessage =
+    confirmJson?.message ||
+    intentJson?.message ||
+    'Batch upload started';
+
+  return {
+    success: true,
+    data: {
+      // Only real backend job_ids should be polled.
+      jobs: confirmJobs,
+      total_files: intentJson?.data?.total_files ?? files.length,
+      failures: failures.length > 0 ? failures : undefined,
+    },
+    message: baseMessage,
+  };
 }
 
 /**
@@ -1077,9 +1247,12 @@ export async function bulkVerifyInvoices(
 /**
  * Export selected invoices to CSV
  * POST /invoices/export
+ * @param invoiceIds - Array of invoice IDs to export
+ * @param template - Template format: 'default', 'xero_bill', or 'xero_sales'
  */
 export async function exportInvoicesCsv(
-  invoiceIds: number[]
+  invoiceIds: number[],
+  template: 'default' | 'xero_bill' | 'xero_sales' = 'default'
 ): Promise<ExportInvoicesCsvResponse> {
   const token = getAccessToken();
 
@@ -1087,9 +1260,21 @@ export async function exportInvoicesCsv(
     throw new Error('No access token found');
   }
 
-  const body: ExportInvoicesRequest = { invoice_ids: invoiceIds };
+  const body: ExportInvoicesRequest = { 
+    invoice_ids: invoiceIds,
+  };
 
-  const response = await fetch(`${BASE_URL}/invoices/export`, {
+  // Add template as query parameter if specified
+  const queryParams = new URLSearchParams();
+  if (template && template !== 'default') {
+    queryParams.append('template', template);
+  }
+
+  const url = `${BASE_URL}/invoices/export${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

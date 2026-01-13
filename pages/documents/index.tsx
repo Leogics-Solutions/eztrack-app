@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus } from "lucide-react";
+import { Plus, ChevronDown } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -84,6 +84,9 @@ const DocumentsListing = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [exportTemplate, setExportTemplate] = useState<'default' | 'xero_bill' | 'xero_sales'>('default');
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
   const [bcConnectionId, setBcConnectionId] = useState<number | null>(null);
   const [isBusinessCentralEnabled, setIsBusinessCentralEnabled] = useState(false);
   const [isPushingToBC, setIsPushingToBC] = useState(false);
@@ -470,15 +473,16 @@ const DocumentsListing = () => {
     }
   };
 
-  const exportSelected = async () => {
+  const exportSelected = async (template: 'default' | 'xero_bill' | 'xero_sales' = 'default') => {
     if (selectedInvoices.size === 0) {
       alert(t.documents.alerts.exportSelectAtLeastOne);
       return;
     }
     try {
       setIsExporting(true);
+      setIsExportDropdownOpen(false);
       const ids = Array.from(selectedInvoices);
-      const { blob, filename } = await exportInvoicesCsv(ids);
+      const { blob, filename } = await exportInvoicesCsv(ids, template);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -504,6 +508,23 @@ const DocumentsListing = () => {
       setIsExporting(false);
     }
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setIsExportDropdownOpen(false);
+      }
+    };
+
+    if (isExportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportDropdownOpen]);
 
   const downloadPdf = async () => {
     if (selectedInvoices.size === 0) {
@@ -852,18 +873,67 @@ const DocumentsListing = () => {
               <span className="mr-2">✓</span>
               {isVerifying ? `${t.documents.verifySubtotals}...` : t.documents.verifySubtotals}
             </button>
-            <button
-              onClick={exportSelected}
-              disabled={selectedInvoices.size === 0 || isExporting}
-              className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="mr-2">📤</span>
-              {isExporting
-                ? t.documents.exportSelected
-                : `${t.documents.exportSelected}${
-                    selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
-                  }`}
-            </button>
+            <div className="relative" ref={exportDropdownRef}>
+              <button
+                onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                disabled={selectedInvoices.size === 0 || isExporting}
+                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span>📤</span>
+                <span>
+                  {isExporting
+                    ? t.documents.exportSelected
+                    : `${t.documents.exportSelected}${
+                        selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
+                      }`}
+                </span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {isExportDropdownOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg z-50"
+                  style={{
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <button
+                    onClick={() => exportSelected('default')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed first:rounded-t-lg"
+                    style={{ color: 'var(--foreground)' }}
+                  >
+                    <div className="font-medium">Default Format</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">Standard CSV export</div>
+                  </button>
+                  <button
+                    onClick={() => exportSelected('xero_bill')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
+                    style={{ 
+                      color: 'var(--foreground)',
+                      borderTopColor: 'var(--border)',
+                    }}
+                  >
+                    <div className="font-medium">Xero Bill (Purchase)</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">For purchase invoices</div>
+                  </button>
+                  <button
+                    onClick={() => exportSelected('xero_sales')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t last:rounded-b-lg"
+                    style={{ 
+                      color: 'var(--foreground)',
+                      borderTopColor: 'var(--border)',
+                    }}
+                  >
+                    <div className="font-medium">Xero Sales Invoice</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">For sales invoices</div>
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={downloadPdf}
               disabled={selectedInvoices.size === 0 || isDownloading}

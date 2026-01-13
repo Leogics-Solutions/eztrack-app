@@ -45,6 +45,7 @@ interface Invoice extends ApiInvoice {
   po_number?: string;
   do_number?: string;
   payment_terms?: string;
+  due_date?: string;
   source_file?: string;
   creditor_account?: string;
   shipping?: number;
@@ -408,6 +409,7 @@ const InvoiceDetail = () => {
         bank_swift_code?: string | null;
         payment_terms?: string | null;
         payment_method?: string | null;
+        due_date?: string | null;
         remarks?: string | null;
       };
 
@@ -439,6 +441,7 @@ const InvoiceDetail = () => {
         bank_beneficiary_name: apiInvoice.bank_beneficiary_name ?? undefined,
         bank_swift_code: apiInvoice.bank_swift_code ?? undefined,
         payment_terms: apiInvoice.payment_terms ?? undefined,
+        due_date: apiInvoice.due_date ?? undefined,
         accepted_payment_methods: apiInvoice.payment_method ?? undefined,
         // Misc
         remarks: apiInvoice.remarks ?? undefined,
@@ -577,6 +580,7 @@ const InvoiceDetail = () => {
       }
       if (updatedData.bank_swift_code !== undefined) payload.bank_swift_code = updatedData.bank_swift_code;
       if (updatedData.payment_terms !== undefined) payload.payment_terms = updatedData.payment_terms;
+      if (updatedData.due_date !== undefined) payload.due_date = updatedData.due_date;
       if (updatedData.accepted_payment_methods !== undefined) {
         payload.payment_method = updatedData.accepted_payment_methods;
       }
@@ -1650,6 +1654,22 @@ function InvoiceInformationCard({
 
           {renderValue('CURRENCY:', invoice.currency || 'MYR')}
         </div>
+
+        {/* Row 1.5: Due Date */}
+        {invoice.due_date && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {renderValue('DUE DATE:', isEditMode ? (
+              <input
+                type="date"
+                value={formData.due_date ? formatDate(formData.due_date) : ''}
+                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                className="w-full px-2 py-1 border border-[var(--border)] rounded"
+              />
+            ) : (
+              formatDate(invoice.due_date)
+            ))}
+          </div>
+        )}
 
         {/* Row 2: Status */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

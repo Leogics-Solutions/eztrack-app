@@ -111,7 +111,7 @@ const BatchUpload = () => {
     try {
       // Upload files using batch upload API
       setProgressText(t.documents.batchUploadPage.preparingUpload);
-      setProgressDetails('Uploading files...');
+      setProgressDetails('Requesting presigned URLs → uploading to S3 → confirming...');
       
       const uploadResponse = await batchUploadInvoices(selectedFiles, {
         auto_classify: autoClassify,
@@ -123,24 +123,37 @@ const BatchUpload = () => {
       }
 
       const jobs = uploadResponse.data.jobs;
+      const failures = uploadResponse.data.failures || [];
+      const totalFiles = selectedFiles.length;
       
       // Initialize job progresses
-      const initialProgresses: JobProgress[] = jobs.map(job => ({
-        jobId: job.job_id,
-        filename: job.filename,
-        status: 'PENDING',
+      const localFailures: JobProgress[] = failures.map((f, idx) => ({
+        jobId: `local-failure:${f.index ?? idx}`,
+        filename: f.filename,
+        status: 'FAILED',
         invoiceId: null,
-        errorMessage: null,
+        errorMessage: f.reason || 'S3 upload failed',
       }));
+
+      const initialProgresses: JobProgress[] = [
+        ...localFailures,
+        ...jobs.map(job => ({
+          jobId: job.job_id,
+          filename: job.filename,
+          status: 'PENDING' as const,
+          invoiceId: (job as any).invoice_id ?? null,
+          errorMessage: null,
+        })),
+      ];
       setJobProgresses(initialProgresses);
 
       // Start polling for job statuses
       const pollJobs = async () => {
-        const updatedProgresses: JobProgress[] = [];
+        const updatedProgresses: JobProgress[] = [...localFailures];
         let allCompleted = true;
         let runningCount = 0;
         let successCount = 0;
-        let failedCount = 0;
+        let failedCount = localFailures.length;
 
         for (const job of jobs) {
           try {
@@ -184,14 +197,14 @@ const BatchUpload = () => {
         setJobProgresses(updatedProgresses);
 
         // Update progress percentage
-        const total = jobs.length;
+        const total = totalFiles;
         const completed = successCount + failedCount;
         const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
         setProgress(progressPercent);
 
         // Update progress text
         if (runningCount > 0) {
-          setProgressText(`${t.documents.batchUploadPage.processing} ${completed + 1} of ${total} files`);
+          setProgressText(`${t.documents.batchUploadPage.processing} ${Math.min(completed + 1, total)} of ${total} files`);
           setProgressDetails(`Processing ${runningCount} file(s)...`);
         } else if (allCompleted) {
           setProgress(100);
