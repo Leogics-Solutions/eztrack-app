@@ -282,6 +282,19 @@ export type {
   PushInvoiceDetail,
 } from './SettingsService';
 
+// Purchase Order Service
+export {
+  listPurchaseOrders,
+  getPurchaseOrder,
+} from './PurchaseOrderService';
+
+export type {
+  ListPurchaseOrdersParams,
+  ListPurchaseOrdersResponse,
+  GetPurchaseOrderResponse,
+  PurchaseOrder,
+} from './PurchaseOrderService';
+
 // Bank Statement Service
 export {
   uploadBankStatement,
@@ -300,6 +313,7 @@ export {
   deleteBankStatement,
   getAccountNumbers,
   reprocessTransactions,
+  exportBankStatementsCsv,
   isAsyncUploadResponse,
 } from './BankStatementService';
 
@@ -340,5 +354,7 @@ export type {
   DeleteBankStatementResponse,
   GetAccountNumbersResponse,
   ReprocessTransactionsResponse,
+  ExportBankStatementsCsvResponse,
+  ExportBankStatementsRequest,
 } from './BankStatementService';
 

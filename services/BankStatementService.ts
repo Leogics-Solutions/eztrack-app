@@ -1223,4 +1223,75 @@ export async function reprocessTransactions(
   return response.json();
 }
 
+// Export response types
+export interface ExportBankStatementsCsvResponse {
+  blob: Blob;
+  contentType: string | null;
+  filename: string | null;
+}
+
+export interface ExportBankStatementsRequest {
+  statement_ids: number[];
+  template?: 'default' | 'xero_statement';
+}
+
+/**
+ * Export selected bank statements to CSV
+ * POST /bank-statements/export
+ * @param statementIds - Array of bank statement IDs to export
+ * @param template - Template format: 'default' or 'xero_statement'
+ */
+export async function exportBankStatementsCsv(
+  statementIds: number[],
+  template: 'default' | 'xero_statement' = 'default'
+): Promise<ExportBankStatementsCsvResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: ExportBankStatementsRequest = {
+    statement_ids: statementIds,
+  };
+
+  // Add template as query parameter if specified
+  const queryParams = new URLSearchParams();
+  if (template && template !== 'default') {
+    queryParams.append('template', template);
+  }
+
+  const url = `${BASE_URL}/bank-statements/export${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to export bank statements');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
+}
+
 

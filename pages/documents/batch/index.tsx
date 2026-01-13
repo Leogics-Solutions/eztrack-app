@@ -156,8 +156,19 @@ const BatchUpload = () => {
         filename: job.filename,
         status: 'PENDING',
         invoiceId: null,
-        errorMessage: null,
+        errorMessage: f.reason || 'S3 upload failed',
       }));
+
+      const initialProgresses: JobProgress[] = [
+        ...localFailures,
+        ...jobs.map(job => ({
+          jobId: job.job_id,
+          filename: job.filename,
+          status: 'PENDING' as const,
+          invoiceId: (job as any).invoice_id ?? null,
+          errorMessage: null,
+        })),
+      ];
       setJobProgresses(initialProgresses);
 
       pollingActiveRef.current = true;

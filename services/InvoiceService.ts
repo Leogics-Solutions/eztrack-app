@@ -267,6 +267,7 @@ export interface UpdateInvoiceRequest {
   bank_swift_code?: string;
   payment_terms?: string;
   payment_method?: string;
+  due_date?: string;
 
   // Misc
   remarks?: string;
@@ -367,6 +368,7 @@ export interface DeleteLineItemResponse {
 // Batch Upload Types
 export interface BatchJob {
   job_id: string;
+  invoice_id?: number;
   filename: string;
   file_type: string;
 }
@@ -376,8 +378,77 @@ export interface BatchUploadResponse {
   data: {
     jobs: BatchJob[];
     total_files: number;
+    failures?: Array<{
+      filename: string;
+      file_type: string;
+      reason: string;
+      index?: number;
+    }>;
   };
   message: string;
+}
+
+// S3 Batch Upload Types (presigned URL flow)
+export interface BatchUploadIntentFileMeta {
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface BatchUploadIntentItem {
+  index?: number;
+  document_id: string | number;
+  upload_url: string;
+  s3_key?: string;
+  filename?: string;
+  content_type?: string;
+}
+
+export interface BatchUploadIntentResponse {
+  success: boolean;
+  data: {
+    items: BatchUploadIntentItem[];
+    total_files?: number;
+  };
+  message: string;
+}
+
+export interface BatchConfirmResponse {
+  success: boolean;
+  data: {
+    jobs: BatchJob[];
+    total_files: number;
+  };
+  message: string;
+}
+
+function guessContentTypeFromFilename(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
+}
+
+function getFileContentType(file: File): string {
+  return file.type || guessContentTypeFromFilename(file.name);
+}
+
+async function uploadToPresignedUrl(uploadUrl: string, file: File, contentType: string): Promise<void> {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType,
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    const suffix = details ? `: ${details.slice(0, 500)}` : '';
+    throw new Error(`S3 upload failed (${response.status} ${response.statusText})${suffix}`);
+  }
 }
 
 export type BatchJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
@@ -448,6 +519,7 @@ export interface BulkVerifyInvoicesResponse {
 
 export interface ExportInvoicesRequest {
   invoice_ids: number[];
+  template?: 'default' | 'xero_bill' | 'xero_sales';
 }
 
 export type ExportInvoicesCsvResponse = InvoiceFileDownload;
@@ -1290,9 +1362,12 @@ export async function bulkVerifyInvoices(
 /**
  * Export selected invoices to CSV
  * POST /invoices/export
+ * @param invoiceIds - Array of invoice IDs to export
+ * @param template - Template format: 'default', 'xero_bill', or 'xero_sales'
  */
 export async function exportInvoicesCsv(
-  invoiceIds: number[]
+  invoiceIds: number[],
+  template: 'default' | 'xero_bill' | 'xero_sales' = 'default'
 ): Promise<ExportInvoicesCsvResponse> {
   const token = getAccessToken();
 
@@ -1300,9 +1375,21 @@ export async function exportInvoicesCsv(
     throw new Error('No access token found');
   }
 
-  const body: ExportInvoicesRequest = { invoice_ids: invoiceIds };
+  const body: ExportInvoicesRequest = { 
+    invoice_ids: invoiceIds,
+  };
 
-  const response = await fetch(`${BASE_URL}/invoices/export`, {
+  // Add template as query parameter if specified
+  const queryParams = new URLSearchParams();
+  if (template && template !== 'default') {
+    queryParams.append('template', template);
+  }
+
+  const url = `${BASE_URL}/invoices/export${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
