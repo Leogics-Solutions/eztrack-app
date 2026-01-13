@@ -160,6 +160,7 @@ const NewInvoice = () => {
 
     try {
       // Use backend /invoices/upload via InvoiceService
+      // const response = await uploadInvoice(file, { auto_classify: autoClassify });
       const response = await uploadInvoice(file, { auto_classify: autoClassify });
 
       if (timerRef.current) {

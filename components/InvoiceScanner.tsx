@@ -3,11 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Plus, Check, ArrowLeft, ArrowUp, ArrowDown, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
-import { 
-  uploadToGroup, 
-  completeGroup, 
-  cancelGroup, 
-  getGroupStatus, 
+import {
+  uploadToGroup,
+  completeGroup,
+  cancelGroup,
+  getGroupStatus,
   type GroupStatusData,
   isAsyncCompleteResponse,
   getBatchJobStatus
@@ -34,6 +34,8 @@ interface InvoiceScannerProps {
   autoClassify?: boolean;
 }
 
+
+
 export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: InvoiceScannerProps) {
   const { t } = useLanguage();
   const [currentSession, setCurrentSession] = useState<InvoiceSession | null>(null);
@@ -45,11 +47,53 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [groupStatus, setGroupStatus] = useState<GroupStatusData | null>(null);
-  
+
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleFileSelectRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | undefined>(undefined);
   const sessionRef = useRef<InvoiceSession | null>(null);
+
+
+  const isPdfFile = (file: File) =>
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  const PreviewMedia = ({
+    file,
+    preview,
+    alt,
+    className,
+  }: {
+    file: File;
+    preview: string;
+    alt?: string;
+    className?: string;
+  }) => {
+    const isPdf = isPdfFile(file);
+
+    if (isPdf) {
+      // Try iframe first (fast, no extra libs)
+      return (
+        <iframe
+          src={preview}
+          title={alt || 'PDF Preview'}
+          className={className || 'w-full h-full'}
+          style={{ border: 'none' }}
+        />
+      );
+    }
+
+    return (
+      <img
+        src={preview}
+        alt={alt || 'Preview'}
+        className={className || 'w-full h-full object-contain'}
+        onError={() => {
+          console.error('Image failed to load:', preview);
+          setUploadError('Failed to load image preview. Please try again.');
+        }}
+      />
+    );
+  };
 
   // Ensure camera input is properly set up and accessible
   useEffect(() => {
@@ -67,7 +111,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       if (input.classList.contains('hidden')) {
         input.classList.remove('hidden');
       }
-      
+
       // Add direct event listener as backup (some mobile browsers need this)
       const handleChange = (e: Event) => {
         const target = e.target as HTMLInputElement;
@@ -77,7 +121,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           handleFileSelectRef.current(changeEvent);
         }
       };
-      
+
       input.addEventListener('change', handleChange, { capture: true });
       return () => {
         input.removeEventListener('change', handleChange, { capture: true });
@@ -124,25 +168,25 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const startScanSession = (e?: React.MouseEvent | React.TouchEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    
+
     const sessionNumber = 1; // In a real app, this would come from state/context
     const session = createNewSession(sessionNumber);
-    
+
     // Reset all states first
     setCurrentPage(null);
     setShowReview(false);
     setUploadError(null);
     setIsUploading(false);
-    
+
     // Set session in both state and ref - ref ensures it's always available
     updateSession(session);
-    
+
     // Reset camera input and trigger camera
     // Must be synchronous with user interaction for mobile browsers
     if (cameraInputRef.current) {
       // Reset input value to ensure onChange fires
       cameraInputRef.current.value = '';
-      
+
       try {
         // Trigger camera immediately (synchronous with user interaction for mobile)
         cameraInputRef.current.focus();
@@ -180,9 +224,9 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       hasFiles: !!e.target.files,
       target: e.target
     });
-    
+
     const file = e.target.files?.[0];
-    
+
     if (!file) {
       console.log('No file selected in handleFileSelect');
       return;
@@ -205,12 +249,12 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     setCurrentSession((prevSession) => {
       // Use ref session if available (most reliable), otherwise use state, or create new
       const session = existingSession || prevSession || createNewSession(1);
-      
+
       // Update ref to ensure it's always in sync (don't call updateSession here to avoid recursion)
       sessionRef.current = session;
-      
+
       console.log('Session state:', session.id, 'Pages:', session.pages.length, 'Has session:', !!session);
-      
+
       // Read file and create preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -220,14 +264,14 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           const pageNumber = latestSession.pages.length + 1;
           const preview = reader.result as string;
           console.log('Preview created, length:', preview?.length, 'Session ID:', latestSession.id);
-          
+
           if (!preview) {
             console.error('Preview is empty');
             setUploadError('Failed to create image preview. Please try again.');
             setIsUploading(false);
             return;
           }
-          
+
           const page: InvoicePage = {
             id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             file,
@@ -235,20 +279,20 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             pageNumber,
             uploaded: false,
           };
-          
+
           console.log('Setting current page:', page.id, 'Preview exists:', !!page.preview);
           console.log('Current session:', latestSession.id, 'Current pages:', latestSession.pages.length);
-          
+
           // Check if page already exists by file object reference (more reliable than ID)
-          const pageExists = latestSession.pages.some(p => 
-            p.file === file || 
+          const pageExists = latestSession.pages.some(p =>
+            p.file === file ||
             (p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)
           );
           if (pageExists) {
             console.warn('Page already exists in session, skipping add. File:', file.name);
             // Find existing page and set it as current
-            const existingPage = latestSession.pages.find(p => 
-              p.file === file || 
+            const existingPage = latestSession.pages.find(p =>
+              p.file === file ||
               (p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)
             );
             if (existingPage) {
@@ -258,7 +302,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             setShowReview(false);
             return;
           }
-          
+
           // Add page to session immediately so it's available when reviewing
           const updatedSession: InvoiceSession = {
             ...latestSession,
@@ -267,17 +311,17 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
               page
             ],
           };
-          
+
           // Update ref and state with session that includes the new page
           sessionRef.current = updatedSession;
-          
+
           // Set all state updates together - React will batch them
           // Ensure session is set first, then page, so preview screen condition is met
           updateSession(updatedSession);
           setCurrentPage(page);
           setIsUploading(false);
           setShowReview(false);
-          
+
           console.log('State updates queued - session:', updatedSession.id, 'page:', page.id, 'total pages:', updatedSession.pages.length);
         } catch (error) {
           console.error('Error processing file preview:', error);
@@ -291,10 +335,10 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         setIsUploading(false);
       };
       reader.readAsDataURL(file);
-      
+
       return session;
     });
-    
+
     // Reset input so same file can be selected again
     // Don't reset immediately on mobile - wait a bit
     setTimeout(() => {
@@ -312,14 +356,14 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
 
   const handleAddPage = async () => {
     if (!currentPage) return;
-    
+
     // Get latest session from ref to avoid stale state
     const latestSession = sessionRef.current;
     if (!latestSession) return;
-    
+
     setIsUploading(true);
     setUploadError(null);
-    
+
     try {
       // Upload to group
       const response = await uploadToGroup(
@@ -330,22 +374,22 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
 
       // Update session with group ID if this is the first page
       const groupId = response.data.group_id;
-      
+
       // Update the page in the session to mark it as uploaded (page should already be in session from handleFileSelect)
       // Use latest session from ref to avoid duplicates
       const pageExists = latestSession.pages.some(p => p.id === currentPage.id);
       const updatedPages = pageExists
-        ? latestSession.pages.map(p => 
-            p.id === currentPage.id ? { ...p, uploaded: true } : p
-          )
+        ? latestSession.pages.map(p =>
+          p.id === currentPage.id ? { ...p, uploaded: true } : p
+        )
         : [...latestSession.pages, { ...currentPage, uploaded: true }];
-      
+
       const updatedSession: InvoiceSession = {
         ...latestSession,
         groupId,
         pages: updatedPages,
       };
-      
+
       sessionRef.current = updatedSession;
       updateSession(updatedSession);
 
@@ -356,7 +400,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       // Clear current page and trigger camera
       // Use a small delay to ensure state updates before triggering camera
       setCurrentPage(null);
-      
+
       // Trigger camera immediately (synchronous for mobile)
       if (cameraInputRef.current) {
         try {
@@ -391,7 +435,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     if (currentPage) {
       setIsUploading(true);
       setUploadError(null);
-      
+
       try {
         const response = await uploadToGroup(
           currentPage.file,
@@ -400,22 +444,22 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         );
 
         const groupId = response.data.group_id;
-        
+
         // Update the page in the session to mark it as uploaded (page should already be in session from handleFileSelect)
         // Use latest session from ref to avoid duplicates
         const pageExists = latestSession.pages.some(p => p.id === currentPage.id);
         const updatedPages = pageExists
-          ? latestSession.pages.map(p => 
-              p.id === currentPage.id ? { ...p, uploaded: true } : p
-            )
+          ? latestSession.pages.map(p =>
+            p.id === currentPage.id ? { ...p, uploaded: true } : p
+          )
           : [...latestSession.pages, { ...currentPage, uploaded: true }];
-        
+
         const updatedSession: InvoiceSession = {
           ...latestSession,
           groupId,
           pages: updatedPages,
         };
-        
+
         sessionRef.current = updatedSession;
         updateSession(updatedSession);
 
@@ -460,7 +504,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const handleDeletePage = (pageId: string) => {
     const latestSession = sessionRef.current;
     if (!latestSession) return;
-    
+
     // Note: The API doesn't support deleting individual pages from a group
     // So we'll just remove it from the UI, but it will still be in the group
     // The user would need to cancel the entire group and start over
@@ -475,11 +519,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const handleReorder = (fromIndex: number, toIndex: number) => {
     const latestSession = sessionRef.current;
     if (!latestSession) return;
-    
+
     const pages = [...latestSession.pages];
     const [removed] = pages.splice(fromIndex, 1);
     pages.splice(toIndex, 0, removed);
-    
+
     const updatedSession = {
       ...latestSession,
       pages,
@@ -490,30 +534,31 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
 
   const handleSubmit = async (overrideAutoClassify?: boolean) => {
     const shouldAutoClassify = overrideAutoClassify !== undefined ? overrideAutoClassify : autoClassify;
-    
+
     // Use ref session to get latest data
     const latestSession = sessionRef.current;
+
     if (!latestSession || !latestSession.groupId || latestSession.pages.length === 0) {
       alert('No pages to submit. Please add at least one page.');
       return;
     }
-    
+
     setIsSubmitting(true);
     setUploadError(null);
-    
+
     try {
       // Complete the group asynchronously - returns immediately with job_id
       const response = await completeGroup(latestSession.groupId, {
         auto_classify: shouldAutoClassify,
         async_process: true, // Enable async processing so user can start next group immediately
       });
-      
+
       // Check if response is async (returns job_id) or sync (returns invoice)
       if (isAsyncCompleteResponse(response)) {
         // Async mode: processing started in background
         const jobId = response.data.job_id;
         console.log('Invoice processing started in background. Job ID:', jobId);
-        
+
         // Create a session object compatible with onComplete
         const completedSession: InvoiceSession = {
           ...latestSession,
@@ -522,17 +567,17 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             pageNumber: index + 1,
           })),
         };
-        
+
         // Call the onComplete callback with the session
         // The invoice will be created in the background
         onComplete(completedSession);
-        
+
         // Show success message
         alert('OK created task');
-        
+
         // Reload page to reset everything to clean state
         window.location.reload();
-        
+
         // Optionally poll for job completion in the background (non-blocking)
         // This is just for logging/debugging - UI doesn't wait
         pollJobStatus(jobId).catch(err => {
@@ -548,10 +593,10 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             pageNumber: index + 1,
           })),
         };
-        
+
         onComplete(completedSession);
         alert('OK created task');
-        
+
         // Reload page to reset everything to clean state
         window.location.reload();
       }
@@ -574,7 +619,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     setUploadError(null);
     setIsSubmitting(false);
     setIsUploading(false);
-    
+
     // Reset camera input so it can be triggered again
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
@@ -585,24 +630,24 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   const pollJobStatus = async (jobId: string) => {
     const maxAttempts = 60; // Poll for up to 5 minutes (5s intervals)
     let attempts = 0;
-    
+
     const poll = async (): Promise<void> => {
       if (attempts >= maxAttempts) {
         console.log('Job status polling timeout. Job may still be processing.');
         return;
       }
-      
+
       attempts++;
-      
+
       try {
         const statusResponse = await getBatchJobStatus(jobId);
-        const status = statusResponse.data.status;
-        
+        const status = (statusResponse as any).data.data.status;
+
         if (status === 'SUCCESS') {
-          console.log('Invoice processing completed successfully. Invoice ID:', statusResponse.data.invoice_id);
+          console.log('Invoice processing completed successfully. Invoice ID:', (statusResponse as any).data.data.invoice_id);
           return;
         } else if (status === 'FAILED') {
-          console.error('Invoice processing failed:', statusResponse.data.error_message);
+          console.error('Invoice processing failed:', (statusResponse as any).data.error_message);
           return;
         } else {
           // Still processing, poll again after 5 seconds
@@ -614,7 +659,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         setTimeout(poll, 5000);
       }
     };
-    
+
     // Start polling after a short delay
     setTimeout(poll, 2000);
   };
@@ -682,8 +727,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
 
     const sessionNumber = 1;
     const session = createNewSession(sessionNumber);
-    setCurrentSession(session);
-    
+    updateSession(session);
+
     setIsUploading(true);
     setUploadError(null);
 
@@ -726,7 +771,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         groupId,
         pages,
       };
-      setCurrentSession(updatedSession);
+      updateSession(updatedSession);
 
       // Fetch group status
       if (groupId) {
@@ -743,6 +788,8 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
       e.target.value = '';
     }
   };
+
+  console.log('Current session base:', sessionRef.current);
 
   // Entry Point
   if (!currentSession && !showSuccess) {
@@ -801,7 +848,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          style={{ 
+          style={{
             position: 'absolute',
             width: '1px',
             height: '1px',
@@ -827,7 +874,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
             Invoice #{currentSession.number} — Capture Pages
           </h3>
           <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {currentPage 
+            {currentPage
               ? `Page ${currentSession.pages.length + 1}`
               : `Uploading page ${currentSession.pages.length}...`
             }
@@ -838,16 +885,13 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
         </div>
 
         {currentPage ? (
-          <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
+          <div className="relative bg-white dark:bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '3/4' }}>
             {currentPage.preview ? (
-              <img
-                src={currentPage.preview}
+              <PreviewMedia
+                file={currentPage.file}
+                preview={currentPage.preview}
                 alt="Preview"
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  console.error('Image failed to load:', currentPage.preview);
-                  setUploadError('Failed to load image preview. Please try again.');
-                }}
+                className="w-full h-full"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-white">
@@ -928,7 +972,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          style={{ 
+          style={{
             position: 'absolute',
             width: '1px',
             height: '1px',
@@ -949,17 +993,17 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
     // Use ref session to get latest data and deduplicate pages
     const reviewSession = sessionRef.current || currentSession;
     if (!reviewSession) return null;
-    
+
     // Deduplicate pages by file reference to prevent showing duplicates
-    const uniquePages = reviewSession.pages.filter((page, index, self) => 
-      index === self.findIndex(p => 
-        p.id === page.id || 
-        (p.file.name === page.file.name && 
-         p.file.size === page.file.size && 
-         p.file.lastModified === page.file.lastModified)
+    const uniquePages = reviewSession.pages.filter((page, index, self) =>
+      index === self.findIndex(p =>
+        p.id === page.id ||
+        (p.file.name === page.file.name &&
+          p.file.size === page.file.size &&
+          p.file.lastModified === page.file.lastModified)
       )
     );
-    
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between mb-4">
@@ -1038,10 +1082,11 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
               className="relative group border border-[var(--border)] rounded-lg overflow-hidden bg-black"
               style={{ aspectRatio: '3/4' }}
             >
-              <img
-                src={page.preview}
+              <PreviewMedia
+                file={page.file}
+                preview={page.preview}
                 alt={`Page ${page.pageNumber || index + 1}`}
-                className="w-full h-full object-contain"
+                className="w-full h-full"
               />
               <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
                 <span>Page {page.pageNumber || index + 1}</span>
@@ -1125,7 +1170,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
           accept="image/*"
           capture="environment"
           onChange={handleFileSelect}
-          style={{ 
+          style={{
             position: 'absolute',
             width: '1px',
             height: '1px',
@@ -1145,7 +1190,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
   if (showSuccess) {
     const successSession = sessionRef.current || currentSession;
     if (!successSession) return null;
-    
+
     return (
       <div className="text-center space-y-6 py-8">
         <div className="flex justify-center">
