@@ -74,8 +74,18 @@ const BankStatementsList = () => {
 
       if (response.data && Array.isArray(response.data)) {
         setStatements(response.data);
-        setTotalCount(response.meta?.total_items || 0);
-        setTotalPages(response.meta?.total_pages || 1);
+        
+        // Parse pagination metadata - handle different response structures
+        const totalItems = response.meta?.total_items || response.data.length;
+        const totalPagesFromMeta = response.meta?.total_pages;
+        
+        // Calculate totalPages if not provided in meta
+        const calculatedTotalPages = totalPagesFromMeta 
+          ? totalPagesFromMeta 
+          : Math.ceil(totalItems / pageSize);
+        
+        setTotalCount(totalItems);
+        setTotalPages(calculatedTotalPages);
       } else {
         setStatements([]);
         setTotalCount(0);
@@ -452,39 +462,41 @@ const BankStatementsList = () => {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
+              {totalCount > 0 && (
                 <div className="p-4 border-t" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between">
                     <div style={{ color: 'var(--muted-foreground)' }}>
                       {t.bankStatements.list.showing || 'Showing'} {(currentPage - 1) * pageSize + 1} {t.bankStatements.list.to || 'to'}{' '}
                       {Math.min(currentPage * pageSize, totalCount)} {t.bankStatements.list.of || 'of'} {totalCount}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: 'var(--background)',
-                          borderColor: 'var(--border)',
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {t.bankStatements.list.previous || 'Previous'}
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                        className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: 'var(--background)',
-                          borderColor: 'var(--border)',
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {t.bankStatements.list.next || 'Next'}
-                      </button>
-                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{
+                            background: 'var(--background)',
+                            borderColor: 'var(--border)',
+                            color: 'var(--foreground)',
+                          }}
+                        >
+                          {t.bankStatements.list.previous || 'Previous'}
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-4 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{
+                            background: 'var(--background)',
+                            borderColor: 'var(--border)',
+                            color: 'var(--foreground)',
+                          }}
+                        >
+                          {t.bankStatements.list.next || 'Next'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
