@@ -6,12 +6,14 @@
 import { BASE_URL } from './config';
 
 // Types
+export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation';
 export interface InvoiceLineItem {
   id: number;
   line_number?: number;
   description: string;
   quantity: number;
   unit_price: number;
+  discount?: number;
   uom?: string;
   tax_rate?: number;
   line_total: number;
@@ -332,6 +334,7 @@ export interface AddLineItemRequest {
   description: string;
   quantity: number;
   unit_price: number;
+  discount?: number;
   uom?: string;
   tax_rate?: number;
   line_total: number;
@@ -347,6 +350,7 @@ export interface UpdateLineItemRequest {
   description?: string;
   quantity?: number;
   unit_price?: number;
+  discount?: number;
   uom?: string;
   tax_rate?: number;
   line_total?: number;
@@ -567,7 +571,7 @@ export interface BulkVerifyInvoicesResponse {
 
 export interface ExportInvoicesRequest {
   invoice_ids: number[];
-  template?: 'default' | 'xero_bill' | 'xero_sales';
+  template?: 'default' | 'xero_bill' | 'xero_sales' | 'autocount';
 }
 
 export type ExportInvoicesCsvResponse = InvoiceFileDownload;
@@ -683,7 +687,10 @@ function getAccessToken(): string | null {
  */
 export async function uploadInvoice(
   file: File,
-  options?: { auto_classify?: boolean }
+  options?: { 
+    auto_classify?: boolean;
+    document_type?: DocumentType;
+  }
 ): Promise<UploadInvoiceResponse> {
   const token = getAccessToken();
 
@@ -696,6 +703,9 @@ export async function uploadInvoice(
   const queryParams = new URLSearchParams();
   if (options?.auto_classify !== undefined) {
     queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.document_type) {
+    queryParams.append('document_type', options.document_type);
   }
 
   const url = `${BASE_URL}/invoices/upload${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1276,6 +1286,7 @@ export async function batchUploadInvoices(
   options?: {
     auto_classify?: boolean;
     remark?: string;
+    document_type?: DocumentType;
   }
 ): Promise<BatchUploadResponse> {
   const token = getAccessToken();
@@ -1297,6 +1308,9 @@ export async function batchUploadInvoices(
   }
   if (options?.remark) {
     queryParams.append('remark', options.remark);
+  }
+  if (options?.document_type) {
+    queryParams.append('document_type', options.document_type);
   }
 
   const intentUrl = `${BASE_URL}/invoices/batch-upload${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1358,6 +1372,7 @@ export async function batchUploadInvoicesMultipart(
   options?: {
     auto_classify?: boolean;
     remark?: string;
+    document_type?: DocumentType;
   }
 ): Promise<BatchUploadResponse> {
   const token = getAccessToken();
@@ -1377,6 +1392,9 @@ export async function batchUploadInvoicesMultipart(
   }
   if (options?.remark) {
     queryParams.append('remark', options.remark);
+  }
+  if (options?.document_type) {
+    queryParams.append('document_type', options.document_type);
   }
 
   const url = `${BASE_URL}/invoices/batch-upload-multipart${
@@ -1435,14 +1453,14 @@ export async function bulkVerifyInvoices(
 }
 
 /**
- * Export selected invoices to CSV
+ * Export selected invoices to CSV or XLS
  * POST /invoices/export
  * @param invoiceIds - Array of invoice IDs to export
- * @param template - Template format: 'default', 'xero_bill', or 'xero_sales'
+ * @param template - Template format: 'default', 'xero_bill', 'xero_sales', or 'autocount'
  */
 export async function exportInvoicesCsv(
   invoiceIds: number[],
-  template: 'default' | 'xero_bill' | 'xero_sales' = 'default'
+  template: 'default' | 'xero_bill' | 'xero_sales' | 'autocount' = 'default'
 ): Promise<ExportInvoicesCsvResponse> {
   const token = getAccessToken();
 
@@ -1808,6 +1826,7 @@ export async function uploadMultiPageInvoice(
     page_numbers?: number[];
     auto_classify?: boolean;
     async_process?: boolean;
+    document_type?: DocumentType;
   }
 ): Promise<UploadInvoiceResponse | AsyncMultiPageJobResponse> {
   const token = getAccessToken();
@@ -1834,6 +1853,9 @@ export async function uploadMultiPageInvoice(
   }
   if (options?.async_process !== undefined) {
     queryParams.append('async_process', String(options.async_process));
+  }
+  if (options?.document_type) {
+    queryParams.append('document_type', options.document_type);
   }
 
   const url = `${BASE_URL}/invoices/upload-multi${queryParams.toString() ? `?${queryParams.toString()}` : ''

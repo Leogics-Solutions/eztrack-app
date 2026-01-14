@@ -577,6 +577,7 @@ export const zh: Translations = {
       bankName: '银行',
       period: '期间',
       transactions: '交易',
+      currency: '货币',
       openingBalance: '期初余额',
       closingBalance: '期末余额',
       actions: '操作',

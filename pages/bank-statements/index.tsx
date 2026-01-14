@@ -249,9 +249,10 @@ const BankStatementsList = () => {
     }
   };
 
-  const formatCurrency = (amount?: number) => {
+  const formatCurrency = (amount?: number, currency?: string) => {
     if (amount === undefined || amount === null) return '-';
-    return `MYR ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const currencyCode = currency || 'MYR';
+    return `${currencyCode} ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (
@@ -382,6 +383,9 @@ const BankStatementsList = () => {
                         {t.bankStatements.list.transactions || 'Transactions'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.list.currency || 'Currency'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.list.openingBalance || 'Opening Balance'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
@@ -413,10 +417,13 @@ const BankStatementsList = () => {
                           {statement.transaction_count || 0}
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(statement.opening_balance)}
+                          {statement.currency || '-'}
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(statement.closing_balance)}
+                          {formatCurrency(statement.opening_balance, statement.currency)}
+                        </td>
+                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                          {formatCurrency(statement.closing_balance, statement.currency)}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
-import { batchUploadInvoices, batchUploadInvoicesMultipart, getBatchJobStatus } from "@/services";
+import { batchUploadInvoices, batchUploadInvoicesMultipart, getBatchJobStatus, DocumentType } from "@/services";
 
 interface JobProgress {
   jobId: string;
@@ -45,6 +45,7 @@ const BatchUpload = () => {
   const [useOcr, setUseOcr] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
+  const [documentType, setDocumentType] = useState<DocumentType>('invoice');
   const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
@@ -122,10 +123,12 @@ const BatchUpload = () => {
         ? await batchUploadInvoicesMultipart(selectedFiles, {
             auto_classify: autoClassify,
             remark: batchRemark || undefined,
+            document_type: documentType,
           })
         : await batchUploadInvoices(selectedFiles, {
             auto_classify: autoClassify,
             remark: batchRemark || undefined,
+            document_type: documentType,
           });
       
       if (!uploadResponse.success || !uploadResponse.data) {
@@ -320,6 +323,23 @@ const BatchUpload = () => {
                 </div>
               </div>
             </label>
+          </div>
+
+          {/* Document Type */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">Document Type</label>
+            <select
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+            >
+              <option value="invoice">Invoice</option>
+              <option value="petty_cash">Petty Cash</option>
+              <option value="claims_compilation">Claims Compilation</option>
+            </select>
+            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+              Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.
+            </small>
           </div>
 
           <FileUpload

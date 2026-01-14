@@ -84,7 +84,7 @@ const DocumentsListing = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [exportTemplate, setExportTemplate] = useState<'default' | 'xero_bill' | 'xero_sales'>('default');
+  const [exportTemplate, setExportTemplate] = useState<'default' | 'xero_bill' | 'xero_sales' | 'autocount'>('default');
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const [bcConnectionId, setBcConnectionId] = useState<number | null>(null);
@@ -473,7 +473,7 @@ const DocumentsListing = () => {
     }
   };
 
-  const exportSelected = async (template: 'default' | 'xero_bill' | 'xero_sales' = 'default') => {
+  const exportSelected = async (template: 'default' | 'xero_bill' | 'xero_sales' | 'autocount' = 'default') => {
     if (selectedInvoices.size === 0) {
       alert(t.documents.alerts.exportSelectAtLeastOne);
       return;
@@ -488,10 +488,11 @@ const DocumentsListing = () => {
       link.href = url;
 
       const timestamp = new Date();
+      const extension = template === 'autocount' ? '.xls' : '.csv';
       const fallbackName = `invoices_${timestamp
         .toISOString()
         .replace(/[-:]/g, '')
-        .slice(0, 15)}.csv`;
+        .slice(0, 15)}${extension}`;
 
       link.download = filename || fallbackName;
       document.body.appendChild(link);
@@ -922,7 +923,7 @@ const DocumentsListing = () => {
                   <button
                     onClick={() => exportSelected('xero_sales')}
                     disabled={isExporting}
-                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t last:rounded-b-lg"
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
                     style={{ 
                       color: 'var(--foreground)',
                       borderTopColor: 'var(--border)',
@@ -930,6 +931,18 @@ const DocumentsListing = () => {
                   >
                     <div className="font-medium">Xero Sales Invoice</div>
                     <div className="text-xs text-[var(--muted-foreground)] mt-1">For sales invoices</div>
+                  </button>
+                  <button
+                    onClick={() => exportSelected('autocount')}
+                    disabled={isExporting}
+                    className="w-full text-left px-4 py-3 hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t last:rounded-b-lg"
+                    style={{ 
+                      color: 'var(--foreground)',
+                      borderTopColor: 'var(--border)',
+                    }}
+                  >
+                    <div className="font-medium">AutoCount Format</div>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-1">CashBook .xls export</div>
                   </button>
                 </div>
               )}

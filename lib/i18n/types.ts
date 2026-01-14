@@ -594,6 +594,7 @@ export interface Translations {
       bankName: string;
       period: string;
       transactions: string;
+      currency: string;
       openingBalance: string;
       closingBalance: string;
       actions: string;

@@ -122,6 +122,7 @@ export type {
   InvoiceStatisticsData,
   InvoiceStatisticsResponse,
   InvoiceStatus,
+  DocumentType,
 } from './InvoiceService';
 
 // Vendor Service

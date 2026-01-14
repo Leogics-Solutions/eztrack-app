@@ -256,9 +256,10 @@ const BankReconciliation = () => {
     }
   };
 
-  const formatCurrency = (amount?: number) => {
+  const formatCurrency = (amount?: number, currency?: string) => {
     if (amount === undefined || amount === null) return '-';
-    return `MYR ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const currencyCode = currency || statement?.currency || 'MYR';
+    return `${currencyCode} ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getConfidenceColor = (confidence: string) => {
@@ -538,7 +539,7 @@ const BankReconciliation = () => {
                           {formatDate(invoice.invoice_date)}
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(invoice.total)}
+                          {formatCurrency(invoice.total, invoice.currency)}
                         </td>
                         <td className="py-3 px-4">
                           {isLinked ? (
@@ -604,7 +605,9 @@ const BankReconciliation = () => {
                 </thead>
                 <tbody>
                   {matchResults.map((transaction) =>
-                    transaction.matches.map((match, idx) => (
+                    transaction.matches.map((match, idx) => {
+                      const invoice = invoices.find(inv => inv.id === match.invoice_id);
+                      return (
                       <tr key={`${transaction.transaction_id}-${match.invoice_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                           <div className="text-sm font-medium">{formatDate(transaction.transaction_date)}</div>
@@ -612,7 +615,7 @@ const BankReconciliation = () => {
                             {transaction.description}
                           </div>
                           <div className="text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
-                            {formatCurrency(transaction.amount)}
+                            {formatCurrency(transaction.amount, statement?.currency)}
                           </div>
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
@@ -624,7 +627,7 @@ const BankReconciliation = () => {
                             {formatDate(match.invoice_date)}
                           </div>
                           <div className="text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
-                            {formatCurrency(match.invoice_total)}
+                            {formatCurrency(match.invoice_total, invoice?.currency)}
                           </div>
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
@@ -664,7 +667,8 @@ const BankReconciliation = () => {
                           </button>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

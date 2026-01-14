@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
 import { InvoiceScanner } from "@/components/InvoiceScanner";
-import { uploadInvoice } from "@/services";
+import { uploadInvoice, DocumentType } from "@/services";
 
 // Types
 interface Vendor {
@@ -23,6 +23,7 @@ const NewInvoice = () => {
   const [vendorId, setVendorId] = useState('');
   const [useOCR, setUseOCR] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
+  const [documentType, setDocumentType] = useState<DocumentType>('auto');
   const [file, setFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
   const [scannerSession, setScannerSession] = useState<any>(null);
@@ -161,7 +162,10 @@ const NewInvoice = () => {
     try {
       // Use backend /invoices/upload via InvoiceService
       // const response = await uploadInvoice(file, { auto_classify: autoClassify });
-      const response = await uploadInvoice(file, { auto_classify: autoClassify });
+      const response = await uploadInvoice(file, { 
+        auto_classify: autoClassify,
+        document_type: documentType,
+      });
 
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -228,6 +232,24 @@ const NewInvoice = () => {
                 <span className="text-sm font-medium">{t.documents.newInvoicePage.useAIOCR}</span>
               </label>
             </div>
+          </div>
+
+          {/* Document Type */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">Document Type</label>
+            <select
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+            >
+              <option value="auto">Auto-detect</option>
+              <option value="invoice">Invoice</option>
+              <option value="petty_cash">Petty Cash</option>
+              <option value="claims_compilation">Claims Compilation</option>
+            </select>
+            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+              Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.
+            </small>
           </div>
 
           {/* Auto-classify checkbox */}

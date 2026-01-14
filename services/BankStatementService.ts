@@ -17,6 +17,7 @@ export interface BankStatement {
   statement_date_to?: string;
   opening_balance?: number;
   closing_balance?: number;
+  currency?: string;
   file_name?: string;
   file_url?: string;
   page_count?: number;
@@ -36,6 +37,7 @@ export interface BankTransaction {
   debit_amount?: number | null;
   credit_amount?: number | null;
   balance?: number | null;
+  currency?: string;
   category?: string | null;
   merchant_name?: string | null;
   created_at?: string;

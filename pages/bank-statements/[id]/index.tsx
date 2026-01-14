@@ -238,9 +238,10 @@ const BankStatementDetail = () => {
     }
   };
 
-  const formatCurrency = (amount?: number | null) => {
+  const formatCurrency = (amount?: number | null, currency?: string) => {
     if (amount === undefined || amount === null) return '-';
-    return `MYR ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const currencyCode = currency || statement?.currency || 'MYR';
+    return `${currencyCode} ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getLinkedInvoiceIds = () => {
@@ -373,7 +374,7 @@ const BankStatementDetail = () => {
                 {t.bankStatements.detail.openingBalance || 'Opening Balance'}
               </div>
               <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                {formatCurrency(statement.opening_balance)}
+                {formatCurrency(statement.opening_balance, statement.currency)}
               </div>
             </div>
             <div>
@@ -381,7 +382,7 @@ const BankStatementDetail = () => {
                 {t.bankStatements.detail.closingBalance || 'Closing Balance'}
               </div>
               <div className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                {formatCurrency(statement.closing_balance)}
+                {formatCurrency(statement.closing_balance, statement.currency)}
               </div>
             </div>
             {links.length > 0 && (
@@ -558,13 +559,13 @@ const BankStatementDetail = () => {
                             {transaction.description}
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                            {formatCurrency(transaction.debit_amount)}
+                            {formatCurrency(transaction.debit_amount, transaction.currency)}
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                            {formatCurrency(transaction.credit_amount)}
+                            {formatCurrency(transaction.credit_amount, transaction.currency)}
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                            {formatCurrency(transaction.balance)}
+                            {formatCurrency(transaction.balance, transaction.currency)}
                           </td>
                           <td className="py-3 px-4">
                             {isLinked ? (

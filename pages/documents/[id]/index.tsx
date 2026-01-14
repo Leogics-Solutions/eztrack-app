@@ -712,12 +712,15 @@ const InvoiceDetail = () => {
       // Ensure line_total is always sent, even if caller omitted it
       const quantity = data.quantity ?? 0;
       const unitPrice = data.unit_price ?? 0;
+      const discount = data.discount ?? 0;
+      const subtotal = quantity * unitPrice;
+      const discountAmount = subtotal * (discount / 100);
       const payload: AddLineItemRequest = {
         ...data,
         line_total:
           data.line_total !== undefined
             ? data.line_total
-            : Number((quantity * unitPrice).toFixed(2)),
+            : Number((subtotal - discountAmount).toFixed(2)),
       };
 
       await apiAddLineItem(invoice.id, payload);
@@ -733,6 +736,7 @@ const InvoiceDetail = () => {
     try {
       const quantity = data.quantity;
       const unitPrice = data.unit_price;
+      const discount = data.discount ?? 0;
 
       const payload: UpdateLineItemRequest = {
         ...data,
@@ -740,7 +744,9 @@ const InvoiceDetail = () => {
 
       // If quantity and unit_price are both available, recompute line_total
       if (quantity !== undefined && unitPrice !== undefined) {
-        payload.line_total = Number((quantity * unitPrice).toFixed(2));
+        const subtotal = quantity * unitPrice;
+        const discountAmount = subtotal * (discount / 100);
+        payload.line_total = Number((subtotal - discountAmount).toFixed(2));
       }
 
       await apiUpdateLineItem(invoice.id, lineId, payload);
@@ -2195,12 +2201,14 @@ function LineItemsCard({
     description: string;
     quantity: number | "";
     unit_price: number | "";
+    discount: number | "";
     uom: string;
     tax_rate: number | "";
   }>({
     description: "",
     quantity: "",
     unit_price: "",
+    discount: "",
     uom: "",
     tax_rate: "",
   });
@@ -2210,6 +2218,7 @@ function LineItemsCard({
     description?: string;
     quantity?: number | "";
     unit_price?: number | "";
+    discount?: number | "";
     uom?: string;
     tax_rate?: number | "";
   } | null>(null);
@@ -2233,14 +2242,17 @@ function LineItemsCard({
     });
   };
 
-  const computeLineTotal = (quantity?: number | "", unitPrice?: number | "") => {
+  const computeLineTotal = (quantity?: number | "", unitPrice?: number | "", discount?: number | "") => {
     const q = typeof quantity === "string" ? parseFloat(quantity || "0") : quantity ?? 0;
     const p = typeof unitPrice === "string" ? parseFloat(unitPrice || "0") : unitPrice ?? 0;
-    return Number((q * p).toFixed(2));
+    const d = typeof discount === "string" ? parseFloat(discount || "0") : discount ?? 0;
+    const subtotal = q * p;
+    const discountAmount = subtotal * (d / 100);
+    return Number((subtotal - discountAmount).toFixed(2));
   };
 
   const handleNewItemChange = (field: keyof typeof newItem, value: string) => {
-    if (field === "quantity" || field === "unit_price" || field === "tax_rate") {
+    if (field === "quantity" || field === "unit_price" || field === "discount" || field === "tax_rate") {
       setNewItem((prev) => ({
         ...prev,
         [field]: value === "" ? "" : Number(value),
@@ -2255,7 +2267,7 @@ function LineItemsCard({
 
   const handleEditingItemChange = (field: keyof NonNullable<typeof editingItem>, value: string) => {
     if (!editingItem) return;
-    if (field === "quantity" || field === "unit_price" || field === "tax_rate") {
+    if (field === "quantity" || field === "unit_price" || field === "discount" || field === "tax_rate") {
       setEditingItem({
         ...editingItem,
         [field]: value === "" ? "" : Number(value),
@@ -2282,6 +2294,10 @@ function LineItemsCard({
       typeof newItem.unit_price === "string"
         ? parseFloat(newItem.unit_price || "0")
         : newItem.unit_price || 0;
+    const discount =
+      typeof newItem.discount === "string"
+        ? parseFloat(newItem.discount || "0")
+        : newItem.discount || 0;
 
     if (!quantity || !unitPrice) {
       alert("Quantity and Unit Price must be greater than 0");
@@ -2292,12 +2308,13 @@ function LineItemsCard({
       description: newItem.description.trim(),
       quantity,
       unit_price: unitPrice,
+      discount: discount > 0 ? discount : undefined,
       uom: newItem.uom || undefined,
       tax_rate:
         typeof newItem.tax_rate === "string"
           ? parseFloat(newItem.tax_rate || "0")
           : newItem.tax_rate || undefined,
-      line_total: computeLineTotal(quantity, unitPrice),
+      line_total: computeLineTotal(quantity, unitPrice, discount),
     };
 
     try {
@@ -2307,6 +2324,7 @@ function LineItemsCard({
         description: "",
         quantity: "",
         unit_price: "",
+        discount: "",
         uom: "",
         tax_rate: "",
       });
@@ -2321,6 +2339,7 @@ function LineItemsCard({
       description: item.description,
       quantity: item.quantity ?? item.qty ?? 0,
       unit_price: item.unit_price ?? 0,
+      discount: item.discount ?? 0,
       uom: item.uom,
       tax_rate: item.tax_rate,
     });
@@ -2342,11 +2361,16 @@ function LineItemsCard({
       typeof editingItem.unit_price === "string"
         ? parseFloat(editingItem.unit_price || "0")
         : editingItem.unit_price;
+    const discount =
+      typeof editingItem.discount === "string"
+        ? parseFloat(editingItem.discount || "0")
+        : editingItem.discount ?? 0;
 
     const payload: UpdateLineItemRequest = {
       description: editingItem.description?.trim(),
       quantity,
       unit_price: unitPrice,
+      discount: discount > 0 ? discount : undefined,
       uom: editingItem.uom || undefined,
       tax_rate:
         typeof editingItem.tax_rate === "string"
@@ -2473,10 +2497,13 @@ function LineItemsCard({
               <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[10%]">
                 {t.documents.invoiceDetailPage.uom}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[14%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[12%]">
                 {t.documents.invoiceDetailPage.unitPrice}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[14%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[10%]">
+                Discount
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[12%]">
                 {t.documents.invoiceDetailPage.lineTotal}
               </th>
               <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[13%]">
@@ -2490,7 +2517,7 @@ function LineItemsCard({
           <tbody className="divide-y divide-[var(--border)]">
             {lineItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
                   {t.documents.invoiceDetailPage.noLineItems}
                 </td>
               </tr>
@@ -2532,8 +2559,18 @@ function LineItemsCard({
                         onChange={(e) => handleEditingItemChange("unit_price", e.target.value)}
                       />
                     </td>
+                    <td className="px-4 py-3 text-right align-top">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        placeholder="0.00%"
+                        value={editingItem?.discount ?? ""}
+                        onChange={(e) => handleEditingItemChange("discount", e.target.value)}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-right align-top text-sm font-medium text-[var(--foreground)] whitespace-nowrap">
-                      {currency} {formatAmount(computeLineTotal(editingItem?.quantity, editingItem?.unit_price))}
+                      {currency} {formatAmount(computeLineTotal(editingItem?.quantity, editingItem?.unit_price, editingItem?.discount))}
                     </td>
                     <td
                       className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
@@ -2575,8 +2612,15 @@ function LineItemsCard({
                     <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
                       {currency} {formatAmount(item.unit_price)}
                     </td>
+                    <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)]">
+                      {item.discount && item.discount > 0 ? (
+                        <span className="text-red-600 dark:text-red-400">{formatAmount(item.discount)}%</span>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-semibold">
-                      {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0))}
+                      {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0, item.discount ?? 0))}
                     </td>
                     <td
                       className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
@@ -2668,8 +2712,23 @@ function LineItemsCard({
                   }}
                 />
               </td>
+              <td className="px-4 py-3 text-sm text-right align-top">
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  placeholder="0.00%"
+                  value={newItem.discount}
+                  onChange={(e) => handleNewItemChange("discount", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newItem.description.trim()) {
+                      handleCreate();
+                    }
+                  }}
+                />
+              </td>
               <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap font-medium text-[var(--foreground)]">
-                {currency} {formatAmount(computeLineTotal(newItem.quantity, newItem.unit_price))}
+                {currency} {formatAmount(computeLineTotal(newItem.quantity, newItem.unit_price, newItem.discount))}
               </td>
               <td className="px-4 py-3 text-sm align-top">
                 <span className="text-[var(--muted-foreground)]">-</span>

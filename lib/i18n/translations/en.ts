@@ -577,6 +577,7 @@ export const en: Translations = {
       bankName: 'Bank',
       period: 'Period',
       transactions: 'Transactions',
+      currency: 'Currency',
       openingBalance: 'Opening Balance',
       closingBalance: 'Closing Balance',
       actions: 'Actions',
