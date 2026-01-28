@@ -37,6 +37,8 @@ const BankStatementsList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedStatementIds, setSelectedStatementIds] = useState<Set<number>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -49,6 +51,11 @@ const BankStatementsList = () => {
     loadStatements();
     loadAccountNumbers();
   }, [currentPage, filters]);
+
+  // Clear selections when statements change
+  useEffect(() => {
+    setSelectedStatementIds(new Set());
+  }, [statements]);
 
   const loadAccountNumbers = async () => {
     try {
@@ -250,6 +257,85 @@ const BankStatementsList = () => {
     }
   };
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedStatementIds(new Set(statements.map(s => s.id)));
+    } else {
+      setSelectedStatementIds(new Set());
+    }
+  };
+
+  const handleSelectStatement = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedStatementIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedStatementIds(newSelected);
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedStatementIds.size === 0) {
+      return;
+    }
+
+    const count = selectedStatementIds.size;
+    if (!confirm(
+      t.bankStatements.list.batchDeleteConfirm || 
+      `Are you sure you want to delete ${count} bank statement${count !== 1 ? 's' : ''}?`
+    )) {
+      return;
+    }
+
+    setIsDeleting(true);
+    const idsToDelete = Array.from(selectedStatementIds);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      // Delete all selected statements in parallel
+      const deletePromises = idsToDelete.map(async (id) => {
+        try {
+          await deleteBankStatement(id);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to delete statement ${id}:`, err);
+          failCount++;
+        }
+      });
+
+      await Promise.all(deletePromises);
+
+      if (successCount > 0) {
+        showToast(
+          t.bankStatements.list.batchDeleteSuccess || 
+          `Successfully deleted ${successCount} bank statement${successCount !== 1 ? 's' : ''}`,
+          { type: 'success' }
+        );
+      }
+
+      if (failCount > 0) {
+        showToast(
+          t.bankStatements.list.batchDeletePartial || 
+          `Failed to delete ${failCount} bank statement${failCount !== 1 ? 's' : ''}`,
+          { type: 'error' }
+        );
+      }
+
+      setSelectedStatementIds(new Set());
+      await loadStatements();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete bank statements';
+      showToast(errorMessage, { type: 'error' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const isAllSelected = statements.length > 0 && selectedStatementIds.size === statements.length;
+  const isIndeterminate = selectedStatementIds.size > 0 && selectedStatementIds.size < statements.length;
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
     try {
@@ -376,10 +462,45 @@ const BankStatementsList = () => {
             </div>
           ) : (
             <>
+              {/* Batch Actions Bar */}
+              {selectedStatementIds.size > 0 && (
+                <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
+                  <div style={{ color: 'var(--foreground)' }}>
+                    {selectedStatementIds.size} {t.bankStatements.list.selected || 'selected'}
+                  </div>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={isDeleting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    style={{
+                      background: isDeleting ? 'var(--muted)' : 'var(--error)',
+                      color: isDeleting ? 'var(--muted-foreground)' : 'white',
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isDeleting 
+                      ? (t.bankStatements.list.deleting || 'Deleting...')
+                      : (t.bankStatements.list.batchDelete || `Delete ${selectedStatementIds.size}`)
+                    }
+                  </button>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          ref={(input) => {
+                            if (input) input.indeterminate = isIndeterminate;
+                          }}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="cursor-pointer"
+                        />
+                      </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.list.bankName || 'Bank'}
                       </th>
@@ -391,6 +512,9 @@ const BankStatementsList = () => {
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.list.transactions || 'Transactions'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.list.matchedTransactions || 'Matched'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.list.currency || 'Currency'}
@@ -414,6 +538,15 @@ const BankStatementsList = () => {
                         className="hover:bg-[var(--muted)] cursor-pointer"
                         onClick={() => router.push(`/bank-statements/${statement.id}`)}
                       >
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedStatementIds.has(statement.id)}
+                            onChange={(e) => handleSelectStatement(statement.id, e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                           {statement.bank_name || '-'}
                         </td>
@@ -425,6 +558,31 @@ const BankStatementsList = () => {
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                           {statement.transaction_count || 0}
+                        </td>
+                        <td className="py-3 px-4">
+                          {statement.matched_transaction_count !== undefined ? (
+                            <div className="flex items-center gap-2">
+                              <span style={{ color: 'var(--foreground)' }}>
+                                {statement.matched_transaction_count}
+                              </span>
+                              {statement.transaction_count && statement.transaction_count > 0 && (
+                                <span className="text-xs px-2 py-1 rounded" style={{ 
+                                  background: statement.matched_transaction_count === statement.transaction_count 
+                                    ? 'var(--success)' 
+                                    : statement.matched_transaction_count > 0 
+                                    ? 'var(--warning)' 
+                                    : 'var(--muted)',
+                                  color: statement.matched_transaction_count === statement.transaction_count || statement.matched_transaction_count > 0
+                                    ? 'white'
+                                    : 'var(--muted-foreground)'
+                                }}>
+                                  {Math.round((statement.matched_transaction_count / statement.transaction_count) * 100)}%
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--muted-foreground)' }}>-</span>
+                          )}
                         </td>
                         <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                           {statement.currency || '-'}

@@ -23,8 +23,23 @@ export interface BankStatement {
   page_count?: number;
   ocr_confidence?: number;
   transaction_count?: number;
+  matched_transaction_count?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface InvoiceLinkInfo {
+  status: 'matched';
+  invoice_id: number;
+  invoice_no: string;
+  invoice_date: string;
+  invoice_total: number;
+  invoice_currency: string;
+  vendor_name: string;
+  match_score: number;
+  match_type: 'auto' | 'manual';
+  reconciled_at: string;
+  notes?: string | null;
 }
 
 export interface BankTransaction {
@@ -42,6 +57,7 @@ export interface BankTransaction {
   merchant_name?: string | null;
   created_at?: string;
   updated_at?: string;
+  invoice_link?: InvoiceLinkInfo | null;
 }
 
 export interface MatchScoreBreakdown {
@@ -57,6 +73,8 @@ export interface TransactionInvoiceMatch {
   vendor_name: string;
   invoice_date: string;
   invoice_total: number;
+  allocated_amount?: number;
+  match_reason?: string;
   match_score: number;
   confidence: 'high' | 'medium' | 'low';
   score_breakdown: MatchScoreBreakdown;
@@ -237,6 +255,9 @@ export interface MatchInvoicesRequest {
   currency_tolerance_percentage?: number;
   min_match_score?: number;
   exclude_linked?: boolean;
+  max_combo_size?: number;
+  auto_create_links?: boolean;
+  auto_link_min_score?: number;
 }
 
 export interface MatchInvoicesResponse {
@@ -252,24 +273,45 @@ export interface MatchInvoicesAcrossStatementsRequest {
   currency_tolerance_percentage?: number;
   min_match_score?: number;
   exclude_linked?: boolean;
+  max_combo_size?: number;
+  auto_create_links?: boolean;
+  auto_link_min_score?: number;
+}
+
+export interface SupplierStatementMatch {
+  statement_id: number;
+  line_item_id: number;
+  supplier_name: string;
+  transaction_date: string;
+  customer_order_no: string | null;
+  bill_of_lading_no: string | null;
+  amount: number | string;
+  payment_amount: number | string;
+  currency: string;
+  match_score: number | string;
+  match_confidence: 'high' | 'medium' | 'low';
+  match_reason?: string;
 }
 
 export interface MatchedInvoiceDetail {
   invoice_id: number;
   invoice_no: string;
   invoice_date: string;
-  invoice_total: string;
+  invoice_total: number | string;
   invoice_currency: string;
-  converted_total: string;
+  converted_total: number | string;
+  allocated_amount?: number | string;
   vendor_name: string;
-  match_score: string;
+  match_reason?: string;
+  match_score: number | string;
   score_breakdown: {
-    amount_score: string;
-    date_score: string;
-    text_score: string;
-    reference_bonus: string;
+    amount_score: number | string;
+    date_score: number | string;
+    text_score: number | string;
+    reference_bonus: number | string;
   };
   match_confidence: 'high' | 'medium' | 'low';
+  supplier_statement_matches?: SupplierStatementMatch[];
 }
 
 export interface StatementTransactionMatch {
@@ -297,6 +339,34 @@ export interface MatchInvoicesAcrossStatementsResponse {
   unmatched_invoices: number;
   statements_searched: number;
   statement_matches: StatementMatchSummary[];
+  invoice_matches?: InvoiceMatchSummary[];
+}
+
+export interface InvoiceMatchedTransaction {
+  transaction_id: number;
+  transaction_date: string;
+  transaction_amount: number | string;
+  description: string;
+  allocated_amount?: number | string;
+  match_reason?: string;
+  match_score: number | string;
+  score_breakdown: {
+    amount_score: number | string;
+    date_score: number | string;
+    text_score: number | string;
+    reference_bonus: number | string;
+  };
+  match_confidence: 'high' | 'medium' | 'low';
+}
+
+export interface InvoiceMatchSummary {
+  invoice_id: number;
+  invoice_no: string;
+  invoice_date: string;
+  invoice_total: number | string;
+  invoice_currency: string;
+  matched: boolean;
+  matched_transactions: InvoiceMatchedTransaction[];
 }
 
 export interface CreateLinkRequest {
@@ -305,6 +375,7 @@ export interface CreateLinkRequest {
   match_type: 'auto' | 'manual';
   match_score?: number;
   notes?: string;
+  allocated_amount?: number;
 }
 
 export interface CreateLinkResponse {
@@ -320,6 +391,7 @@ export interface CreateLinksBulkRequest {
     match_type: 'auto' | 'manual';
     match_score?: number;
     notes?: string;
+    allocated_amount?: number;
   }>;
 }
 
@@ -659,6 +731,9 @@ export async function matchInvoices(
     currency_tolerance_percentage?: number;
     min_match_score?: number;
     exclude_linked?: boolean;
+    max_combo_size?: number;
+    auto_create_links?: boolean;
+    auto_link_min_score?: number;
   }
 ): Promise<MatchInvoicesResponse> {
   const token = getAccessToken();
@@ -675,6 +750,9 @@ export async function matchInvoices(
     currency_tolerance_percentage: options?.currency_tolerance_percentage,
     min_match_score: options?.min_match_score,
     exclude_linked: options?.exclude_linked,
+    max_combo_size: options?.max_combo_size,
+    auto_create_links: options?.auto_create_links,
+    auto_link_min_score: options?.auto_link_min_score,
   };
 
   const response = await fetch(`${BASE_URL}/bank-statements/${statementId}/match-invoices`, {
@@ -709,6 +787,9 @@ export async function matchInvoicesAcrossStatements(
     currency_tolerance_percentage?: number;
     min_match_score?: number;
     exclude_linked?: boolean;
+    max_combo_size?: number;
+    auto_create_links?: boolean;
+    auto_link_min_score?: number;
   }
 ): Promise<MatchInvoicesAcrossStatementsResponse> {
   const token = getAccessToken();
@@ -724,6 +805,9 @@ export async function matchInvoicesAcrossStatements(
     currency_tolerance_percentage: options?.currency_tolerance_percentage,
     min_match_score: options?.min_match_score,
     exclude_linked: options?.exclude_linked,
+    max_combo_size: options?.max_combo_size,
+    auto_create_links: options?.auto_create_links,
+    auto_link_min_score: options?.auto_link_min_score,
   };
 
   const response = await fetch(`${BASE_URL}/bank-statements/match-invoices`, {
@@ -754,6 +838,7 @@ export async function createLink(
     match_type?: 'auto' | 'manual';
     match_score?: number;
     notes?: string;
+    allocated_amount?: number;
   }
 ): Promise<CreateLinkResponse> {
   const token = getAccessToken();
@@ -768,6 +853,7 @@ export async function createLink(
     match_type: options?.match_type || 'manual',
     match_score: options?.match_score,
     notes: options?.notes,
+    allocated_amount: options?.allocated_amount,
   };
 
   const response = await fetch(`${BASE_URL}/bank-statements/links`, {
@@ -798,6 +884,7 @@ export async function createLinksBulk(
     match_type: 'auto' | 'manual';
     match_score?: number;
     notes?: string;
+    allocated_amount?: number;
   }>
 ): Promise<CreateLinksBulkResponse> {
   const token = getAccessToken();

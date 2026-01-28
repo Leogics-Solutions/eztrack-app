@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   CreditCard,
+  Receipt,
 } from 'lucide-react';
 
 interface MobileSidebarProps {
@@ -30,7 +31,9 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const navItems = [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
     { href: '/documents', label: t.nav.documents, icon: FileCheck },
+    { href: '/supporting-documents', label: t.nav.supportingDocuments, icon: FileCheck },
     { href: '/bank-statements', label: t.nav.bankStatements, icon: CreditCard },
+    { href: '/supplier-statements', label: t.nav.supplierStatements, icon: Receipt },
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
     { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },

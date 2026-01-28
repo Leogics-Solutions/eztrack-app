@@ -599,7 +599,7 @@ export function InvoiceValidation({
                                     {formatDate(invoice.invoice_date)}
                                   </div>
                                   <div className="text-xs font-semibold mt-1" style={{ color: 'var(--foreground)' }}>
-                                    {invoice.invoice_currency} {parseFloat(invoice.invoice_total).toLocaleString('en-MY', {
+                                    {invoice.invoice_currency} {parseFloat(String(invoice.invoice_total)).toLocaleString('en-MY', {
                                       minimumFractionDigits: 2,
                                       maximumFractionDigits: 2,
                                     })}
@@ -615,25 +615,25 @@ export function InvoiceValidation({
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Amount: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {parseFloat(invoice.score_breakdown.amount_score).toFixed(1)}
+                                        {parseFloat(String(invoice.score_breakdown.amount_score)).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Date: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {parseFloat(invoice.score_breakdown.date_score).toFixed(1)}
+                                        {parseFloat(String(invoice.score_breakdown.date_score)).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Text: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {parseFloat(invoice.score_breakdown.text_score).toFixed(1)}
+                                        {parseFloat(String(invoice.score_breakdown.text_score)).toFixed(1)}
                                       </span>
                                     </div>
                                     <div>
                                       <span style={{ color: 'var(--muted-foreground)' }}>Reference: </span>
                                       <span style={{ color: 'var(--foreground)' }}>
-                                        {parseFloat(invoice.score_breakdown.reference_bonus).toFixed(1)}
+                                        {parseFloat(String(invoice.score_breakdown.reference_bonus)).toFixed(1)}
                                       </span>
                                     </div>
                                   </div>
@@ -653,7 +653,7 @@ export function InvoiceValidation({
                                   {invoice.match_confidence}
                                 </div>
                                 <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                                  {parseFloat(invoice.match_score).toFixed(1)}%
+                                  {parseFloat(String(invoice.match_score)).toFixed(1)}%
                                 </div>
                               </div>
                             </div>

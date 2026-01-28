@@ -34,6 +34,7 @@ import {
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type ChartOfAccount,
+  type LinkedDocument,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 
@@ -53,6 +54,8 @@ interface Invoice extends ApiInvoice {
   shopee_voucher?: number;
   shop_voucher?: number;
   coin_discount?: number;
+  total_in_myr?: number | null;
+  exchange_rate?: number | null;
   // Handwriting detection fields (already in ApiInvoice, but explicitly included for clarity)
   is_handwritten?: boolean | null;
   handwriting_clarity?: 'clear' | 'unclear' | 'mixed' | null;
@@ -76,6 +79,35 @@ interface Invoice extends ApiInvoice {
   bank_swift_code?: string;
   accepted_payment_methods?: string;
   remarks?: string;
+  // Supplier statement links
+  supplier_statement_links?: Array<{
+    id: number;
+    supplier_statement_line_item_id: number;
+    invoice_id: number;
+    match_type: 'auto' | 'manual';
+    match_score?: number | null;
+    notes?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    line_item?: {
+      id: number;
+      supplier_statement_id: number;
+      transaction_date: string;
+      amount: number;
+      payment_amount?: number | null;
+      is_paid: boolean;
+      payment_date?: string | null;
+      currency?: string;
+    };
+    statement?: {
+      id: number;
+      supplier_name?: string;
+      statement_date_from?: string;
+      statement_date_to?: string;
+      total_amount?: number;
+      currency?: string;
+    };
+  }>;
 }
 
 interface LineItem {
@@ -115,6 +147,7 @@ const InvoiceDetail = () => {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -390,6 +423,35 @@ const InvoiceDetail = () => {
       const apiInvoice = response.data as ApiInvoice & {
         lines?: LineItem[];
         payments?: InvoicePayment[];
+        linked_documents?: LinkedDocument[] | null;
+        supplier_statement_links?: Array<{
+          id: number;
+          supplier_statement_line_item_id: number;
+          invoice_id: number;
+          match_type: 'auto' | 'manual';
+          match_score?: number | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          line_item?: {
+            id: number;
+            supplier_statement_id: number;
+            transaction_date: string;
+            amount: number;
+            payment_amount?: number | null;
+            is_paid: boolean;
+            payment_date?: string | null;
+            currency?: string;
+          };
+          statement?: {
+            id: number;
+            supplier_name?: string;
+            statement_date_from?: string;
+            statement_date_to?: string;
+            total_amount?: number;
+            currency?: string;
+          };
+        }>;
         vendor_company_reg_no?: string | null;
         vendor_company_reg_no_old?: string | null;
         vendor_sst_number?: string | null;
@@ -411,6 +473,8 @@ const InvoiceDetail = () => {
         payment_method?: string | null;
         due_date?: string | null;
         remarks?: string | null;
+        total_in_myr?: number | null;
+        exchange_rate?: number | null;
       };
 
       const uiInvoice: Invoice = {
@@ -473,6 +537,9 @@ const InvoiceDetail = () => {
         }))
       );
 
+      // Extract linked documents
+      setLinkedDocuments(apiInvoice.linked_documents || []);
+
       // Load source file(s) for preview
       // Check if invoice has page_files (multi-page invoice)
       if (apiInvoice.page_files && apiInvoice.page_files.length > 0) {
@@ -514,6 +581,7 @@ const InvoiceDetail = () => {
       setInvoice(null);
       setLineItems([]);
       setPayments([]);
+      setLinkedDocuments([]);
     }
   };
 
@@ -526,7 +594,7 @@ const InvoiceDetail = () => {
       // Core identifiers
       if (updatedData.invoice_no !== undefined) payload.invoice_no = updatedData.invoice_no;
       if (updatedData.invoice_date !== undefined) payload.invoice_date = updatedData.invoice_date;
-      if (updatedData.status !== undefined) payload.status = updatedData.status;
+      if (updatedData.status !== undefined) payload.status = updatedData.status.toUpperCase();
 
       // Vendor
       if (updatedData.vendor_name !== undefined) payload.vendor_name = updatedData.vendor_name;
@@ -589,6 +657,9 @@ const InvoiceDetail = () => {
       if ((updatedData as any).remarks !== undefined) {
         payload.remarks = (updatedData as any).remarks;
       }
+      if (updatedData.exchange_rate !== undefined && updatedData.exchange_rate !== null) {
+        payload.exchange_rate = updatedData.exchange_rate;
+      }
 
       await updateInvoice(invoice.id, payload);
       await loadInvoiceData();
@@ -626,7 +697,7 @@ const InvoiceDetail = () => {
         }
       } else {
         // Fallback for other status changes (e.g. posted, revert)
-        await updateInvoice(invoice.id, { status: newStatus });
+        await updateInvoice(invoice.id, { status: newStatus.toUpperCase() });
       }
 
       await loadInvoiceData();
@@ -1323,6 +1394,79 @@ const InvoiceDetail = () => {
           </div>
         </div>
       )}
+
+      {/* Linked Supporting Documents - Bottom Section */}
+      {linkedDocuments.length > 0 && (
+        <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mt-6">
+          <h3 className="text-lg font-semibold mb-4">Linked Supporting Documents</h3>
+          <div className="space-y-3">
+            {linkedDocuments.map((doc) => {
+              // Format document type key to human-readable format
+              const formatDocumentType = (type: string): string => {
+                return type
+                  .split('_')
+                  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
+              };
+
+              return (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between p-4 border border-[var(--border)] rounded-md hover:bg-[var(--muted)] transition-colors"
+                >
+                  <div className="flex-1">
+                    <a
+                      href={`/supporting-documents/${doc.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        router.push(`/supporting-documents/${doc.id}`);
+                      }}
+                      className="font-medium text-sm hover:underline cursor-pointer"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      {doc.reference_number}
+                    </a>
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                        Document ID: {doc.id}
+                      </div>
+                      {doc.document_type && (
+                        <>
+                          <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>•</span>
+                          <div className="text-xs font-medium" style={{ color: 'var(--foreground)' }}>
+                            {formatDocumentType(doc.document_type)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <a
+                      href={`/supporting-documents/${doc.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--muted)] transition-colors text-sm font-medium whitespace-nowrap"
+                      style={{ color: 'var(--foreground)' }}
+                    >
+                      View Details
+                    </a>
+                    {doc.preview_url && (
+                      <a
+                        href={doc.preview_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors text-sm font-medium whitespace-nowrap"
+                      >
+                        Preview
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 };
@@ -1821,6 +1965,130 @@ function InvoiceInformationCard({
           {renderValue('TAX:', `${invoice.currency || 'MYR'} ${formatAmount(invoice.tax)}`)}
           {renderValue('TOTAL:', `${invoice.currency || 'MYR'} ${formatAmount(invoice.total)}`)}
         </div>
+
+        {/* Row 8: Total in MYR (if available) */}
+        {invoice.total_in_myr && invoice.total_in_myr > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 border-t border-dashed border-[var(--border)]">
+            {renderValue('TOTAL IN MYR:', `MYR ${formatAmount(invoice.total_in_myr)}`)}
+            {invoice.exchange_rate !== null && invoice.exchange_rate !== undefined ? (
+              isEditMode ? (
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase">
+                    EXCHANGE RATE:
+                  </div>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    value={formData.exchange_rate ?? invoice.exchange_rate ?? ''}
+                    onChange={(e) => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-2 py-1 border border-[var(--border)] rounded text-sm text-[var(--foreground)]"
+                  />
+                </div>
+              ) : (
+                renderValue('EXCHANGE RATE:', invoice.exchange_rate.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }))
+              )
+            ) : isEditMode ? (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold tracking-wide text-[var(--muted-foreground)] uppercase">
+                  EXCHANGE RATE:
+                </div>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  value={formData.exchange_rate ?? ''}
+                  onChange={(e) => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-2 py-1 border border-[var(--border)] rounded text-sm text-[var(--foreground)]"
+                  placeholder="Enter exchange rate"
+                />
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* Supplier Statement Links Section */}
+        {invoice.supplier_statement_links && invoice.supplier_statement_links.length > 0 && (
+          <div className="pt-4 border-t border-[var(--border)]">
+            <div className="mb-3">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Linked Supplier Statements ({invoice.supplier_statement_links.length})
+              </h4>
+            </div>
+            <div className="space-y-3">
+              {invoice.supplier_statement_links.map((link: NonNullable<typeof invoice.supplier_statement_links>[0]) => (
+                <div
+                  key={link.id}
+                  className="p-3 rounded-md border border-[var(--border)] bg-[var(--hover-bg-light)] dark:bg-[var(--hover-bg)]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      {link.statement && (
+                        <div className="mb-2">
+                          <a
+                            href={`/supplier-statements/${link.statement.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-[var(--primary)] hover:underline"
+                          >
+                            {link.statement.supplier_name || `Supplier Statement #${link.statement.id}`}
+                          </a>
+                          {link.statement.statement_date_from && link.statement.statement_date_to && (
+                            <span className="text-xs text-[var(--muted-foreground)] ml-2">
+                              ({formatDate(link.statement.statement_date_from)} - {formatDate(link.statement.statement_date_to)})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {link.line_item && (
+                        <div className="text-xs text-[var(--muted-foreground)] space-y-1">
+                          <div>
+                            Transaction Date: {formatDate(link.line_item.transaction_date)}
+                          </div>
+                          <div>
+                            Amount: {link.line_item.currency || 'MYR'} {formatAmount(link.line_item.amount)}
+                            {link.line_item.payment_amount !== null && link.line_item.payment_amount !== undefined && (
+                              <span className="ml-2">
+                                (Payment: {link.line_item.currency || 'MYR'} {formatAmount(link.line_item.payment_amount)})
+                              </span>
+                            )}
+                          </div>
+                          {link.line_item.is_paid && (
+                            <div className="text-[var(--success)]">
+                              Status: Paid
+                              {link.line_item.payment_date && ` on ${formatDate(link.line_item.payment_date)}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className="text-xs px-2 py-1 rounded inline-block capitalize"
+                        style={{
+                          background: link.match_type === 'auto' ? 'var(--info)' : 'var(--primary)',
+                          color: 'white',
+                        }}
+                      >
+                        {link.match_type}
+                      </span>
+                      {link.match_score !== null && link.match_score !== undefined && (
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          Score: {(link.match_score * 100).toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {link.notes && (
+                    <div className="mt-2 text-xs text-[var(--muted-foreground)] italic">
+                      Note: {link.notes}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {isEditMode && (
@@ -2481,7 +2749,9 @@ function LineItemsCard({
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[var(--foreground)]">{t.documents.invoiceDetailPage.lineItems}</h3>
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">
+          {t.documents.invoiceDetailPage.lineItems} ({lineItems?.length || 0})
+        </h3>
       </div>
 
       <div className="overflow-x-auto mb-4">

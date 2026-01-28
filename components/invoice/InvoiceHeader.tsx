@@ -9,6 +9,8 @@ interface InvoiceHeaderProps {
     subtotal?: number;
     tax?: number;
     total?: number;
+    total_in_myr?: number | null;
+    exchange_rate?: number | null;
   };
   onEditToggle: () => void;
   isEditMode: boolean;
@@ -68,6 +70,11 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
           <div className="text-2xl font-bold text-[var(--primary-foreground)]">
             {invoice.currency || 'MYR'} {(invoice.total || 0).toFixed(2)}
           </div>
+          {invoice.total_in_myr && invoice.total_in_myr > 0 && (
+            <div className="text-sm mt-1 text-[var(--primary-foreground)] opacity-90">
+              ≈ MYR {(invoice.total_in_myr).toFixed(2)}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -124,7 +124,7 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
           bank_transaction_id: m.transaction.transaction_id,
           invoice_id: m.invoice.invoice_id,
           match_type: (m.invoice.match_confidence === 'high' ? 'auto' : 'manual') as 'auto' | 'manual',
-          match_score: parseFloat(m.invoice.match_score),
+          match_score: parseFloat(String(m.invoice.match_score)),
         }));
 
       const response = await createLinksBulk(linksToCreate);
@@ -370,13 +370,13 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
                                   {formatDate(invoice.invoice_date)}
                                 </div>
                                 <div className="text-xs font-semibold mt-1" style={{ color: 'var(--foreground)' }}>
-                                  {invoice.invoice_currency} {parseFloat(invoice.invoice_total).toLocaleString('en-MY', {
+                                  {invoice.invoice_currency} {parseFloat(String(invoice.invoice_total)).toLocaleString('en-MY', {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   })}
                                   {invoice.invoice_currency !== 'MYR' && (
                                     <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
-                                      (≈ MYR {parseFloat(invoice.converted_total).toLocaleString('en-MY', {
+                                      (≈ MYR {parseFloat(String(invoice.converted_total)).toLocaleString('en-MY', {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
                                       })})
@@ -394,25 +394,25 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
                                   <div>
                                     <span style={{ color: 'var(--muted-foreground)' }}>Amount: </span>
                                     <span style={{ color: 'var(--foreground)' }}>
-                                      {parseFloat(invoice.score_breakdown.amount_score).toFixed(1)}
+                                      {parseFloat(String(invoice.score_breakdown.amount_score)).toFixed(1)}
                                     </span>
                                   </div>
                                   <div>
                                     <span style={{ color: 'var(--muted-foreground)' }}>Date: </span>
                                     <span style={{ color: 'var(--foreground)' }}>
-                                      {parseFloat(invoice.score_breakdown.date_score).toFixed(1)}
+                                      {parseFloat(String(invoice.score_breakdown.date_score)).toFixed(1)}
                                     </span>
                                   </div>
                                   <div>
                                     <span style={{ color: 'var(--muted-foreground)' }}>Text: </span>
                                     <span style={{ color: 'var(--foreground)' }}>
-                                      {parseFloat(invoice.score_breakdown.text_score).toFixed(1)}
+                                      {parseFloat(String(invoice.score_breakdown.text_score)).toFixed(1)}
                                     </span>
                                   </div>
                                   <div>
                                     <span style={{ color: 'var(--muted-foreground)' }}>Reference: </span>
                                     <span style={{ color: 'var(--foreground)' }}>
-                                      {parseFloat(invoice.score_breakdown.reference_bonus).toFixed(1)}
+                                      {parseFloat(String(invoice.score_breakdown.reference_bonus)).toFixed(1)}
                                     </span>
                                   </div>
                                 </div>
@@ -442,7 +442,7 @@ export function PaymentValidationResult({ result, invoiceNo, onClose, onLinksCre
                                 </div>
                               </div>
                               <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                                {parseFloat(invoice.match_score).toFixed(1)}%
+                                {parseFloat(String(invoice.match_score)).toFixed(1)}%
                               </div>
                             </div>
                           </div>

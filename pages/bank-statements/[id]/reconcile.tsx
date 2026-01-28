@@ -279,6 +279,21 @@ const BankReconciliation = () => {
     return links.some(link => link.invoice_id === invoiceId);
   };
 
+  const getLinkForTransactionInvoice = (transactionId: number, invoiceId: number): TransactionInvoiceLink | undefined => {
+    return links.find(link => link.bank_transaction_id === transactionId && link.invoice_id === invoiceId);
+  };
+
+  const handleUnlink = async (linkId: number) => {
+    try {
+      await deleteLink(linkId);
+      showToast(t.bankStatements.reconcile.linkDeleted || 'Link deleted successfully', { type: 'success' });
+      await loadLinks();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete link';
+      showToast(errorMessage, { type: 'error' });
+    }
+  };
+
   if (isLoading) {
     return (
       <AppLayout pageName={t.bankStatements.reconcile.title || 'Bank Reconciliation'}>
@@ -654,17 +669,37 @@ const BankReconciliation = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <button
-                            onClick={() => handleCreateSingleLink(transaction.transaction_id, match.invoice_id, match.match_score)}
-                            className="px-3 py-1 rounded text-sm border"
-                            style={{
-                              background: 'var(--background)',
-                              borderColor: 'var(--border)',
-                              color: 'var(--foreground)',
-                            }}
-                          >
-                            {t.bankStatements.reconcile.createLink || 'Create Link'}
-                          </button>
+                          {(() => {
+                            const existingLink = getLinkForTransactionInvoice(transaction.transaction_id, match.invoice_id);
+                            if (existingLink) {
+                              return (
+                                <button
+                                  onClick={() => handleUnlink(existingLink.id)}
+                                  className="px-3 py-1 rounded text-sm border"
+                                  style={{
+                                    background: 'var(--error)',
+                                    borderColor: 'var(--error)',
+                                    color: 'white',
+                                  }}
+                                >
+                                  {t.bankStatements.reconcile.unlink || 'Unlink'}
+                                </button>
+                              );
+                            }
+                            return (
+                              <button
+                                onClick={() => handleCreateSingleLink(transaction.transaction_id, match.invoice_id, match.match_score)}
+                                className="px-3 py-1 rounded text-sm border"
+                                style={{
+                                  background: 'var(--background)',
+                                  borderColor: 'var(--border)',
+                                  color: 'var(--foreground)',
+                                }}
+                              >
+                                {t.bankStatements.reconcile.createLink || 'Create Link'}
+                              </button>
+                            );
+                          })()}
                         </td>
                       </tr>
                       );

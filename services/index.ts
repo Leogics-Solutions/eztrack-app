@@ -60,7 +60,9 @@ export {
   addPayment,
   batchUploadInvoices,
   batchUploadInvoicesMultipart,
+  batchUploadSupportingDocuments,
   getBatchJobStatus,
+  getDocumentBatchJobStatus,
   listBatchJobs,
   downloadInvoiceFile,
   bulkVerifyInvoices,
@@ -74,6 +76,7 @@ export type {
   Invoice,
   InvoiceLineItem,
   BankReconciliation,
+  LinkedDocument,
   UploadInvoiceResponse,
   ListInvoicesParams,
   ListInvoicesResponse,
@@ -123,6 +126,7 @@ export type {
   InvoiceStatisticsResponse,
   InvoiceStatus,
   DocumentType,
+  DocumentDirection,
 } from './InvoiceService';
 
 // Vendor Service
@@ -344,9 +348,12 @@ export type {
   MatchInvoicesResponse,
   MatchInvoicesAcrossStatementsRequest,
   MatchInvoicesAcrossStatementsResponse,
+  InvoiceMatchSummary,
+  InvoiceMatchedTransaction,
   StatementMatchSummary,
   StatementTransactionMatch,
   MatchedInvoiceDetail,
+  SupplierStatementMatch,
   CreateLinkRequest,
   CreateLinkResponse,
   CreateLinksBulkRequest,
@@ -360,3 +367,70 @@ export type {
   ExportBankStatementsRequest,
 } from './BankStatementService';
 
+// Supplier Statement Service
+export {
+  createUploadIntent,
+  confirmUpload,
+  uploadSupplierStatement,
+  listSupplierStatements,
+  getSupplierStatement,
+  getSupplierStatementLineItems,
+  getSupplierNames,
+  deleteSupplierStatement,
+  createSupplierStatementLink,
+  createSupplierStatementLinksBulk,
+  getInvoiceSupplierStatementLinks,
+  deleteSupplierStatementLink,
+} from './SupplierStatementService';
+
+export type {
+  SupplierStatement,
+  SupplierStatementLineItem,
+  UploadIntentRequest,
+  UploadIntentResponse,
+  ConfirmUploadResponse,
+  UploadSupplierStatementResponse,
+  UploadSupplierStatementAsyncResponse,
+  UploadSupplierStatementResult,
+  ListSupplierStatementsParams,
+  ListSupplierStatementsResponse,
+  GetSupplierStatementResponse,
+  GetSupplierStatementLineItemsParams,
+  GetSupplierStatementLineItemsResponse,
+  ListSupplierNamesResponse,
+  DeleteSupplierStatementResponse,
+  SupplierStatementInvoiceLink,
+  CreateSupplierStatementLinkRequest,
+  CreateSupplierStatementLinkResponse,
+  CreateSupplierStatementLinksBulkRequest,
+  CreateSupplierStatementLinksBulkResponse,
+  GetInvoiceSupplierStatementLinksResponse,
+  DeleteSupplierStatementLinkResponse,
+} from './SupplierStatementService';
+
+// Document Service
+export {
+  listDocuments,
+  getDocument,
+  updateDocument,
+  deleteDocument,
+  bulkDeleteDocuments,
+} from './DocumentService';
+
+export type {
+  Document,
+  DocumentTypeInfo,
+  StructuredFields,
+  ExtractedMetadata,
+  DuplicateDocument,
+  ListDocumentsParams,
+  ListDocumentsData,
+  ListDocumentsResponse,
+  GetDocumentResponse,
+  UpdateDocumentRequest,
+  UpdateDocumentResponse,
+  DeleteDocumentResponse,
+  BulkDeleteDocumentsRequest,
+  BulkDeleteDocumentsData,
+  BulkDeleteDocumentsResponse,
+} from './DocumentService';

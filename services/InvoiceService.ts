@@ -6,7 +6,9 @@
 import { BASE_URL } from './config';
 
 // Types
-export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation';
+export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'combined_docs';
+
+export type DocumentDirection = 'AP' | 'AR' | 'NEUTRAL';
 export interface InvoiceLineItem {
   id: number;
   line_number?: number;
@@ -33,6 +35,13 @@ export interface BankReconciliation {
   match_type: 'auto' | 'manual' | 'suggested';
   reconciled_at: string;
   notes?: string | null;
+}
+
+export interface LinkedDocument {
+  id: number;
+  reference_number: string;
+  document_type: string;
+  preview_url?: string | null;
 }
 
 export interface Invoice {
@@ -67,6 +76,44 @@ export interface Invoice {
   // Handwriting detection fields
   is_handwritten?: boolean | null;
   handwriting_clarity?: 'clear' | 'unclear' | 'mixed' | null;
+  // Linked supporting documents
+  linked_documents?: LinkedDocument[] | null;
+  // MYR conversion fields (when invoice currency is not MYR)
+  total_in_myr?: number | null;
+  exchange_rate?: number | null;
+  // Status tracking fields
+  missing_do?: boolean;
+  missing_custom_form?: boolean;
+  is_bank_reconciled?: boolean;
+  // Supplier statement links
+  supplier_statement_links?: Array<{
+    id: number;
+    supplier_statement_line_item_id: number;
+    invoice_id: number;
+    match_type: 'auto' | 'manual';
+    match_score?: number | null;
+    notes?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    line_item?: {
+      id: number;
+      supplier_statement_id: number;
+      transaction_date: string;
+      amount: number;
+      payment_amount?: number | null;
+      is_paid: boolean;
+      payment_date?: string | null;
+      currency?: string;
+    };
+    statement?: {
+      id: number;
+      supplier_name?: string;
+      statement_date_from?: string;
+      statement_date_to?: string;
+      total_amount?: number;
+      currency?: string;
+    };
+  }>;
 }
 
 export interface UploadInvoiceResponse {
@@ -129,6 +176,10 @@ export interface ListInvoicesParams {
   date_range?: 'today' | 'week' | 'month' | 'quarter' | 'year';
   month?: number; // 1–12
   year?: number;
+  // Status filters
+  missing_do?: boolean;
+  missing_custom_form?: boolean;
+  not_bank_reconciled?: boolean;
 }
 
 export interface ListInvoicesData {
@@ -275,6 +326,7 @@ export interface UpdateInvoiceRequest {
   remarks?: string;
   tags?: string;
   currency?: string;
+  exchange_rate?: number;
 }
 
 export interface UpdateInvoiceResponse {
@@ -649,9 +701,16 @@ export interface InvoiceStatisticsRecentActivity {
   created_at: string;
 }
 
+export interface InvoiceStatisticsStatusCounts {
+  missing_do: number;
+  missing_custom_form: number;
+  not_bank_reconciled: number;
+}
+
 export interface InvoiceStatisticsData {
   summary: InvoiceStatisticsSummary;
   status_distribution: Record<string, InvoiceStatisticsStatusBucket>;
+  status_counts?: InvoiceStatisticsStatusCounts;
   top_vendors: InvoiceStatisticsTopVendor[];
   categories: InvoiceStatisticsCategory[];
   monthly_trends: InvoiceStatisticsMonthlyTrend[];
@@ -907,6 +966,15 @@ export async function listInvoices(
   }
   if (params?.year !== undefined) {
     queryParams.append('year', params.year.toString());
+  }
+  if (params?.missing_do !== undefined) {
+    queryParams.append('missing_do', params.missing_do.toString());
+  }
+  if (params?.missing_custom_form !== undefined) {
+    queryParams.append('missing_custom_form', params.missing_custom_form.toString());
+  }
+  if (params?.not_bank_reconciled !== undefined) {
+    queryParams.append('not_bank_reconciled', params.not_bank_reconciled.toString());
   }
 
   const url = `${BASE_URL}/invoices${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1415,6 +1483,113 @@ export async function batchUploadInvoicesMultipart(
   }
 
   return response.json();
+}
+
+/**
+ * Upload multiple supporting documents using multipart form data
+ * POST /documents/batch-upload-multipart
+ * 
+ * This endpoint allows per-file document_type selection and optional direction.
+ * Returns job IDs immediately (202 Accepted) for async processing.
+ * Documents are processed in background and stored as-is (no invoice rows created).
+ */
+export async function batchUploadSupportingDocuments(
+  files: File[],
+  fileMetadata: Array<{
+    document_type: DocumentType;
+    direction?: DocumentDirection;
+  }>,
+  options?: {
+    remark?: string;
+  }
+): Promise<BatchUploadResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  if (files.length !== fileMetadata.length) {
+    throw new Error('Number of files must match number of metadata entries');
+  }
+
+  const formData = new FormData();
+  files.forEach((file, index) => {
+    formData.append('files', file);
+    formData.append('document_types', fileMetadata[index].document_type);
+    if (fileMetadata[index].direction) {
+      formData.append('directions', fileMetadata[index].direction);
+    }
+  });
+
+  const queryParams = new URLSearchParams();
+  if (options?.remark) {
+    queryParams.append('remark', options.remark);
+  }
+
+  const url = `${BASE_URL}/documents/batch-upload-multipart${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  // Accept both 200 (sync) and 202 (async) responses
+  if (!response.ok && response.status !== 202) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload supporting documents');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the status of a single document batch job
+ * GET /documents/batch-jobs/{job_id}
+ */
+export async function getDocumentBatchJobStatus(jobId: string): Promise<GetBatchJobResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    return { success: false, error: { message: 'No access token found' } };
+  }
+
+  try {
+    const response = await fetch(`${BASE_URL}/documents/batch-jobs/${jobId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    // Try to parse json (even for non-2xx)
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const msg =
+        payload?.message ||
+        payload?.error ||
+        payload?.detail ||
+        response.statusText ||
+        'Failed to get document batch job status';
+      return { success: false, error: { message: msg } };
+    }
+
+    return { success: true, data: payload };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        message: error instanceof Error ? error.message : 'Failed to get document batch job status',
+      },
+    };
+  }
 }
 
 /**

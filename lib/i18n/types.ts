@@ -25,7 +25,10 @@ export interface Translations {
   nav: {
     dashboard: string;
     documents: string;
+    supportingDocuments: string;
+    settlementDocuments: string;
     bankStatements: string;
+    supplierStatements: string;
     coaViewer: string;
     accounts: string;
     creditors: string;
@@ -206,6 +209,158 @@ export interface Translations {
       tax: string;
       totalAmount: string;
     };
+    filters: {
+      title: string;
+      toggleFilters: string;
+      dateRange: string;
+      startDate: string;
+      endDate: string;
+      search: string;
+      searchPlaceholder: string;
+      remarkTag: string;
+      allTags: string;
+      vendor: string;
+      allVendors: string;
+      currency: string;
+      allCurrencies: string;
+      status: string;
+      amountRange: string;
+      min: string;
+      max: string;
+      clearAll: string;
+      applyFilters: string;
+    };
+    table: {
+      id: string;
+      vendor: string;
+      invoiceNo: string;
+      date: string;
+      currency: string;
+      total: string;
+      remarkTag: string;
+      uploadedBy: string;
+      verify: string;
+      status: string;
+      actions: string;
+      open: string;
+      delete: string;
+      showing: string;
+      to: string;
+      of: string;
+      invoices: string;
+    };
+    verify: {
+      ok: string;
+      check: string;
+      unknown: string;
+    };
+    vendorInfo: {
+      sst: string;
+      tin: string;
+      reg: string;
+      regNew: string;
+      regOld: string;
+    };
+    pagination: {
+      previous: string;
+      next: string;
+      itemsPerPage: string;
+    };
+    alerts: {
+      selectAtLeastOne: string;
+      deleteConfirm: string;
+      deleteConfirmSingle: string;
+      exportSelectAtLeastOne: string;
+      deleteFailed: string;
+      verifyIndicators: string;
+    };
+  };
+
+  // Supporting Documents
+  supportingDocuments: {
+    title: string;
+    newInvoice: string;
+    batchUpload: string;
+    exportSelected: string;
+    downloadPdf: string;
+    deleteSelected: string;
+    verifySubtotals: string;
+    filters: {
+      title: string;
+      toggleFilters: string;
+      dateRange: string;
+      startDate: string;
+      endDate: string;
+      search: string;
+      searchPlaceholder: string;
+      remarkTag: string;
+      allTags: string;
+      vendor: string;
+      allVendors: string;
+      currency: string;
+      allCurrencies: string;
+      status: string;
+      amountRange: string;
+      min: string;
+      max: string;
+      clearAll: string;
+      applyFilters: string;
+    };
+    table: {
+      id: string;
+      vendor: string;
+      invoiceNo: string;
+      date: string;
+      currency: string;
+      total: string;
+      remarkTag: string;
+      uploadedBy: string;
+      verify: string;
+      status: string;
+      actions: string;
+      open: string;
+      delete: string;
+      showing: string;
+      to: string;
+      of: string;
+      invoices: string;
+    };
+    verify: {
+      ok: string;
+      check: string;
+      unknown: string;
+    };
+    vendorInfo: {
+      sst: string;
+      tin: string;
+      reg: string;
+      regNew: string;
+      regOld: string;
+    };
+    pagination: {
+      previous: string;
+      next: string;
+      itemsPerPage: string;
+    };
+    alerts: {
+      selectAtLeastOne: string;
+      deleteConfirm: string;
+      deleteConfirmSingle: string;
+      exportSelectAtLeastOne: string;
+      deleteFailed: string;
+      verifyIndicators: string;
+    };
+  };
+
+  // Settlement Documents
+  settlementDocuments: {
+    title: string;
+    newInvoice: string;
+    batchUpload: string;
+    exportSelected: string;
+    downloadPdf: string;
+    deleteSelected: string;
+    verifySubtotals: string;
     filters: {
       title: string;
       toggleFilters: string;
@@ -594,6 +749,7 @@ export interface Translations {
       bankName: string;
       period: string;
       transactions: string;
+      matchedTransactions: string;
       currency: string;
       openingBalance: string;
       closingBalance: string;
@@ -601,7 +757,13 @@ export interface Translations {
       view: string;
       delete: string;
       deleteConfirm: string;
+      batchDeleteConfirm: string;
       deleteSuccess: string;
+      batchDeleteSuccess: string;
+      batchDeletePartial: string;
+      selected: string;
+      deleting: string;
+      batchDelete: string;
       showing: string;
       to: string;
       of: string;
@@ -685,6 +847,91 @@ export interface Translations {
       existingLinks: string;
       matchType: string;
       linked: string;
+      unlink: string;
+    };
+  };
+
+  // Supplier Statements
+  supplierStatements: {
+    title: string;
+    description: string;
+    upload: {
+      button: string;
+      title: string;
+      description: string;
+      selectFile: string;
+      selectFiles: string;
+      helpText: string;
+      uploading: string;
+      uploadButton: string;
+      success: string;
+      failed: string;
+    };
+    list: {
+      filters: string;
+      supplierName: string;
+      allSuppliers: string;
+      dateFrom: string;
+      dateTo: string;
+      period: string;
+      lineItems: string;
+      paidUnpaid: string;
+      totalAmount: string;
+      totalPayment: string;
+      accountsReceivable: string;
+      currency: string;
+      actions: string;
+      view: string;
+      delete: string;
+      deleteConfirm: string;
+      deleteSuccess: string;
+      showing: string;
+      to: string;
+      of: string;
+      previous: string;
+      next: string;
+      noStatements: string;
+    };
+    detail: {
+      title: string;
+      backToList: string;
+      delete: string;
+      deleteConfirm: string;
+      deleteSuccess: string;
+      summary: string;
+      supplierName: string;
+      supplierAddress: string;
+      period: string;
+      lineItems: string;
+      totalAmount: string;
+      totalPayment: string;
+      accountsReceivable: string;
+      currency: string;
+      documentPreview: string;
+      filters: string;
+      paymentStatus: string;
+      allStatuses: string;
+      paid: string;
+      unpaid: string;
+      transactionDate: string;
+      customerOrderNo: string;
+      billOfLadingNo: string;
+      amount: string;
+      paymentAmount: string;
+      paymentDate: string;
+      electronicRelease: string;
+      remarks: string;
+      showing: string;
+      to: string;
+      of: string;
+      previous: string;
+      next: string;
+      noLineItems: string;
+      openInNewTab: string;
+      dateFrom: string;
+      dateTo: string;
+      yes: string;
+      no: string;
     };
   };
 }

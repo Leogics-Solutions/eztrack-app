@@ -539,18 +539,20 @@ const BankStatementDetail = () => {
                         {t.bankStatements.detail.balance || 'Balance'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
-                        {t.bankStatements.detail.linked || 'Linked'}
+                        {t.bankStatements.detail.linked || 'Linked Invoice'}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {transactions.map((transaction) => {
-                      const isLinked = links.some(link => link.bank_transaction_id === transaction.id);
+                      const matchingLink = links.find(link => link.bank_transaction_id === transaction.id);
+                      const isLinked = !!matchingLink;
+                      const invoiceLink = transaction.invoice_link;
                       return (
                         <tr
                           key={transaction.id}
                           style={{ borderBottom: '1px solid var(--border)' }}
-                          className={isLinked ? 'bg-green-500/10' : ''}
+                          className={isLinked || invoiceLink ? 'bg-green-500/10' : ''}
                         >
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                             {formatDate(transaction.transaction_date)}
@@ -567,9 +569,36 @@ const BankStatementDetail = () => {
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
                             {formatCurrency(transaction.balance, transaction.currency)}
                           </td>
-                          <td className="py-3 px-4">
-                            {isLinked ? (
-                              <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--success)', color: 'white' }}>
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            {invoiceLink ? (
+                              <div
+                                className="flex flex-col gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  window.open(`/documents/${invoiceLink.invoice_id}`, '_blank', 'noopener,noreferrer');
+                                }}
+                              >
+                                <span className="text-xs px-2 py-1 rounded inline-block" style={{ background: 'var(--success)', color: 'white' }}>
+                                  {invoiceLink.invoice_no}
+                                </span>
+                                <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                  {invoiceLink.vendor_name}
+                                </span>
+                                <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                  {formatCurrency(invoiceLink.invoice_total, invoiceLink.invoice_currency)}
+                                </span>
+                              </div>
+                            ) : isLinked && matchingLink ? (
+                              <span
+                                className="text-xs px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity inline-block"
+                                style={{ background: 'var(--success)', color: 'white' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  window.open(`/documents/${matchingLink.invoice_id}`, '_blank', 'noopener,noreferrer');
+                                }}
+                              >
                                 {t.bankStatements.detail.linked || 'Linked'}
                               </span>
                             ) : (

@@ -5,13 +5,18 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
-import { batchUploadInvoices, batchUploadInvoicesMultipart, getBatchJobStatus, DocumentType } from "@/services";
+import { batchUploadSupportingDocuments, getDocumentBatchJobStatus, DocumentType, DocumentDirection } from "@/services";
+
+interface FileMetadata {
+  document_type: DocumentType;
+  direction?: DocumentDirection;
+}
 
 interface JobProgress {
   jobId: string;
   filename: string;
   status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
-  invoiceId: number | null;
+  documentId: number | null;
   errorMessage: string | null;
 }
 
@@ -20,33 +25,15 @@ interface ResultSummary {
   failed: number;
   failed_files: Array<{
     file: string;
-    type: 'error' | 'duplicate';
+    type: 'error';
     reason: string;
-    extracted?: {
-      vendor_name?: string;
-      invoice_no?: string;
-      invoice_date?: string;
-      total?: number;
-    };
-    duplicate_of?: {
-      id?: number;
-      vendor_name?: string;
-      invoice_no?: string;
-      invoice_date?: string;
-      total?: number;
-      status?: string;
-    };
   }>;
 }
 
-const BatchUpload = () => {
+const SupportingDocumentsBatchUpload = () => {
   const router = useRouter();
   const { t } = useLanguage();
-  const [useOcr, setUseOcr] = useState(true);
-  const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
-  const [documentType, setDocumentType] = useState<DocumentType>('invoice');
-  const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -60,11 +47,15 @@ const BatchUpload = () => {
   const [showResultActions, setShowResultActions] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileMetadata, setFileMetadata] = useState<FileMetadata[]>([]);
+  const [defaultDocumentType, setDefaultDocumentType] = useState<DocumentType>('delivery_order');
+  const [defaultDirection, setDefaultDirection] = useState<DocumentDirection | undefined>(undefined);
   const [jobProgresses, setJobProgresses] = useState<JobProgress[]>([]);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const currentFileStartTimeRef = useRef<number>(0);
+  const isCompletedRef = useRef<boolean>(false);
 
   // Clean up on unmount
   useEffect(() => {
@@ -80,6 +71,32 @@ const BatchUpload = () => {
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles(files);
+    // Initialize metadata for each file with pre-selected default values
+    setFileMetadata(
+      files.map(() => ({
+        document_type: defaultDocumentType,
+        direction: defaultDirection,
+      }))
+    );
+  };
+
+  const applyDefaultsToAll = () => {
+    if (selectedFiles.length === 0) return;
+    setFileMetadata(
+      selectedFiles.map(() => ({
+        document_type: defaultDocumentType,
+        direction: defaultDirection,
+      }))
+    );
+  };
+
+  const updateFileMetadata = (index: number, field: keyof FileMetadata, value: DocumentType | DocumentDirection | undefined) => {
+    const newMetadata = [...fileMetadata];
+    newMetadata[index] = {
+      ...newMetadata[index],
+      [field]: value,
+    };
+    setFileMetadata(newMetadata);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -90,17 +107,11 @@ const BatchUpload = () => {
       return;
     }
 
-    // Validate file types for combined_docs (only PDFs allowed)
-    if (documentType === 'combined_docs') {
-      const invalidFiles = selectedFiles.filter(file => {
-        const fileExtension = file.name.toLowerCase().split('.').pop();
-        return fileExtension !== 'pdf';
-      });
-      
-      if (invalidFiles.length > 0) {
-        alert(`Combined Documents mode only accepts PDF files. Please remove the following non-PDF files:\n${invalidFiles.map(f => f.name).join('\n')}`);
-        return;
-      }
+    // Validate that all files have document_type
+    const invalidFiles = fileMetadata.filter((meta, idx) => !meta.document_type);
+    if (invalidFiles.length > 0) {
+      alert('Please select a document type for all files.');
+      return;
     }
 
     setIsUploading(true);
@@ -114,8 +125,15 @@ const BatchUpload = () => {
     startTimeRef.current = Date.now();
     currentFileStartTimeRef.current = Date.now();
 
+    // Reset completion flag
+    isCompletedRef.current = false;
+
     // Update elapsed time every 100ms
     timingIntervalRef.current = setInterval(() => {
+      // Don't update if already completed
+      if (isCompletedRef.current) {
+        return;
+      }
       const elapsed = ((Date.now() - startTimeRef.current) / 1000).toFixed(1);
       setElapsedTime(elapsed + 's');
 
@@ -124,73 +142,113 @@ const BatchUpload = () => {
     }, 100);
 
     try {
-      // Upload files using batch upload API
+      // Upload files using supporting documents batch upload API
       setProgressText(t.documents.batchUploadPage.preparingUpload);
-      setProgressDetails(
-        uploadMode === 'multipart'
-          ? 'Uploading files to backend...'
-          : 'Requesting presigned URLs → uploading to S3 → confirming...'
-      );
+      setProgressDetails('Uploading supporting documents...');
       
-      const uploadResponse = uploadMode === 'multipart'
-        ? await batchUploadInvoicesMultipart(selectedFiles, {
-            auto_classify: autoClassify,
-            remark: batchRemark || undefined,
-            document_type: documentType,
-          })
-        : await batchUploadInvoices(selectedFiles, {
-            auto_classify: autoClassify,
-            remark: batchRemark || undefined,
-            document_type: documentType,
-          });
+      const uploadResponse = await batchUploadSupportingDocuments(
+        selectedFiles,
+        fileMetadata,
+        {
+          remark: batchRemark || undefined,
+        }
+      );
       
       if (!uploadResponse.success || !uploadResponse.data) {
         throw new Error('Upload failed');
       }
 
-      const jobs = uploadResponse.data.jobs;
+      // Handle both async (jobs) and sync (items) response formats
+      const jobs = uploadResponse.data.jobs || [];
+      const items = (uploadResponse.data as any).items || [];
       const failures = uploadResponse.data.failures || [];
       const totalFiles = uploadResponse.data.total_files ?? selectedFiles.length;
       
-      // Initialize job progresses
+      // If we have items (sync response), mark them as SUCCESS immediately
+      // If we have jobs (async response), mark them as PENDING for polling
       const localFailures: JobProgress[] = failures.map((f, idx) => ({
         jobId: `local-failure:${f.index ?? idx}`,
         filename: f.filename,
         status: 'FAILED',
-        invoiceId: null,
-        errorMessage: f.reason || 'S3 upload failed',
+        documentId: null,
+        errorMessage: f.reason || 'Upload failed',
+      }));
+
+      const syncSuccesses: JobProgress[] = items.map((item: any, idx: number) => ({
+        jobId: `sync-success:${item.document_id ?? idx}`,
+        filename: item.filename,
+        status: 'SUCCESS' as const,
+        documentId: item.document_id ?? null,
+        errorMessage: null,
+      }));
+
+      const asyncJobs: JobProgress[] = jobs.map(job => ({
+        jobId: job.job_id,
+        filename: job.filename,
+        status: 'PENDING' as const,
+        documentId: (job as any).document_id ?? null,
+        errorMessage: null,
       }));
 
       const initialProgresses: JobProgress[] = [
         ...localFailures,
-        ...jobs.map(job => ({
-          jobId: job.job_id,
-          filename: job.filename,
-          status: 'PENDING' as const,
-          invoiceId: (job as any).invoice_id ?? null,
-          errorMessage: null,
-        })),
+        ...syncSuccesses,
+        ...asyncJobs,
       ];
       setJobProgresses(initialProgresses);
 
-      // Start polling for job statuses
+      // If we only have sync successes (no jobs to poll), mark as completed
+      if (items.length > 0 && jobs.length === 0) {
+        setProgress(100);
+        setProgressStatus('completed');
+        setProgressText(t.documents.batchUploadPage.uploadCompleted);
+        setProgressDetails(`Successfully processed ${items.length} file(s)`);
+        setResultSummary({
+          created: items.length,
+          failed: localFailures.length,
+          failed_files: localFailures.map(f => ({
+            file: f.filename,
+            type: 'error' as const,
+            reason: f.errorMessage || 'Upload failed',
+          })),
+        });
+        setShowResultActions(true);
+        
+        // Mark as completed to stop timing updates
+        isCompletedRef.current = true;
+        
+        // Stop timing interval
+        if (timingIntervalRef.current) {
+          clearInterval(timingIntervalRef.current);
+          timingIntervalRef.current = null;
+        }
+        
+        setIsUploading(false);
+        return;
+      }
+
+      // Start polling for job statuses (only if we have async jobs)
+      if (jobs.length === 0) {
+        return; // Already handled sync responses above
+      }
+
       const pollJobs = async () => {
-        const updatedProgresses: JobProgress[] = [...localFailures];
+        const updatedProgresses: JobProgress[] = [...localFailures, ...syncSuccesses];
         let allCompleted = true;
         let runningCount = 0;
-        let successCount = 0;
+        let successCount = syncSuccesses.length;
         let failedCount = localFailures.length;
 
         for (const job of jobs) {
           try {
-            const statusResponse = await getBatchJobStatus(job.job_id);
+            const statusResponse = await getDocumentBatchJobStatus(job.job_id);
             if (statusResponse.success && statusResponse.data?.data) {
               const jobData = statusResponse.data.data;
               updatedProgresses.push({
                 jobId: job.job_id,
-                filename: jobData.original_filename,
+                filename: jobData.original_filename || job.filename,
                 status: jobData.status,
-                invoiceId: jobData.invoice_id,
+                documentId: (jobData as any).document_id || jobData.invoice_id || null,
                 errorMessage: jobData.error_message,
               });
 
@@ -213,7 +271,7 @@ const BatchUpload = () => {
               jobId: job.job_id,
               filename: job.filename,
               status: 'FAILED',
-              invoiceId: null,
+              documentId: null,
               errorMessage: error instanceof Error ? error.message : 'Unknown error',
             });
             failedCount++;
@@ -254,6 +312,9 @@ const BatchUpload = () => {
           });
           setShowResultActions(true);
 
+          // Mark as completed to stop timing updates
+          isCompletedRef.current = true;
+
           // Stop polling and timing
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
@@ -264,6 +325,7 @@ const BatchUpload = () => {
             timingIntervalRef.current = null;
           }
           setIsUploading(false);
+          return; // Exit early to prevent further polling
         }
       };
 
@@ -289,92 +351,139 @@ const BatchUpload = () => {
     }
   };
 
-  const duplicates = resultSummary?.failed_files?.filter(ff => ff && ff.type === 'duplicate') || [];
-  const errors = resultSummary?.failed_files?.filter(ff => !ff || ff.type !== 'duplicate') || [];
-  
   // Get failed jobs from jobProgresses for display
   const failedJobs = jobProgresses.filter(jp => jp.status === 'FAILED');
   const successfulJobs = jobProgresses.filter(jp => jp.status === 'SUCCESS');
+  const errors = resultSummary?.failed_files?.filter(ff => !!ff) || [];
+
+  const documentTypeOptions: { value: DocumentType; label: string }[] = [
+    { value: 'delivery_order', label: 'Delivery Order (DO)' },
+    { value: 'transfer_note', label: 'Transfer Note' },
+    { value: 'purchase_order', label: 'Purchase Order (PO)' },
+    { value: 'payment_voucher', label: 'Payment Voucher' },
+  ];
+
+  const directionOptions: { value: DocumentDirection; label: string }[] = [
+    { value: 'AP', label: 'AP (Accounts Payable)' },
+    { value: 'AR', label: 'AR (Accounts Receivable)' },
+    { value: 'NEUTRAL', label: 'Neutral' },
+  ];
 
   return (
-    <AppLayout pageName={t.documents.batchUploadPage.title}>
+    <AppLayout pageName="Batch Upload Supporting Documents">
       <div className="">
-        <h1 className="text-3xl font-bold mb-6">{t.documents.batchUploadPage.title}</h1>
+        <h1 className="text-3xl font-bold mb-6">Batch Upload Supporting Documents</h1>
 
         <form onSubmit={handleSubmit} className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
+          {/* Default Settings - Pre-select for all files */}
           <div className="mb-6">
-            <label className="flex items-start space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useOcr}
-                onChange={(e) => setUseOcr(e.target.checked)}
-                className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] mt-0.5"
-              />
-              <div>
-                <span className="text-sm font-medium">{t.documents.batchUploadPage.useOCR}</span>
-                <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  {t.documents.batchUploadPage.useOCRDescription}
-                </div>
-              </div>
+            <label className="block text-sm font-medium mb-3">
+              Default Settings (Applied to All Files)
             </label>
-          </div>
-
-          <div className="mb-6">
-            <label className="flex items-start space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoClassify}
-                onChange={(e) => setAutoClassify(e.target.checked)}
-                className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] mt-0.5"
-              />
+            <div className="grid grid-cols-1 gap-4">
               <div>
-                <span className="text-sm font-medium">
-                  {t.documents.batchUploadPage.autoClassify} <span className="text-[var(--muted-foreground)]">(AI)</span>
-                </span>
-                <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  {t.documents.batchUploadPage.autoClassifyDescription}
-                </div>
+                <label className="block text-xs font-medium mb-2 text-[var(--muted-foreground)]">
+                  Default Document Type
+                </label>
+                <select
+                  value={defaultDocumentType}
+                  onChange={(e) => {
+                    setDefaultDocumentType(e.target.value as DocumentType);
+                    // Auto-apply to existing files if any
+                    if (selectedFiles.length > 0) {
+                      setFileMetadata(
+                        selectedFiles.map(() => ({
+                          document_type: e.target.value as DocumentType,
+                          direction: defaultDirection,
+                        }))
+                      );
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                >
+                  {documentTypeOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
-            </label>
-          </div>
-
-          {/* Document Type */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">Document Type</label>
-            <select
-              value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-            >
-              <option value="invoice">Invoice</option>
-              <option value="petty_cash">Petty Cash</option>
-              <option value="claims_compilation">Claims Compilation</option>
-              <option value="combined_docs">Combined Documents</option>
-            </select>
-            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              {documentType === 'combined_docs' 
-                ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
-                : documentType === 'petty_cash'
-                ? 'Petty cash documents skip summary validation.'
-                : documentType === 'claims_compilation'
-                ? 'Claims compilation processes scanned multi-receipt PDFs.'
-                : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
-              }
+            </div>
+            <small className="text-xs text-[var(--muted-foreground)] mt-2 block">
+              This default will be applied to all files when you select them. You can customize individual files in the table below.
             </small>
           </div>
 
           <FileUpload
             onFilesSelect={handleFilesSelect}
             multiple={true}
-            accept={documentType === 'combined_docs' ? '.pdf' : 'image/*,.pdf'}
+            accept="image/*,.pdf"
             required={true}
             label={t.documents.batchUploadPage.selectFiles}
             requiredText={t.documents.batchUploadPage.selectFilesRequired}
-            helpText={documentType === 'combined_docs' 
-              ? 'Only PDF files are accepted for combined document processing.'
-              : t.documents.batchUploadPage.selectFilesHelp
-            }
+            helpText={t.documents.batchUploadPage.selectFilesHelp}
           />
+
+          {/* File Metadata Table */}
+          {selectedFiles.length > 0 && (
+            <div className="mb-6 mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">
+                  Configure Document Types <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={applyDefaultsToAll}
+                  className="text-xs px-3 py-1.5 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] transition-colors"
+                >
+                  Apply Defaults to All
+                </button>
+              </div>
+              <div className="overflow-x-auto border border-[var(--border)] rounded-md">
+                <table className="min-w-full">
+                  <thead className="bg-[var(--muted)]">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">File Name</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">Document Type <span className="text-red-500">*</span></th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">Direction (Optional)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedFiles.map((file, index) => (
+                      <tr key={index} className="border-b border-[var(--border)] hover:bg-[var(--hover-bg)]">
+                        <td className="px-4 py-2 text-sm">{file.name}</td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={fileMetadata[index]?.document_type || defaultDocumentType}
+                            onChange={(e) => updateFileMetadata(index, 'document_type', e.target.value as DocumentType)}
+                            className="w-full px-3 py-1.5 text-sm border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                            required
+                          >
+                            {documentTypeOptions.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={fileMetadata[index]?.direction || ''}
+                            onChange={(e) => updateFileMetadata(index, 'direction', e.target.value ? (e.target.value as DocumentDirection) : undefined)}
+                            className="w-full px-3 py-1.5 text-sm border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                          >
+                            <option value="">-- Not specified --</option>
+                            {directionOptions.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+                Select the document type for each file. Direction is optional and helps categorize the document. Use "Apply Defaults to All" to reset all files to the default settings.
+              </small>
+            </div>
+          )}
 
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">
@@ -394,7 +503,7 @@ const BatchUpload = () => {
 
           <button
             type="submit"
-            disabled={isUploading}
+            disabled={isUploading || selectedFiles.length === 0}
             className="w-full px-4 py-3 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isUploading ? t.documents.batchUploadPage.uploading : t.documents.batchUploadPage.startUpload}
@@ -438,16 +547,6 @@ const BatchUpload = () => {
                       }`}>
                         {job.status}
                       </span>
-                      {job.invoiceId && (
-                        <a
-                          href={`/documents/${job.invoiceId}`}
-                          className="ml-2 text-[var(--primary)] hover:underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          View
-                        </a>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -460,65 +559,6 @@ const BatchUpload = () => {
                 <div className="mb-2 text-sm">
                   {t.documents.batchUploadPage.created}: {resultSummary.created ?? 0} • {t.documents.batchUploadPage.failed}: {resultSummary.failed ?? 0}
                 </div>
-
-                {/* Duplicate Invoices */}
-                {duplicates.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.duplicateInvoices}</h4>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border border-[var(--border)]">
-                        <thead className="bg-gray-100 dark:bg-gray-800">
-                          <tr>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.file}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.vendor}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.invoiceNo}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.date}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.total}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.existing}</th>
-                            <th className="border border-[var(--border)] px-4 py-2 text-left text-xs font-medium">{t.documents.batchUploadPage.action}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {duplicates.map((ff, idx) => {
-                            const file = ff.file || '<unknown>';
-                            const ex = ff.extracted || {};
-                            const du = ff.duplicate_of || {};
-                            const exVendor = ex.vendor_name || du.vendor_name || '-';
-                            const exNo = ex.invoice_no || du.invoice_no || '-';
-                            const exDate = ex.invoice_date || du.invoice_date || '-';
-                            const exTotal = (ex.total != null ? ex.total : (du.total != null ? du.total : '-'));
-                            const existingLabel = du.id ? `#${du.id} (${du.status || '-'})` : '-';
-
-                            return (
-                              <tr key={idx}>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">{file}</td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">{exVendor}</td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">{exNo}</td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">{exDate}</td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">
-                                  {exTotal !== '-' ? Number(exTotal).toFixed(2) : '-'}
-                                </td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">{existingLabel}</td>
-                                <td className="border border-[var(--border)] px-4 py-2 text-xs">
-                                  {du.id && (
-                                    <a
-                                      href={`/documents/${du.id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[var(--primary)] hover:underline"
-                                    >
-                                      {t.documents.batchUploadPage.open}
-                                    </a>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
 
                 {/* Other Errors */}
                 {errors.length > 0 && (
@@ -540,10 +580,10 @@ const BatchUpload = () => {
             {showResultActions && (
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => router.push('/documents')}
+                  onClick={() => router.push('/supporting-documents')}
                   className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors font-medium text-sm"
                 >
-                  {t.documents.batchUploadPage.goToDocuments}
+                  Go to Supporting Documents
                 </button>
                 <button
                   onClick={() => {}}
@@ -568,14 +608,15 @@ const BatchUpload = () => {
         )}
 
         <p className="mt-6 text-sm text-[var(--muted-foreground)]">
-          <strong>{t.documents.batchUploadPage.tips}</strong>
-          <br />- {t.documents.batchUploadPage.tip1}
-          <br />- {t.documents.batchUploadPage.tip2}
-          <br />- {t.documents.batchUploadPage.tip3}
+          <strong>Tips:</strong>
+          <br />- Select the appropriate document type for each file. This helps the system process documents correctly.
+          <br />- Direction is optional and helps categorize documents (AP for accounts payable, AR for accounts receivable).
+          <br />- Documents are stored as-is without creating invoice rows.
         </p>
       </div>
     </AppLayout>
   );
 };
 
-export default BatchUpload;
+export default SupportingDocumentsBatchUpload;
+
