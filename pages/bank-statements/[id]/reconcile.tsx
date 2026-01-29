@@ -620,7 +620,9 @@ const BankReconciliation = () => {
                 </thead>
                 <tbody>
                   {matchResults.map((transaction) =>
-                    transaction.matches.map((match, idx) => {
+                    transaction.matches
+                      .filter((match) => match.confidence === 'high' || match.confidence === 'medium')
+                      .map((match, idx) => {
                       const invoice = invoices.find(inv => inv.id === match.invoice_id);
                       return (
                       <tr key={`${transaction.transaction_id}-${match.invoice_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)' }}>

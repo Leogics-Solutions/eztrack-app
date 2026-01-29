@@ -1918,7 +1918,9 @@ const DocumentsListing = () => {
                                     <span className="text-sm text-[var(--muted-foreground)]">No invoice matches</span>
                                   ) : (
                                     <div className="space-y-2">
-                                      {transaction.matched_invoices.map((inv) => {
+                                      {transaction.matched_invoices
+                                        .filter((inv) => inv.match_confidence === 'high' || inv.match_confidence === 'medium')
+                                        .map((inv) => {
                                         const linkKey = `${transaction.transaction_id}-${inv.invoice_id}`;
                                         const isCreating = creatingLinkIds.has(linkKey);
                                         const allocatedAmount = toNumber(inv.allocated_amount) ?? toNumber(inv.converted_total) ?? toNumber(inv.invoice_total) ?? 0;
@@ -2080,7 +2082,9 @@ const DocumentsListing = () => {
                         <div className="p-4 text-sm text-[var(--muted-foreground)]">No matched transactions.</div>
                       ) : (
                         <div className="p-4 space-y-2">
-                          {invoice.matched_transactions.map((tx) => {
+                          {invoice.matched_transactions
+                            .filter((tx) => tx.match_confidence === 'high' || tx.match_confidence === 'medium')
+                            .map((tx) => {
                             const linkKey = `${tx.transaction_id}-${invoice.invoice_id}`;
                             const isCreating = creatingLinkIds.has(linkKey);
                             const allocatedAmount = toNumber(tx.allocated_amount) ?? toNumber(tx.transaction_amount) ?? 0;

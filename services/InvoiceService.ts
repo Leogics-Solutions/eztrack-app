@@ -6,7 +6,7 @@
 import { BASE_URL } from './config';
 
 // Types
-export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'combined_docs';
+export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs';
 
 export type DocumentDirection = 'AP' | 'AR' | 'NEUTRAL';
 export interface InvoiceLineItem {
@@ -1498,6 +1498,7 @@ export async function batchUploadSupportingDocuments(
   fileMetadata: Array<{
     document_type: DocumentType;
     direction?: DocumentDirection;
+    invoice_number?: string;
   }>,
   options?: {
     remark?: string;
@@ -1519,6 +1520,9 @@ export async function batchUploadSupportingDocuments(
     formData.append('document_types', fileMetadata[index].document_type);
     if (fileMetadata[index].direction) {
       formData.append('directions', fileMetadata[index].direction);
+    }
+    if (fileMetadata[index].invoice_number) {
+      formData.append('invoice_numbers', fileMetadata[index].invoice_number);
     }
   });
 

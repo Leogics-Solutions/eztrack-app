@@ -10,6 +10,7 @@ import { batchUploadSupportingDocuments, getDocumentBatchJobStatus, DocumentType
 interface FileMetadata {
   document_type: DocumentType;
   direction?: DocumentDirection;
+  invoice_number?: string;
 }
 
 interface JobProgress {
@@ -76,6 +77,7 @@ const SupportingDocumentsBatchUpload = () => {
       files.map(() => ({
         document_type: defaultDocumentType,
         direction: defaultDirection,
+        invoice_number: undefined,
       }))
     );
   };
@@ -83,14 +85,15 @@ const SupportingDocumentsBatchUpload = () => {
   const applyDefaultsToAll = () => {
     if (selectedFiles.length === 0) return;
     setFileMetadata(
-      selectedFiles.map(() => ({
+      selectedFiles.map((_, index) => ({
         document_type: defaultDocumentType,
         direction: defaultDirection,
+        invoice_number: fileMetadata[index]?.invoice_number, // Preserve existing invoice numbers
       }))
     );
   };
 
-  const updateFileMetadata = (index: number, field: keyof FileMetadata, value: DocumentType | DocumentDirection | undefined) => {
+  const updateFileMetadata = (index: number, field: keyof FileMetadata, value: DocumentType | DocumentDirection | string | undefined) => {
     const newMetadata = [...fileMetadata];
     newMetadata[index] = {
       ...newMetadata[index],
@@ -361,6 +364,9 @@ const SupportingDocumentsBatchUpload = () => {
     { value: 'transfer_note', label: 'Transfer Note' },
     { value: 'purchase_order', label: 'Purchase Order (PO)' },
     { value: 'payment_voucher', label: 'Payment Voucher' },
+    { value: 'custom_form', label: 'Custom Form' },
+    { value: 'bill_of_lading', label: 'Bill of Lading' },
+    { value: 'auto', label: 'Auto-detect' },
   ];
 
   const directionOptions: { value: DocumentDirection; label: string }[] = [
@@ -392,9 +398,10 @@ const SupportingDocumentsBatchUpload = () => {
                     // Auto-apply to existing files if any
                     if (selectedFiles.length > 0) {
                       setFileMetadata(
-                        selectedFiles.map(() => ({
+                        selectedFiles.map((_, index) => ({
                           document_type: e.target.value as DocumentType,
                           direction: defaultDirection,
+                          invoice_number: fileMetadata[index]?.invoice_number, // Preserve existing invoice numbers
                         }))
                       );
                     }
@@ -444,6 +451,7 @@ const SupportingDocumentsBatchUpload = () => {
                       <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">File Name</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">Document Type <span className="text-red-500">*</span></th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">Direction (Optional)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-[var(--foreground)] border-b border-[var(--border)]">Invoice Number (Optional)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -474,13 +482,22 @@ const SupportingDocumentsBatchUpload = () => {
                             ))}
                           </select>
                         </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            value={fileMetadata[index]?.invoice_number || ''}
+                            onChange={(e) => updateFileMetadata(index, 'invoice_number', e.target.value || undefined)}
+                            placeholder="Enter invoice number"
+                            className="w-full px-3 py-1.5 text-sm border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-                Select the document type for each file. Direction is optional and helps categorize the document. Use "Apply Defaults to All" to reset all files to the default settings.
+                Select the document type for each file. Direction is optional and helps categorize the document. Invoice number is optional - if provided, the document will be linked to the specified invoice. Use "Apply Defaults to All" to reset all files to the default settings.
               </small>
             </div>
           )}
