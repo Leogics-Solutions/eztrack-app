@@ -1430,10 +1430,68 @@ export async function batchUploadInvoices(
 }
 
 /**
+ * Upload a single invoice file using backend multipart streaming (no S3 direct PUT from browser)
+ * POST /invoices/upload-multipart
+ *
+ * This endpoint accepts a single file and returns a job ID for async processing.
+ * Use this for sequential uploads to avoid 413 Payload Too Large errors.
+ */
+export async function uploadInvoiceMultipart(
+  file: File,
+  options?: {
+    auto_classify?: boolean;
+    remark?: string;
+    document_type?: DocumentType;
+  }
+): Promise<BatchUploadResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const queryParams = new URLSearchParams();
+  if (options?.auto_classify !== undefined) {
+    queryParams.append('auto_classify', String(options.auto_classify));
+  }
+  if (options?.remark) {
+    queryParams.append('remark', options.remark);
+  }
+  if (options?.document_type) {
+    queryParams.append('document_type', options.document_type);
+  }
+
+  const url = `${BASE_URL}/invoices/upload-multipart${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  // Accept both 200 (sync) and 202 (async) responses
+  if (!response.ok && response.status !== 202) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to upload invoice');
+  }
+
+  return response.json();
+}
+
+/**
  * Upload multiple invoice files using backend multipart streaming (no S3 direct PUT from browser)
  * POST /invoices/batch-upload-multipart
  *
  * This is useful for local dev when S3 CORS is not configured, or when you want the backend to handle S3 upload.
+ * 
+ * Note: If you encounter 413 Payload Too Large errors, use uploadInvoiceMultipart() sequentially instead.
  */
 export async function batchUploadInvoicesMultipart(
   files: File[],
@@ -1479,7 +1537,11 @@ export async function batchUploadInvoicesMultipart(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.message || error.error || 'Failed to upload invoices');
+    const errorMessage = error.message || error.error || 'Failed to upload invoices';
+    // Include status code in error for better error handling
+    const errorWithStatus = new Error(errorMessage);
+    (errorWithStatus as any).status = response.status;
+    throw errorWithStatus;
   }
 
   return response.json();

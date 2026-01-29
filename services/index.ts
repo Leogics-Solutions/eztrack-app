@@ -60,6 +60,7 @@ export {
   addPayment,
   batchUploadInvoices,
   batchUploadInvoicesMultipart,
+  uploadInvoiceMultipart,
   batchUploadSupportingDocuments,
   getBatchJobStatus,
   getDocumentBatchJobStatus,

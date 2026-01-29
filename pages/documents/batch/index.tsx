@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
-import { batchUploadInvoices, batchUploadInvoicesMultipart, getBatchJobStatus, DocumentType } from "@/services";
+import { batchUploadInvoices, batchUploadInvoicesMultipart, uploadInvoiceMultipart, getBatchJobStatus, DocumentType } from "@/services";
 
 interface JobProgress {
   jobId: string;
@@ -132,25 +132,103 @@ const BatchUpload = () => {
           : 'Requesting presigned URLs → uploading to S3 → confirming...'
       );
       
-      const uploadResponse = uploadMode === 'multipart'
-        ? await batchUploadInvoicesMultipart(selectedFiles, {
-            auto_classify: autoClassify,
-            remark: batchRemark || undefined,
-            document_type: documentType,
-          })
-        : await batchUploadInvoices(selectedFiles, {
+      let uploadResponse: any;
+      let jobs: any[] = [];
+      let failures: any[] = [];
+      let totalFiles = selectedFiles.length;
+
+      if (uploadMode === 'multipart') {
+        // For multipart mode, use sequential uploads to avoid 413 errors
+        try {
+          // Try batch upload first
+          uploadResponse = await batchUploadInvoicesMultipart(selectedFiles, {
             auto_classify: autoClassify,
             remark: batchRemark || undefined,
             document_type: documentType,
           });
-      
-      if (!uploadResponse.success || !uploadResponse.data) {
-        throw new Error('Upload failed');
-      }
+          
+          if (uploadResponse.success && uploadResponse.data) {
+            jobs = uploadResponse.data.jobs || [];
+            failures = uploadResponse.data.failures || [];
+            totalFiles = uploadResponse.data.total_files ?? selectedFiles.length;
+          } else {
+            throw new Error('Upload failed');
+          }
+        } catch (error: any) {
+          // If we get a 413 error or any error, fall back to sequential uploads
+          const is413Error = error.status === 413 || 
+                           error.message?.includes('413') || 
+                           error.message?.toLowerCase().includes('payload too large') ||
+                           error.message?.toLowerCase().includes('request entity too large');
+          
+          if (is413Error || error.message) {
+            setProgressDetails(
+              is413Error 
+                ? 'Batch upload too large, uploading files sequentially...'
+                : 'Upload failed, retrying files sequentially...'
+            );
+            
+            // Upload files sequentially
+            const sequentialJobs: any[] = [];
+            const sequentialFailures: any[] = [];
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+              const file = selectedFiles[i];
+              setProgressDetails(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
+              
+              try {
+                const singleFileResponse = await uploadInvoiceMultipart(file, {
+                  auto_classify: autoClassify,
+                  remark: batchRemark || undefined,
+                  document_type: documentType,
+                });
+                
+                if (singleFileResponse.success && singleFileResponse.data) {
+                  const fileJobs = singleFileResponse.data.jobs || [];
+                  const fileFailures = singleFileResponse.data.failures || [];
+                  sequentialJobs.push(...fileJobs);
+                  sequentialFailures.push(...fileFailures);
+                } else {
+                  sequentialFailures.push({
+                    filename: file.name,
+                    file_type: file.type || 'unknown',
+                    reason: 'Upload failed',
+                    index: i,
+                  });
+                }
+              } catch (fileError: any) {
+                sequentialFailures.push({
+                  filename: file.name,
+                  file_type: file.type || 'unknown',
+                  reason: fileError.message || 'Upload failed',
+                  index: i,
+                });
+              }
+            }
+            
+            jobs = sequentialJobs;
+            failures = sequentialFailures;
+            totalFiles = selectedFiles.length;
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        // S3 mode - use batch upload
+        uploadResponse = await batchUploadInvoices(selectedFiles, {
+          auto_classify: autoClassify,
+          remark: batchRemark || undefined,
+          document_type: documentType,
+        });
+        
+        if (!uploadResponse.success || !uploadResponse.data) {
+          throw new Error('Upload failed');
+        }
 
-      const jobs = uploadResponse.data.jobs;
-      const failures = uploadResponse.data.failures || [];
-      const totalFiles = uploadResponse.data.total_files ?? selectedFiles.length;
+        jobs = uploadResponse.data.jobs;
+        failures = uploadResponse.data.failures || [];
+        totalFiles = uploadResponse.data.total_files ?? selectedFiles.length;
+      }
       
       // Initialize job progresses
       const localFailures: JobProgress[] = failures.map((f, idx) => ({
