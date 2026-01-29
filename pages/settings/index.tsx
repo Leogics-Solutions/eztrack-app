@@ -900,16 +900,6 @@ const SettingsPage = () => {
                                         </button>
                                     </div>
                                 </div>
-
-                                {/* Member Since */}
-                                <div className="group hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] p-3 rounded-md transition-colors">
-                                    <div className="text-xs font-semibold uppercase tracking-wide mb-1 group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
-                                        {t.settings.memberSince}
-                                    </div>
-                                    <div className="font-medium">
-                                        January 2024
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
