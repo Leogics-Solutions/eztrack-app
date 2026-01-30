@@ -428,6 +428,7 @@ const BatchUpload = () => {
               <option value="petty_cash">Petty Cash</option>
               <option value="claims_compilation">Claims Compilation</option>
               <option value="combined_docs">Combined Documents</option>
+              <option value="handwritten_invoice">Handwriting Invoice</option>
             </select>
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
               {documentType === 'combined_docs' 
@@ -436,6 +437,8 @@ const BatchUpload = () => {
                 ? 'Petty cash documents skip summary validation.'
                 : documentType === 'claims_compilation'
                 ? 'Claims compilation processes scanned multi-receipt PDFs.'
+                : documentType === 'handwritten_invoice'
+                ? 'Handwriting Invoice: Processes handwritten invoices using specialized OCR and arithmetic reconciliation workflows.'
                 : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
               }
             </small>

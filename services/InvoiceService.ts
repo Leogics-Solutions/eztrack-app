@@ -6,7 +6,7 @@
 import { BASE_URL } from './config';
 
 // Types
-export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs';
+export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs' | 'handwritten_invoice';
 
 export type DocumentDirection = 'AP' | 'AR' | 'NEUTRAL';
 export interface InvoiceLineItem {
