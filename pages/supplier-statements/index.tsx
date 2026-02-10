@@ -28,6 +28,7 @@ const SupplierStatementsList = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [supplierName, setSupplierName] = useState<string>('');
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
@@ -98,6 +99,12 @@ const SupplierStatementsList = () => {
     setSelectedFiles(files);
   };
 
+  const handleCloseModal = () => {
+    setShowUploadModal(false);
+    setSelectedFiles([]);
+    setSupplierName('');
+  };
+
   const handleUpload = async () => {
     if (selectedFiles.length === 0) {
       showToast(t.supplierStatements?.upload?.selectFile || 'Please select at least one file', { type: 'error' });
@@ -108,8 +115,9 @@ const SupplierStatementsList = () => {
 
     try {
       // Upload files one by one (can be enhanced to support batch upload if API supports it)
+      const nameToUse = supplierName.trim() || undefined;
       for (const file of selectedFiles) {
-        await uploadSupplierStatement(file, false);
+        await uploadSupplierStatement(file, false, nameToUse);
       }
 
       showToast(
@@ -117,8 +125,7 @@ const SupplierStatementsList = () => {
         { type: 'success' }
       );
       
-      setShowUploadModal(false);
-      setSelectedFiles([]);
+      handleCloseModal();
       await loadStatements();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to upload supplier statement';
@@ -447,11 +454,11 @@ const SupplierStatementsList = () => {
         <>
           <div
             className="fixed inset-0 z-[9998] bg-black/50"
-            onClick={() => setShowUploadModal(false)}
+            onClick={handleCloseModal}
           />
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
-            onClick={() => setShowUploadModal(false)}
+            onClick={handleCloseModal}
           >
             <div
               className="bg-[var(--card)] rounded-lg border max-w-2xl w-full p-6 my-auto"
@@ -467,7 +474,7 @@ const SupplierStatementsList = () => {
                   {t.supplierStatements?.upload?.title || 'Upload Supplier Statement'}
                 </h2>
                 <button
-                  onClick={() => setShowUploadModal(false)}
+                  onClick={handleCloseModal}
                   className="p-2 rounded hover:bg-[var(--muted)]"
                   style={{ color: 'var(--foreground)' }}
                 >
@@ -475,18 +482,53 @@ const SupplierStatementsList = () => {
                 </button>
               </div>
               <p className="mb-4 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                {t.supplierStatements?.upload?.description || 'Upload PDF or image files of your supplier statements. The system will automatically extract line items. You can upload multiple files at once.'}
+                {t.supplierStatements?.upload?.description || 'Upload PDF, image, or Excel files of your supplier statements. The system will automatically extract line items. You can upload multiple files at once.'}
               </p>
 
               <FileUpload
                 onFilesSelect={handleFilesSelect}
                 multiple={true}
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"
                 required
                 label={t.supplierStatements?.upload?.selectFiles || 'Select Files'}
-                helpText={t.supplierStatements?.upload?.helpText || 'PDF files or images (PNG, JPG, JPEG). You can select multiple files.'}
+                helpText={t.supplierStatements?.upload?.helpText || 'PDF files, images (PNG, JPG, JPEG), or Excel files (XLSX, XLS). You can select multiple files.'}
                 autoUpload={false}
               />
+
+              {/* Supplier Name Input */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                  {t.supplierStatements?.upload?.supplierName || 'Supplier Name'}
+                  <span className="text-xs ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                    ({t.supplierStatements?.upload?.optional || 'optional'})
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                    placeholder={t.supplierStatements?.upload?.supplierNamePlaceholder || 'Enter supplier name (will override OCR if provided)'}
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{
+                      background: 'var(--background)',
+                      borderColor: 'var(--border)',
+                      color: 'var(--foreground)',
+                    }}
+                    list="supplier-names-list"
+                  />
+                  {supplierNames.length > 0 && (
+                    <datalist id="supplier-names-list">
+                      {supplierNames.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                  )}
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                  {t.supplierStatements?.upload?.supplierNameHelp || 'If provided, this will be used instead of the OCR-extracted supplier name.'}
+                </p>
+              </div>
 
               {/* Upload Button */}
               <div className="mt-4">

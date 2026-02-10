@@ -46,6 +46,8 @@ const BatchUpload = () => {
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
   const [documentType, setDocumentType] = useState<DocumentType>('invoice');
+  const [documentCategory, setDocumentCategory] = useState<string>('invoice');
+  const [documentSubCategory, setDocumentSubCategory] = useState<string>('');
   const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
@@ -80,6 +82,40 @@ const BatchUpload = () => {
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles(files);
+  };
+
+  // Handle document category change
+  const handleCategoryChange = (category: string) => {
+    setDocumentCategory(category);
+    setDocumentSubCategory('');
+    
+    // Map category to document type
+    if (category === 'petty_cash') {
+      setDocumentType('petty_cash');
+    } else if (category === 'claims_compilation') {
+      setDocumentType('claims_compilation');
+    } else {
+      setDocumentType(category as DocumentType);
+    }
+  };
+
+  // Handle document sub-category change
+  const handleSubCategoryChange = (subCategory: string) => {
+    setDocumentSubCategory(subCategory);
+    
+    // Keep document_type as base category (petty_cash or claims_compilation)
+    // The sub-category will be passed separately as document_sub_type
+    // This aligns with backend which expects: document_type + document_sub_type
+    if (subCategory === '') {
+      // Reset to base category type
+      if (documentCategory === 'petty_cash') {
+        setDocumentType('petty_cash');
+      } else if (documentCategory === 'claims_compilation') {
+        setDocumentType('claims_compilation');
+      }
+    }
+    // documentType stays as the base category (petty_cash or claims_compilation)
+    // documentSubCategory will be passed separately to backend
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -145,6 +181,7 @@ const BatchUpload = () => {
             auto_classify: autoClassify,
             remark: batchRemark || undefined,
             document_type: documentType,
+            document_sub_type: documentSubCategory || undefined,
           });
           
           if (uploadResponse.success && uploadResponse.data) {
@@ -181,6 +218,7 @@ const BatchUpload = () => {
                   auto_classify: autoClassify,
                   remark: batchRemark || undefined,
                   document_type: documentType,
+                  document_sub_type: documentSubCategory || undefined,
                 });
                 
                 if (singleFileResponse.success && singleFileResponse.data) {
@@ -219,6 +257,7 @@ const BatchUpload = () => {
           auto_classify: autoClassify,
           remark: batchRemark || undefined,
           document_type: documentType,
+          document_sub_type: documentSubCategory || undefined,
         });
         
         if (!uploadResponse.success || !uploadResponse.data) {
@@ -419,22 +458,52 @@ const BatchUpload = () => {
           {/* Document Type */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Document Type</label>
-            <select
-              value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-            >
-              <option value="invoice">Invoice</option>
-              <option value="petty_cash">Petty Cash</option>
-              <option value="claims_compilation">Claims Compilation</option>
-              <option value="combined_docs">Combined Documents</option>
-              <option value="handwritten_invoice">Handwriting Invoice</option>
-            </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <select
+                  value={documentCategory}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                >
+                  <option value="invoice">Invoice</option>
+                  <option value="petty_cash">Petty Cash</option>
+                  <option value="claims_compilation">Claims Compilation</option>
+                  <option value="combined_docs">Combined Documents</option>
+                  <option value="handwritten_invoice">Handwriting Invoice</option>
+                </select>
+              </div>
+              {(documentCategory === 'petty_cash' || documentCategory === 'claims_compilation') && (
+                <div>
+                  <select
+                    value={documentSubCategory}
+                    onChange={(e) => handleSubCategoryChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                  >
+                    <option value="">Select sub-category...</option>
+                    {documentCategory === 'petty_cash' && (
+                      <option value="summary">Summary Petty Cash</option>
+                    )}
+                    {documentCategory === 'claims_compilation' && (
+                      <>
+                        <option value="director">Director Claims</option>
+                        <option value="staff">Staff Claims</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
               {documentType === 'combined_docs' 
                 ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
+                : documentType === 'petty_cash' && documentSubCategory === 'summary'
+                ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
                 : documentType === 'petty_cash'
                 ? 'Petty cash documents skip summary validation.'
+                : documentType === 'claims_compilation' && documentSubCategory === 'director'
+                ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
+                : documentType === 'claims_compilation' && documentSubCategory === 'staff'
+                ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
                 : documentType === 'claims_compilation'
                 ? 'Claims compilation processes scanned multi-receipt PDFs.'
                 : documentType === 'handwritten_invoice'

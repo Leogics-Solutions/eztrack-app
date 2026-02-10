@@ -321,6 +321,7 @@ export {
   getAccountNumbers,
   reprocessTransactions,
   exportBankStatementsCsv,
+  exportBankStatementsExcel,
   isAsyncUploadResponse,
 } from './BankStatementService';
 
@@ -366,6 +367,8 @@ export type {
   ReprocessTransactionsResponse,
   ExportBankStatementsCsvResponse,
   ExportBankStatementsRequest,
+  ExportBankStatementsExcelResponse,
+  ExportBankStatementsExcelRequest,
 } from './BankStatementService';
 
 // Supplier Statement Service

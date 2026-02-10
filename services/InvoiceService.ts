@@ -6,7 +6,7 @@
 import { BASE_URL } from './config';
 
 // Types
-export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'claims_compilation' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs' | 'handwritten_invoice';
+export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'petty_cash_summary' | 'claims_compilation' | 'claims_compilation_director' | 'claims_compilation_staff' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs' | 'handwritten_invoice';
 
 export type DocumentDirection = 'AP' | 'AR' | 'NEUTRAL';
 export interface InvoiceLineItem {
@@ -749,6 +749,7 @@ export async function uploadInvoice(
   options?: { 
     auto_classify?: boolean;
     document_type?: DocumentType;
+    document_sub_type?: string;
   }
 ): Promise<UploadInvoiceResponse> {
   const token = getAccessToken();
@@ -765,6 +766,9 @@ export async function uploadInvoice(
   }
   if (options?.document_type) {
     queryParams.append('document_type', options.document_type);
+  }
+  if (options?.document_sub_type) {
+    queryParams.append('document_sub_type', options.document_sub_type);
   }
 
   const url = `${BASE_URL}/invoices/upload${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1355,6 +1359,7 @@ export async function batchUploadInvoices(
     auto_classify?: boolean;
     remark?: string;
     document_type?: DocumentType;
+    document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
   const token = getAccessToken();
@@ -1442,6 +1447,7 @@ export async function uploadInvoiceMultipart(
     auto_classify?: boolean;
     remark?: string;
     document_type?: DocumentType;
+    document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
   const token = getAccessToken();
@@ -1462,6 +1468,9 @@ export async function uploadInvoiceMultipart(
   }
   if (options?.document_type) {
     queryParams.append('document_type', options.document_type);
+  }
+  if (options?.document_sub_type) {
+    queryParams.append('document_sub_type', options.document_sub_type);
   }
 
   const url = `${BASE_URL}/invoices/upload-multipart${
@@ -1499,6 +1508,7 @@ export async function batchUploadInvoicesMultipart(
     auto_classify?: boolean;
     remark?: string;
     document_type?: DocumentType;
+    document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
   const token = getAccessToken();
@@ -1521,6 +1531,9 @@ export async function batchUploadInvoicesMultipart(
   }
   if (options?.document_type) {
     queryParams.append('document_type', options.document_type);
+  }
+  if (options?.document_sub_type) {
+    queryParams.append('document_sub_type', options.document_sub_type);
   }
 
   const url = `${BASE_URL}/invoices/batch-upload-multipart${

@@ -1515,6 +1515,30 @@ const DocumentsListing = () => {
                     selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''
                   }`}
             </button>
+            {isBusinessCentralEnabled && (
+              <button
+                onClick={handlePushToBusinessCentral}
+                disabled={selectedInvoices.size === 0 || isPushingToBC}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isPushingToBC ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Pushing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                    </svg>
+                    Push to Business Central{selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''}
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={bulkDelete}
               disabled={selectedInvoices.size === 0}
@@ -1975,38 +1999,76 @@ const DocumentsListing = () => {
                     type="button"
                     onClick={handleCreateAllLinks}
                     disabled={isCreatingLinks}
-                    className="px-4 py-2 text-sm bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 text-base font-medium bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isCreatingLinks ? 'Creating Links...' : 'Create All Links'}
+                    {isCreatingLinks ? 'Creating Bank Links...' : 'Create All Bank Links'}
                   </button>
                   <button
                     type="button"
                     onClick={handleCreateAllSupplierStatementLinks}
                     disabled={isCreatingSupplierLinks}
-                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 text-base font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreatingSupplierLinks ? 'Creating Supplier Links...' : 'Create All Supplier Links'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="p-3 rounded-md border border-[var(--border)]">
-                    <div className="text-xs text-[var(--muted-foreground)]">Total Invoices</div>
-                    <div className="text-lg font-semibold">{reconReport.total_invoices}</div>
-                  </div>
-                  <div className="p-3 rounded-md border border-[var(--border)]">
-                    <div className="text-xs text-[var(--muted-foreground)]">Matched Invoices</div>
-                    <div className="text-lg font-semibold">{reconReport.matched_invoices}</div>
-                  </div>
-                  <div className="p-3 rounded-md border border-[var(--border)]">
-                    <div className="text-xs text-[var(--muted-foreground)]">Unmatched Invoices</div>
-                    <div className="text-lg font-semibold">{reconReport.unmatched_invoices}</div>
-                  </div>
-                  <div className="p-3 rounded-md border border-[var(--border)]">
-                    <div className="text-xs text-[var(--muted-foreground)]">Statements Searched</div>
-                    <div className="text-lg font-semibold">{reconReport.statements_searched}</div>
-                  </div>
-                </div>
+                {(() => {
+                  // Calculate actual matched invoices including supplier statement matches
+                  let actualMatchedInvoices = 0;
+                  if (reconReport.invoice_matches) {
+                    reconReport.invoice_matches.forEach((invoice) => {
+                      const invoiceAny = invoice as any;
+                      const hasBankMatches = invoice.matched || (invoice.matched_transactions && invoice.matched_transactions.length > 0);
+                      const hasSupplierMatches = invoiceAny.supplier_statement_matches && 
+                        Array.isArray(invoiceAny.supplier_statement_matches) && 
+                        invoiceAny.supplier_statement_matches.length > 0;
+                      if (hasBankMatches || hasSupplierMatches) {
+                        actualMatchedInvoices++;
+                      }
+                    });
+                  }
+                  // Also check statement matches for any invoices that might not be in invoice_matches
+                  reconReport.statement_matches.forEach((statement) => {
+                    statement.matches.forEach((transaction) => {
+                      transaction.matched_invoices.forEach((inv) => {
+                        const invAny = inv as any;
+                        const hasSupplierMatches = invAny.supplier_statement_matches && 
+                          Array.isArray(invAny.supplier_statement_matches) && 
+                          invAny.supplier_statement_matches.length > 0;
+                        if (hasSupplierMatches) {
+                          // Check if this invoice is already counted
+                          const alreadyCounted = reconReport.invoice_matches?.some(im => im.invoice_id === inv.invoice_id);
+                          if (!alreadyCounted) {
+                            actualMatchedInvoices++;
+                          }
+                        }
+                      });
+                    });
+                  });
+                  const actualUnmatchedInvoices = reconReport.total_invoices - actualMatchedInvoices;
+                  
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="p-3 rounded-md border border-[var(--border)]">
+                        <div className="text-xs text-[var(--muted-foreground)]">Total Invoices</div>
+                        <div className="text-lg font-semibold">{reconReport.total_invoices}</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-[var(--border)]">
+                        <div className="text-xs text-[var(--muted-foreground)]">Matched Invoices</div>
+                        <div className="text-lg font-semibold">{actualMatchedInvoices}</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-[var(--border)]">
+                        <div className="text-xs text-[var(--muted-foreground)]">Unmatched Invoices</div>
+                        <div className="text-lg font-semibold">{actualUnmatchedInvoices}</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-[var(--border)]">
+                        <div className="text-xs text-[var(--muted-foreground)]">Statements Searched</div>
+                        <div className="text-lg font-semibold">{reconReport.statements_searched}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-4">
                   <h4 className="text-base font-semibold m-0">Statement Matches</h4>
@@ -2090,8 +2152,8 @@ const DocumentsListing = () => {
                                                   
                                                   if (supplierMatches && Array.isArray(supplierMatches) && supplierMatches.length > 0) {
                                                     return (
-                                                      <div className="mt-2 pt-2 border-t border-[var(--border)]">
-                                                        <div className="text-xs font-semibold text-[var(--muted-foreground)] mb-1">
+                                                      <div className="mt-3 pt-3 border-t-2 border-[var(--border)]">
+                                                        <div className="text-sm font-bold text-[var(--foreground)] mb-2">
                                                           Supplier Statement Matches ({supplierMatches.length}):
                                                         </div>
                                                         {supplierMatches.map((ssMatch: any, idx: number) => {
@@ -2099,29 +2161,29 @@ const DocumentsListing = () => {
                                                           const supplierLinkKey = `ss-${ssMatch.line_item_id}-${inv.invoice_id}`;
                                                           const isCreatingSupplierLink = creatingSupplierLinkIds.has(supplierLinkKey);
                                                           return (
-                                                            <div key={idx} className="text-xs bg-[var(--muted)] p-2 rounded-md mt-1">
-                                                              <div className="font-medium">{ssMatch.supplier_name || 'Unknown Supplier'}</div>
-                                                              <div className="text-[var(--muted-foreground)]">
+                                                            <div key={idx} className="text-sm bg-[var(--muted)] p-3 rounded-md mt-2 border border-[var(--border)]">
+                                                              <div className="font-semibold text-base mb-1">{ssMatch.supplier_name || 'Unknown Supplier'}</div>
+                                                              <div className="text-sm font-medium text-[var(--foreground)] mb-1">
                                                                 {formatDate(ssMatch.transaction_date)} • {formatAmount(ssMatch.amount, ssMatch.currency)}
                                                               </div>
                                                               {ssMatch.customer_order_no && (
-                                                                <div className="text-[var(--muted-foreground)]">
+                                                                <div className="text-sm text-[var(--foreground)] font-medium mb-1">
                                                                   Order: {ssMatch.customer_order_no}
                                                                 </div>
                                                               )}
                                                               {ssMatch.bill_of_lading_no && (
-                                                                <div className="text-[var(--muted-foreground)]">
+                                                                <div className="text-sm text-[var(--foreground)] font-medium mb-1">
                                                                   B/L: {ssMatch.bill_of_lading_no}
                                                                 </div>
                                                               )}
                                                               {ssMatch.match_reason && (
-                                                                <div className="text-[var(--muted-foreground)] mt-1">
+                                                                <div className="text-sm text-white mt-2 p-3 bg-blue-700 dark:bg-blue-800 rounded border border-blue-600 font-medium leading-relaxed">
                                                                   {ssMatch.match_reason}
                                                                 </div>
                                                               )}
-                                                              <div className="flex items-center gap-2 mt-1">
-                                                                <span className="font-semibold">Score: {ssMatchScore.toFixed(1)}</span>
-                                                                <span className={`inline-block px-2 py-0.5 rounded-md ${getConfidenceColor(ssMatch.match_confidence || 'low')}`}>
+                                                              <div className="flex items-center gap-2 mt-2">
+                                                                <span className="text-sm font-bold">Score: {ssMatchScore.toFixed(1)}</span>
+                                                                <span className={`inline-block px-2.5 py-1 rounded-md text-sm font-medium ${getConfidenceColor(ssMatch.match_confidence || 'low')}`}>
                                                                   {ssMatch.match_confidence || 'low'}
                                                                 </span>
                                                               </div>
@@ -2133,7 +2195,7 @@ const DocumentsListing = () => {
                                                                   ssMatch.match_reason
                                                                 )}
                                                                 disabled={isCreatingSupplierLink}
-                                                                className="mt-2 px-3 py-1 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="mt-3 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                               >
                                                                 {isCreatingSupplierLink ? 'Creating...' : 'Create Supplier Link'}
                                                               </button>
@@ -2201,7 +2263,18 @@ const DocumentsListing = () => {
                     <div className="text-sm text-[var(--muted-foreground)]">No invoice-centric matches available.</div>
                   ) : (
                     <div className="space-y-3">
-                      {reconReport.invoice_matches.map((invoice) => (
+                      {reconReport.invoice_matches.map((invoice) => {
+                        const invoiceAny = invoice as any;
+                        const hasSupplierMatches = invoiceAny.supplier_statement_matches && 
+                          Array.isArray(invoiceAny.supplier_statement_matches) && 
+                          invoiceAny.supplier_statement_matches.length > 0;
+                        const hasBankMatches = invoice.matched || (invoice.matched_transactions && invoice.matched_transactions.length > 0);
+                        const isMatched = hasBankMatches || hasSupplierMatches;
+                        const matchType = hasBankMatches && hasSupplierMatches ? 'Both' : 
+                                        hasBankMatches ? 'Bank' : 
+                                        hasSupplierMatches ? 'Supplier' : 'None';
+                        
+                        return (
                         <div
                           key={invoice.invoice_id}
                           className="rounded-lg border border-[var(--border)] bg-[var(--card)]"
@@ -2213,12 +2286,21 @@ const DocumentsListing = () => {
                                 {formatDate(invoice.invoice_date)} • {formatAmount(invoice.invoice_total, invoice.invoice_currency)}
                               </div>
                             </div>
-                            <span className={`inline-block px-2 py-1 text-xs rounded-md ${invoice.matched ? 'bg-[var(--success)] text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                              {invoice.matched ? 'Matched' : 'Unmatched'}
+                            <span className={`inline-block px-2 py-1 text-xs rounded-md ${
+                              isMatched 
+                                ? 'bg-[var(--success)] text-white' 
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                            }`}>
+                              {matchType === 'Both' ? 'Matched (Bank + Supplier)' :
+                               matchType === 'Bank' ? 'Matched (Bank)' :
+                               matchType === 'Supplier' ? 'Matched (Supplier)' :
+                               'Unmatched'}
                             </span>
                           </div>
-                          {invoice.matched_transactions.length === 0 ? (
+                          {invoice.matched_transactions.length === 0 && !hasSupplierMatches ? (
                             <div className="p-4 text-sm text-[var(--muted-foreground)]">No matched transactions.</div>
+                          ) : invoice.matched_transactions.length === 0 && hasSupplierMatches ? (
+                            <div className="p-4 text-sm text-[var(--muted-foreground)]">No matched bank transactions (but has supplier statement matches below).</div>
                           ) : (
                             <div className="p-4 space-y-2">
                               {invoice.matched_transactions
@@ -2270,39 +2352,39 @@ const DocumentsListing = () => {
                             
                             if (supplierMatches && Array.isArray(supplierMatches) && supplierMatches.length > 0) {
                               return (
-                                <div className="p-4 border-t border-[var(--border)]">
-                                  <div className="text-sm font-semibold text-[var(--muted-foreground)] mb-2">
+                                <div className="p-4 border-t-2 border-[var(--border)]">
+                                  <div className="text-base font-bold text-[var(--foreground)] mb-3">
                                     Supplier Statement Matches ({supplierMatches.length}):
                                   </div>
-                                  <div className="space-y-2">
+                                  <div className="space-y-3">
                                     {supplierMatches.map((ssMatch: any, idx: number) => {
                                       const ssMatchScore = toNumber(ssMatch.match_score) ?? 0;
                                       const supplierLinkKey = `ss-${ssMatch.line_item_id}-${invoice.invoice_id}`;
                                       const isCreatingSupplierLink = creatingSupplierLinkIds.has(supplierLinkKey);
                                       return (
-                                        <div key={idx} className="text-sm bg-[var(--muted)] p-3 rounded-md border border-[var(--border)]">
-                                          <div className="font-medium">{ssMatch.supplier_name || 'Unknown Supplier'}</div>
-                                          <div className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        <div key={idx} className="text-sm bg-[var(--muted)] p-4 rounded-md border-2 border-[var(--border)]">
+                                          <div className="font-bold text-base mb-2">{ssMatch.supplier_name || 'Unknown Supplier'}</div>
+                                          <div className="text-sm font-semibold text-[var(--foreground)] mb-2">
                                             {formatDate(ssMatch.transaction_date)} • {formatAmount(ssMatch.amount, ssMatch.currency)}
                                           </div>
                                           {ssMatch.customer_order_no && (
-                                            <div className="text-xs text-[var(--muted-foreground)] mt-1">
+                                            <div className="text-sm font-medium text-[var(--foreground)] mb-1">
                                               Order: {ssMatch.customer_order_no}
                                             </div>
                                           )}
                                           {ssMatch.bill_of_lading_no && (
-                                            <div className="text-xs text-[var(--muted-foreground)]">
+                                            <div className="text-sm font-medium text-[var(--foreground)] mb-1">
                                               B/L: {ssMatch.bill_of_lading_no}
                                             </div>
                                           )}
                                           {ssMatch.match_reason && (
-                                            <div className="text-xs text-[var(--muted-foreground)] mt-2 p-2 bg-white dark:bg-gray-800 rounded">
+                                            <div className="text-sm text-white mt-3 p-3 bg-blue-700 dark:bg-blue-800 rounded border border-blue-600 font-medium leading-relaxed">
                                               {ssMatch.match_reason}
                                             </div>
                                           )}
-                                          <div className="flex items-center gap-2 text-xs mt-2">
-                                            <span className="font-semibold">Score: {ssMatchScore.toFixed(1)}</span>
-                                            <span className={`inline-block px-2 py-0.5 rounded-md ${getConfidenceColor(ssMatch.match_confidence || 'low')}`}>
+                                          <div className="flex items-center gap-2 text-sm mt-3">
+                                            <span className="font-bold">Score: {ssMatchScore.toFixed(1)}</span>
+                                            <span className={`inline-block px-2.5 py-1 rounded-md text-sm font-medium ${getConfidenceColor(ssMatch.match_confidence || 'low')}`}>
                                               {ssMatch.match_confidence || 'low'}
                                             </span>
                                           </div>
@@ -2314,7 +2396,7 @@ const DocumentsListing = () => {
                                               ssMatch.match_reason
                                             )}
                                             disabled={isCreatingSupplierLink}
-                                            className="mt-2 px-3 py-1 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="mt-3 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                           >
                                             {isCreatingSupplierLink ? 'Creating...' : 'Create Supplier Link'}
                                           </button>
@@ -2328,7 +2410,8 @@ const DocumentsListing = () => {
                             return null;
                           })()}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2378,6 +2461,120 @@ const DocumentsListing = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Push to Business Central Result Modal */}
+      {showPushResultModal && pushResult && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPushResultModal(false);
+            }
+          }}
+        >
+          <div
+            className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            style={{
+              background: 'var(--card)',
+              borderColor: 'var(--border)',
+            }}
+          >
+            <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+              <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                Push to Business Central - Results
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPushResultModal(false);
+                }}
+                className="text-2xl hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--foreground)' }}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {pushResult.success_count}
+                  </div>
+                  <div className="text-sm text-green-700 dark:text-green-300">Success</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-red-50 dark:bg-red-900/20">
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {pushResult.failed_count}
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">Failed</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                  <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                    {pushResult.skipped_count}
+                  </div>
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300">Skipped</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {pushResult.details.map((detail) => (
+                  <div
+                    key={detail.invoice_id}
+                    className={`p-3 rounded-md border ${detail.status === 'SUCCESS'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : detail.status === 'FAILED'
+                          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                          : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-medium" style={{ color: 'var(--foreground)' }}>
+                          Invoice #{detail.invoice_id} {detail.invoice_no && `(${detail.invoice_no})`}
+                        </div>
+                        <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                          Status: <span className="font-semibold">{detail.status}</span>
+                        </div>
+                        {detail.error_message && (
+                          <div className="text-sm mt-1 text-red-600 dark:text-red-400">
+                            {detail.error_message}
+                          </div>
+                        )}
+                        {detail.bc_invoice_id && (
+                          <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                            BC Invoice ID: {detail.bc_invoice_id}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-md font-semibold ${detail.status === 'SUCCESS'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                          : detail.status === 'FAILED'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                        }`}>
+                        {detail.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
+              <button
+                onClick={() => {
+                  setShowPushResultModal(false);
+                }}
+                className="px-6 py-2 rounded-md transition-colors hover:opacity-90"
+                style={{
+                  background: 'var(--primary)',
+                  color: 'white',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </AppLayout>

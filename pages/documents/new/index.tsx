@@ -24,6 +24,8 @@ const NewInvoice = () => {
   const [useOCR, setUseOCR] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [documentType, setDocumentType] = useState<DocumentType>('auto');
+  const [documentCategory, setDocumentCategory] = useState<string>('auto');
+  const [documentSubCategory, setDocumentSubCategory] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
   const [scannerSession, setScannerSession] = useState<any>(null);
@@ -67,6 +69,40 @@ const NewInvoice = () => {
     const lower = name.toLowerCase();
     const match = vendors.find(v => v.name.toLowerCase() === lower);
     return match ? match.id : null;
+  };
+
+  // Handle document category change
+  const handleCategoryChange = (category: string) => {
+    setDocumentCategory(category);
+    setDocumentSubCategory('');
+    
+    // Map category to document type
+    if (category === 'petty_cash') {
+      setDocumentType('petty_cash');
+    } else if (category === 'claims_compilation') {
+      setDocumentType('claims_compilation');
+    } else {
+      setDocumentType(category as DocumentType);
+    }
+  };
+
+  // Handle document sub-category change
+  const handleSubCategoryChange = (subCategory: string) => {
+    setDocumentSubCategory(subCategory);
+    
+    // Keep document_type as base category (petty_cash or claims_compilation)
+    // The sub-category will be passed separately as document_sub_type
+    // This aligns with backend which expects: document_type + document_sub_type
+    if (subCategory === '') {
+      // Reset to base category type
+      if (documentCategory === 'petty_cash') {
+        setDocumentType('petty_cash');
+      } else if (documentCategory === 'claims_compilation') {
+        setDocumentType('claims_compilation');
+      }
+    }
+    // documentType stays as the base category (petty_cash or claims_compilation)
+    // documentSubCategory will be passed separately to backend
   };
 
   // Handle OCR extraction
@@ -165,6 +201,7 @@ const NewInvoice = () => {
       const response = await uploadInvoice(file, { 
         auto_classify: autoClassify,
         document_type: documentType,
+        document_sub_type: documentSubCategory || undefined,
       });
 
       if (timerRef.current) {
@@ -237,18 +274,53 @@ const NewInvoice = () => {
           {/* Document Type */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">Document Type</label>
-            <select
-              value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
-            >
-              <option value="auto">Auto-detect</option>
-              <option value="invoice">Invoice</option>
-              <option value="petty_cash">Petty Cash</option>
-              <option value="claims_compilation">Claims Compilation</option>
-            </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <select
+                  value={documentCategory}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                >
+                  <option value="auto">Auto-detect</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="petty_cash">Petty Cash</option>
+                  <option value="claims_compilation">Claims Compilation</option>
+                </select>
+              </div>
+              {(documentCategory === 'petty_cash' || documentCategory === 'claims_compilation') && (
+                <div>
+                  <select
+                    value={documentSubCategory}
+                    onChange={(e) => handleSubCategoryChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                  >
+                    <option value="">Select sub-category...</option>
+                    {documentCategory === 'petty_cash' && (
+                      <option value="summary">Summary Petty Cash</option>
+                    )}
+                    {documentCategory === 'claims_compilation' && (
+                      <>
+                        <option value="director">Director Claims</option>
+                        <option value="staff">Staff Claims</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.
+              {documentType === 'petty_cash' && documentSubCategory === 'summary'
+                ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
+                : documentType === 'petty_cash'
+                ? 'Petty cash documents skip summary validation.'
+                : documentType === 'claims_compilation' && documentSubCategory === 'director'
+                ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
+                : documentType === 'claims_compilation' && documentSubCategory === 'staff'
+                ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
+                : documentType === 'claims_compilation'
+                ? 'Claims compilation processes scanned multi-receipt PDFs.'
+                : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
+              }
             </small>
           </div>
 

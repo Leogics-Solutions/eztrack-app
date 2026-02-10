@@ -2,15 +2,17 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus, Upload, Eye, Trash2, CreditCard } from "lucide-react";
+import { Plus, Upload, Eye, Trash2, CreditCard, Download, ChevronDown } from "lucide-react";
 import {
   listBankStatements,
   deleteBankStatement,
   getAccountNumbers,
   batchUploadBankStatements,
   getBankStatementJobStatus,
+  exportBankStatementsExcel,
+  exportBankStatementsCsv,
   type BankStatement,
   type BankStatementJobStatus,
   type BatchUploadBankStatementJob,
@@ -39,6 +41,9 @@ const BankStatementsList = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedStatementIds, setSelectedStatementIds] = useState<Set<number>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -56,6 +61,23 @@ const BankStatementsList = () => {
   useEffect(() => {
     setSelectedStatementIds(new Set());
   }, [statements]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setIsExportDropdownOpen(false);
+      }
+    };
+
+    if (isExportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportDropdownOpen]);
 
   const loadAccountNumbers = async () => {
     try {
@@ -333,6 +355,62 @@ const BankStatementsList = () => {
     }
   };
 
+  const handleBatchExport = async (batch: boolean = false, template: 'default' | 'xero_statement' = 'default') => {
+    if (selectedStatementIds.size === 0) {
+      showToast('Please select at least one bank statement to export', { type: 'error' });
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      setIsExportDropdownOpen(false);
+      const statementIds = Array.from(selectedStatementIds);
+      
+      // For Xero template, use CSV endpoint (Excel endpoint doesn't support Xero template properly)
+      // For default template, use Excel endpoint
+      const isXeroTemplate = template === 'xero_statement';
+      const { blob, filename } = isXeroTemplate
+        ? await exportBankStatementsCsv(statementIds, template, batch)
+        : await exportBankStatementsExcel(statementIds, batch, template);
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date();
+      let extension: string;
+      if (batch) {
+        extension = '.zip';
+      } else {
+        extension = isXeroTemplate ? '.csv' : '.xlsx';
+      }
+      const fallbackName = `bank_statements_${timestamp
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .slice(0, 15)}${extension}`;
+
+      link.download = filename || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      const templateLabel = template === 'xero_statement' ? ' (Xero)' : '';
+      const formatLabel = isXeroTemplate ? 'CSV' : 'Excel';
+      showToast(
+        batch 
+          ? `Successfully exported ${statementIds.length} bank statement${statementIds.length !== 1 ? 's' : ''} as ZIP${templateLabel}`
+          : `Successfully exported ${statementIds.length} bank statement${statementIds.length !== 1 ? 's' : ''} to ${formatLabel}${templateLabel}`,
+        { type: 'success' }
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export bank statements';
+      showToast(errorMessage, { type: 'error' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const isAllSelected = statements.length > 0 && selectedStatementIds.size === statements.length;
   const isIndeterminate = selectedStatementIds.size > 0 && selectedStatementIds.size < statements.length;
 
@@ -468,21 +546,87 @@ const BankStatementsList = () => {
                   <div style={{ color: 'var(--foreground)' }}>
                     {selectedStatementIds.size} {t.bankStatements.list.selected || 'selected'}
                   </div>
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={isDeleting}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    style={{
-                      background: isDeleting ? 'var(--muted)' : 'var(--error)',
-                      color: isDeleting ? 'var(--muted-foreground)' : 'white',
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {isDeleting 
-                      ? (t.bankStatements.list.deleting || 'Deleting...')
-                      : (t.bankStatements.list.batchDelete || `Delete ${selectedStatementIds.size}`)
-                    }
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Export Dropdown */}
+                    <div className="relative" ref={exportDropdownRef} style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        style={{
+                          background: isExporting ? 'var(--muted)' : 'var(--primary)',
+                          color: isExporting ? 'var(--muted-foreground)' : 'var(--primary-foreground)',
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                        {isExporting 
+                          ? (t.bankStatements.list.exporting || 'Exporting...')
+                          : (t.bankStatements.list.export || 'Export')
+                        }
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                      {isExportDropdownOpen && (
+                        <div
+                          className="absolute right-0 mt-2 z-[9999] rounded-lg border shadow-lg min-w-[250px]"
+                          style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                          }}
+                        >
+                          <div className="px-3 py-2 text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>
+                            {t.bankStatements.list.exportSingle || 'Single File'}
+                          </div>
+                          <button
+                            onClick={() => handleBatchExport(false, 'default')}
+                            className="w-full text-left px-4 py-2 hover:bg-[var(--muted)] transition-colors"
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            {t.bankStatements.list.exportDefault || 'Excel - Default Template'}
+                          </button>
+                          <button
+                            onClick={() => handleBatchExport(false, 'xero_statement')}
+                            className="w-full text-left px-4 py-2 hover:bg-[var(--muted)] transition-colors"
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            {t.bankStatements.list.exportXero || 'CSV - Xero Statement Template'}
+                          </button>
+                          <div className="border-t my-1" style={{ borderColor: 'var(--border)' }} />
+                          <div className="px-3 py-2 text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>
+                            {t.bankStatements.list.exportBatch || 'ZIP (One per Statement)'}
+                          </div>
+                          <button
+                            onClick={() => handleBatchExport(true, 'default')}
+                            className="w-full text-left px-4 py-2 hover:bg-[var(--muted)] transition-colors"
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            {t.bankStatements.list.exportBatchDefault || 'Excel - Default Template'}
+                          </button>
+                          <button
+                            onClick={() => handleBatchExport(true, 'xero_statement')}
+                            className="w-full text-left px-4 py-2 hover:bg-[var(--muted)] transition-colors rounded-b-lg"
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            {t.bankStatements.list.exportBatchXero || 'CSV - Xero Statement Template'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleBatchDelete}
+                      disabled={isDeleting}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      style={{
+                        background: isDeleting ? 'var(--muted)' : 'var(--error)',
+                        color: isDeleting ? 'var(--muted-foreground)' : 'white',
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {isDeleting 
+                        ? (t.bankStatements.list.deleting || 'Deleting...')
+                        : (t.bankStatements.list.batchDelete || `Delete ${selectedStatementIds.size}`)
+                      }
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="overflow-x-auto">

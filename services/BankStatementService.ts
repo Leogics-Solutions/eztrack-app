@@ -1126,10 +1126,12 @@ export interface ExportBankStatementsRequest {
  * POST /bank-statements/export
  * @param statementIds - Array of bank statement IDs to export
  * @param template - Template format: 'default' or 'xero_statement'
+ * @param batch - If true, returns one CSV per statement in a ZIP. If false, returns a single CSV with all statements.
  */
 export async function exportBankStatementsCsv(
   statementIds: number[],
-  template: 'default' | 'xero_statement' = 'default'
+  template: 'default' | 'xero_statement' = 'default',
+  batch: boolean = false
 ): Promise<ExportBankStatementsCsvResponse> {
   const token = getAccessToken();
 
@@ -1141,13 +1143,91 @@ export async function exportBankStatementsCsv(
     statement_ids: statementIds,
   };
 
-  // Add template as query parameter if specified
+  // Add template and batch as query parameters
   const queryParams = new URLSearchParams();
   if (template && template !== 'default') {
     queryParams.append('template', template);
   }
+  if (batch) {
+    queryParams.append('batch', 'true');
+  }
 
   const url = `${BASE_URL}/bank-statements/export${
+    queryParams.toString() ? `?${queryParams.toString()}` : ''
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to export bank statements');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
+}
+
+// Export response types for Excel
+export interface ExportBankStatementsExcelResponse {
+  blob: Blob;
+  contentType: string | null;
+  filename: string | null;
+}
+
+export interface ExportBankStatementsExcelRequest {
+  statement_ids: number[];
+}
+
+/**
+ * Export selected bank statements to Excel
+ * POST /bank-statements/export/excel
+ * @param statementIds - Array of bank statement IDs to export
+ * @param batch - If true, returns one .xlsx per statement in a ZIP. If false, returns a single .xlsx with all statements.
+ * @param template - Template format: 'default' or 'xero_statement'
+ */
+export async function exportBankStatementsExcel(
+  statementIds: number[],
+  batch: boolean = false,
+  template: 'default' | 'xero_statement' = 'default'
+): Promise<ExportBankStatementsExcelResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const body: ExportBankStatementsExcelRequest = {
+    statement_ids: statementIds,
+  };
+
+  // Add batch and template as query parameters
+  const queryParams = new URLSearchParams();
+  if (batch) {
+    queryParams.append('batch', 'true');
+  }
+  if (template && template !== 'default') {
+    queryParams.append('template', template);
+  }
+
+  const url = `${BASE_URL}/bank-statements/export/excel${
     queryParams.toString() ? `?${queryParams.toString()}` : ''
   }`;
 

@@ -9,6 +9,7 @@ import {
   getSupplierStatement,
   getSupplierStatementLineItems,
   deleteSupplierStatement,
+  deleteSupplierStatementLink,
   type SupplierStatement,
   type SupplierStatementLineItem,
 } from "@/services";
@@ -33,6 +34,7 @@ const SupplierStatementDetail = () => {
   const [totalLineItems, setTotalLineItems] = useState(0);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileContentType, setFileContentType] = useState<string | null>(null);
+  const [isLinking, setIsLinking] = useState(false);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -207,6 +209,25 @@ const SupplierStatementDetail = () => {
     if (amount === undefined || amount === null) return '-';
     const currencyCode = currency || statement?.currency || 'CNY';
     return `${currencyCode} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const handleUnlink = async (linkId: number) => {
+    if (!confirm('Are you sure you want to unlink this invoice?')) {
+      return;
+    }
+
+    setIsLinking(true);
+    try {
+      await deleteSupplierStatementLink(linkId);
+      showToast('Link deleted successfully', { type: 'success' });
+      await loadStatement();
+      await loadLineItems();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete link';
+      showToast(errorMessage, { type: 'error' });
+    } finally {
+      setIsLinking(false);
+    }
   };
 
   if (isLoading) {
@@ -545,6 +566,9 @@ const SupplierStatementDetail = () => {
                         {t.supplierStatements?.detail?.transactionDate || 'Transaction Date'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.supplierStatements?.detail?.invoiceNumber || 'Invoice Number'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.supplierStatements?.detail?.customerOrderNo || 'Customer Order No'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
@@ -571,73 +595,76 @@ const SupplierStatementDetail = () => {
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         Linked Invoice
                       </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {lineItems.map((item) => (
-                      <tr
-                        key={item.id}
-                        style={{ borderBottom: '1px solid var(--border)' }}
-                        className={item.is_paid ? 'bg-green-500/10' : ''}
-                      >
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatDate(item.transaction_date)}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {item.customer_order_no || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {item.bill_of_lading_no || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(item.amount, item.currency)}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(item.payment_amount, item.currency)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="text-xs px-2 py-1 rounded inline-block"
-                            style={{
-                              background: item.is_paid ? 'var(--success)' : 'var(--warning)',
-                              color: 'white',
-                            }}
-                          >
-                            {item.is_paid 
-                              ? (t.supplierStatements?.detail?.paid || 'Paid')
-                              : (t.supplierStatements?.detail?.unpaid || 'Unpaid')
+                    {lineItems.map((item) => {
+                      const links = (item.supplier_statement_links && Array.isArray(item.supplier_statement_links) && item.supplier_statement_links.length > 0)
+                        ? item.supplier_statement_links
+                        : item.invoice_link
+                          ? [item.invoice_link]
+                          : [];
+                      
+                      return (
+                        <tr
+                          key={item.id}
+                          style={{ borderBottom: '1px solid var(--border)' }}
+                          className={item.is_paid ? 'bg-green-500/10' : ''}
+                        >
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatDate(item.transaction_date)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {item.invoice_number || '-'}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {item.customer_order_no || '-'}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {item.bill_of_lading_no || '-'}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatCurrency(item.amount, item.currency)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatCurrency(item.payment_amount, item.currency)}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className="text-xs px-2 py-1 rounded inline-block"
+                              style={{
+                                background: item.is_paid ? 'var(--success)' : 'var(--warning)',
+                                color: 'white',
+                              }}
+                            >
+                              {item.is_paid 
+                                ? (t.supplierStatements?.detail?.paid || 'Paid')
+                                : (t.supplierStatements?.detail?.unpaid || 'Unpaid')
+                              }
+                            </span>
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {formatDate(item.payment_date)}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {item.is_released_electronically !== undefined
+                              ? (item.is_released_electronically 
+                                  ? (t.supplierStatements?.detail?.yes || 'Yes')
+                                  : (t.supplierStatements?.detail?.no || 'No')
+                                )
+                              : '-'
                             }
-                          </span>
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatDate(item.payment_date)}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {item.is_released_electronically !== undefined
-                            ? (item.is_released_electronically 
-                                ? (t.supplierStatements?.detail?.yes || 'Yes')
-                                : (t.supplierStatements?.detail?.no || 'No')
-                              )
-                            : '-'
-                          }
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {item.remarks || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {(() => {
-                            // Check for supplier_statement_links first (new structure), fallback to invoice_link (legacy)
-                            const links = (item.supplier_statement_links && Array.isArray(item.supplier_statement_links) && item.supplier_statement_links.length > 0)
-                              ? item.supplier_statement_links
-                              : item.invoice_link
-                                ? [item.invoice_link]
-                                : [];
-                            
-                            if (links.length === 0) {
-                              return <span className="text-sm text-[var(--muted-foreground)]">-</span>;
-                            }
-                            
-                            return (
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {item.remarks || '-'}
+                          </td>
+                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                            {links.length === 0 ? (
+                              <span className="text-sm text-[var(--muted-foreground)]">-</span>
+                            ) : (
                               <div className="flex flex-col gap-2">
                                 {links.map((link, idx) => (
                                   <div key={link.id || `link-${item.id}-${idx}`} className="flex flex-col gap-1">
@@ -657,11 +684,34 @@ const SupplierStatementDetail = () => {
                                   </div>
                                 ))}
                               </div>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    ))}
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {links.length > 0 ? (
+                              <div className="flex flex-col gap-2">
+                                {links.map((link) => (
+                                  <button
+                                    key={link.id}
+                                    onClick={() => handleUnlink(link.id)}
+                                    disabled={isLinking}
+                                    className="px-3 py-1 rounded text-sm border disabled:opacity-50 disabled:cursor-not-allowed"
+                                    style={{
+                                      background: 'var(--error)',
+                                      borderColor: 'var(--error)',
+                                      color: 'white',
+                                    }}
+                                  >
+                                    {t.supplierStatements?.detail?.unlink || 'Unlink'}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-[var(--muted-foreground)]">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

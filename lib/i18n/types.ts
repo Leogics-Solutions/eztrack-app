@@ -764,6 +764,14 @@ export interface Translations {
       selected: string;
       deleting: string;
       batchDelete: string;
+      export: string;
+      exporting: string;
+      exportSingle: string;
+      exportBatch: string;
+      exportBatchDefault: string;
+      exportBatchXero: string;
+      exportDefault: string;
+      exportXero: string;
       showing: string;
       to: string;
       of: string;
@@ -862,6 +870,10 @@ export interface Translations {
       selectFile: string;
       selectFiles: string;
       helpText: string;
+      supplierName: string;
+      supplierNamePlaceholder: string;
+      supplierNameHelp: string;
+      optional: string;
       uploading: string;
       uploadButton: string;
       success: string;
@@ -914,6 +926,7 @@ export interface Translations {
       paid: string;
       unpaid: string;
       transactionDate: string;
+      invoiceNumber: string;
       customerOrderNo: string;
       billOfLadingNo: string;
       amount: string;
@@ -932,6 +945,10 @@ export interface Translations {
       dateTo: string;
       yes: string;
       no: string;
+      createLink: string;
+      unlink: string;
+      link: string;
+      selectInvoice: string;
     };
   };
 }

@@ -33,6 +33,7 @@ export interface SupplierStatementLineItem {
   id: number;
   supplier_statement_id: number;
   transaction_date: string;
+  invoice_number?: string | null;
   customer_order_no?: string | null;
   bill_of_lading_no?: string | null;
   amount: number;
@@ -53,6 +54,7 @@ export interface UploadIntentRequest {
   filename: string;
   content_type: string;
   size_bytes: number;
+  supplier_name?: string;
 }
 
 export interface UploadIntentResponse {
@@ -254,7 +256,8 @@ function getAccessToken(): string | null {
 export async function createUploadIntent(
   filename: string,
   contentType: string,
-  sizeBytes: number
+  sizeBytes: number,
+  supplierName?: string
 ): Promise<UploadIntentResponse> {
   const token = getAccessToken();
 
@@ -266,6 +269,7 @@ export async function createUploadIntent(
     filename,
     content_type: contentType,
     size_bytes: sizeBytes,
+    ...(supplierName && { supplier_name: supplierName }),
   };
 
   const response = await fetch(`${BASE_URL}/supplier-statements/upload-intent`, {
@@ -315,15 +319,17 @@ export async function confirmUpload(
 }
 
 /**
- * Upload and process a supplier statement file (PDF/image) - Legacy multipart
+ * Upload and process a supplier statement file (PDF/image/Excel) - Legacy multipart
  * POST /supplier-statements/upload
  * 
- * @param file - The supplier statement file to upload
+ * @param file - The supplier statement file to upload (PDF, image, or Excel)
  * @param asyncProcess - If true, processes asynchronously and returns job_id. If false, processes synchronously.
+ * @param supplierName - Optional supplier name to override OCR-extracted name
  */
 export async function uploadSupplierStatement(
   file: File,
-  asyncProcess: boolean = false
+  asyncProcess: boolean = false,
+  supplierName?: string
 ): Promise<UploadSupplierStatementResult> {
   const token = getAccessToken();
 
@@ -333,6 +339,9 @@ export async function uploadSupplierStatement(
 
   const formData = new FormData();
   formData.append('file', file);
+  if (supplierName) {
+    formData.append('supplier_name', supplierName);
+  }
 
   const queryParams = new URLSearchParams();
   if (asyncProcess) {
