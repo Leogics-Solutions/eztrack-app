@@ -332,9 +332,9 @@ const SupportingDocumentsBatchUpload = () => {
         }
       };
 
-      // Poll immediately, then every 2 seconds
+      // Poll immediately, then every 10 seconds
       await pollJobs();
-      pollingIntervalRef.current = setInterval(pollJobs, 2000);
+      pollingIntervalRef.current = setInterval(pollJobs, 10000);
 
     } catch (error) {
       setProgressText(t.documents.batchUploadPage.uploadFailed);

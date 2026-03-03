@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
 // Types
 export interface BankStatement {
@@ -47,6 +48,9 @@ export interface BankTransaction {
   bank_statement_id: number;
   transaction_date: string;
   description: string;
+  payor?: string | null;
+  description_1?: string | null;
+  description_2?: string | null;
   transaction_type: 'DEBIT' | 'CREDIT';
   reference_number?: string | null;
   debit_amount?: number | null;
@@ -440,14 +444,6 @@ export interface ReprocessTransactionsResponse {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * Upload and process a bank statement file (PDF/image)
  * POST /bank-statements/upload
  * 
@@ -458,12 +454,6 @@ export async function uploadBankStatement(
   file: File,
   asyncProcess: boolean = false
 ): Promise<UploadBankStatementResult> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const formData = new FormData();
   formData.append('file', file);
 
@@ -478,9 +468,7 @@ export async function uploadBankStatement(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -499,18 +487,9 @@ export async function uploadBankStatement(
 export async function getBankStatementJobStatus(
   jobId: string
 ): Promise<GetBankStatementJobResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/jobs/${jobId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -526,18 +505,9 @@ export async function getBankStatementJobStatus(
  * GET /bank-statements/jobs
  */
 export async function listBankStatementJobs(): Promise<ListBankStatementJobsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/jobs`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -555,12 +525,6 @@ export async function listBankStatementJobs(): Promise<ListBankStatementJobsResp
 export async function batchUploadBankStatements(
   files: File[]
 ): Promise<BatchUploadBankStatementsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   if (files.length === 0) {
     throw new Error('At least one file is required');
   }
@@ -572,9 +536,7 @@ export async function batchUploadBankStatements(
 
   const response = await fetch(`${BASE_URL}/bank-statements/batch-upload-multipart`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -593,12 +555,6 @@ export async function batchUploadBankStatements(
 export async function listBankStatements(
   params?: ListBankStatementsParams
 ): Promise<ListBankStatementsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -623,10 +579,7 @@ export async function listBankStatements(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -644,18 +597,9 @@ export async function listBankStatements(
 export async function getBankStatement(
   id: number
 ): Promise<GetBankStatementResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/${id}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -674,12 +618,6 @@ export async function getStatementTransactions(
   statementId: number,
   params?: GetStatementTransactionsParams
 ): Promise<GetStatementTransactionsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -704,10 +642,7 @@ export async function getStatementTransactions(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -736,12 +671,6 @@ export async function matchInvoices(
     auto_link_min_score?: number;
   }
 ): Promise<MatchInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: MatchInvoicesRequest = {
     statement_id: statementId,
     invoice_ids: invoiceIds,
@@ -757,10 +686,7 @@ export async function matchInvoices(
 
   const response = await fetch(`${BASE_URL}/bank-statements/${statementId}/match-invoices`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -792,12 +718,6 @@ export async function matchInvoicesAcrossStatements(
     auto_link_min_score?: number;
   }
 ): Promise<MatchInvoicesAcrossStatementsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: MatchInvoicesAcrossStatementsRequest = {
     invoice_ids: invoiceIds,
     date_tolerance_days: options?.date_tolerance_days,
@@ -812,10 +732,7 @@ export async function matchInvoicesAcrossStatements(
 
   const response = await fetch(`${BASE_URL}/bank-statements/match-invoices`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -841,12 +758,6 @@ export async function createLink(
     allocated_amount?: number;
   }
 ): Promise<CreateLinkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: CreateLinkRequest = {
     bank_transaction_id: transactionId,
     invoice_id: invoiceId,
@@ -858,10 +769,7 @@ export async function createLink(
 
   const response = await fetch(`${BASE_URL}/bank-statements/links`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -887,20 +795,11 @@ export async function createLinksBulk(
     allocated_amount?: number;
   }>
 ): Promise<CreateLinksBulkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: CreateLinksBulkRequest = { links };
 
   const response = await fetch(`${BASE_URL}/bank-statements/links/bulk`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -919,18 +818,9 @@ export async function createLinksBulk(
 export async function getStatementLinks(
   statementId: number
 ): Promise<GetStatementLinksResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/${statementId}/links`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -958,18 +848,9 @@ export async function getStatementLinks(
  * DELETE /bank-statements/links/{link_id}
  */
 export async function deleteLink(linkId: number): Promise<DeleteLinkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/links/${linkId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1009,18 +890,9 @@ export async function deleteLink(linkId: number): Promise<DeleteLinkResponse> {
 export async function deleteBankStatement(
   id: number
 ): Promise<DeleteBankStatementResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1058,18 +930,9 @@ export async function deleteBankStatement(
  * GET /bank-statements/accounts/list
  */
 export async function getAccountNumbers(): Promise<GetAccountNumbersResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/accounts/list`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1087,18 +950,9 @@ export async function getAccountNumbers(): Promise<GetAccountNumbersResponse> {
 export async function reprocessTransactions(
   statementId: number
 ): Promise<ReprocessTransactionsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/bank-statements/${statementId}/reprocess-transactions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1133,12 +987,6 @@ export async function exportBankStatementsCsv(
   template: 'default' | 'xero_statement' = 'default',
   batch: boolean = false
 ): Promise<ExportBankStatementsCsvResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: ExportBankStatementsRequest = {
     statement_ids: statementIds,
   };
@@ -1158,10 +1006,7 @@ export async function exportBankStatementsCsv(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1208,12 +1053,6 @@ export async function exportBankStatementsExcel(
   batch: boolean = false,
   template: 'default' | 'xero_statement' = 'default'
 ): Promise<ExportBankStatementsExcelResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: ExportBankStatementsExcelRequest = {
     statement_ids: statementIds,
   };
@@ -1233,10 +1072,7 @@ export async function exportBankStatementsExcel(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 

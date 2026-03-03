@@ -16,11 +16,13 @@ import {
     type CreditorAccountInvoice,
 } from "@/services";
 import { listVendors, type Vendor } from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 const CreditorAccounts = () => {
     const { t } = useLanguage();
     const toast = useToast();
     const router = useRouter();
+    const { selectedOrganizationId } = useOrganization();
     // State
     const [creditors, setCreditors] = useState<CreditorAccount[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -59,7 +61,7 @@ const CreditorAccounts = () => {
 
     useEffect(() => {
         loadCreditors();
-    }, [currentPage, pageSize, search]);
+    }, [currentPage, pageSize, search, selectedOrganizationId]);
 
     const loadCreditors = async () => {
         try {

@@ -18,6 +18,7 @@ import {
   type InvoiceStatus,
   type PushInvoicesResponse,
 } from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
 interface Vendor {
@@ -65,6 +66,7 @@ interface Pagination {
 const settlementDocumentsListing = () => {
   const router = useRouter();
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -112,7 +114,7 @@ const settlementDocumentsListing = () => {
   useEffect(() => {
     loadData();
     loadBusinessCentralConnection();
-  }, [filters]);
+  }, [filters, selectedOrganizationId]);
 
   const loadBusinessCentralConnection = async () => {
     try {

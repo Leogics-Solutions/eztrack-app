@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
 // Types
 export type DocumentType = 'auto' | 'invoice' | 'petty_cash' | 'petty_cash_summary' | 'claims_compilation' | 'claims_compilation_director' | 'claims_compilation_staff' | 'commercial_invoice' | 'expense_receipt' | 'transport_receipt' | 'pos_receipt' | 'weighbridge_ticket' | 'delivery_order' | 'transfer_note' | 'payment_voucher' | 'bank_proof' | 'purchase_order' | 'custom_form' | 'bill_of_lading' | 'combined_docs' | 'handwritten_invoice';
@@ -731,17 +732,13 @@ export interface InvoiceStatisticsResponse {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * Upload and process an invoice file with OCR (Legacy - uses multipart upload)
  * POST /invoices/upload
- * 
+ *
+ * Sends X-Organization-Id when a company is selected. Backend must pass
+ * active_organization_id into process_invoice() so the created invoice has
+ * organization_id set; otherwise GET /invoices/{id} with the same org returns 404.
+ *
  * @deprecated Use uploadInvoiceViaS3() for new implementations
  */
 export async function uploadInvoice(
@@ -752,12 +749,6 @@ export async function uploadInvoice(
     document_sub_type?: string;
   }
 ): Promise<UploadInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const formData = new FormData();
   formData.append('file', file);
   const queryParams = new URLSearchParams();
@@ -776,9 +767,7 @@ export async function uploadInvoice(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -797,12 +786,6 @@ export async function uploadInvoice(
 export async function createInvoiceUploadIntent(
   file: File
 ): Promise<UploadIntentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: UploadIntentRequest = {
     filename: file.name,
     content_type: file.type || 'application/octet-stream',
@@ -811,10 +794,7 @@ export async function createInvoiceUploadIntent(
 
   const response = await fetch(`${BASE_URL}/invoices/upload-intent`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -858,12 +838,6 @@ export async function confirmInvoiceUpload(
   invoiceId: number,
   options?: { auto_classify?: boolean }
 ): Promise<ConfirmUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (options?.auto_classify !== undefined) {
     queryParams.append('auto_classify', String(options.auto_classify));
@@ -874,10 +848,7 @@ export async function confirmInvoiceUpload(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -918,12 +889,6 @@ export async function uploadInvoiceViaS3(
 export async function listInvoices(
   params?: ListInvoicesParams
 ): Promise<ListInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -986,10 +951,7 @@ export async function listInvoices(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1005,17 +967,9 @@ export async function listInvoices(
  * GET /invoices/{invoice_id}/file
  */
 export async function downloadInvoiceFile(invoiceId: number): Promise<InvoiceFileDownload> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/file`, {
     method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
   });
 
   if (!response.ok) {
@@ -1050,18 +1004,9 @@ export async function downloadInvoiceFile(invoiceId: number): Promise<InvoiceFil
  * GET /invoices/{invoice_id}
  */
 export async function getInvoice(invoiceId: number): Promise<GetInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1077,18 +1022,9 @@ export async function getInvoice(invoiceId: number): Promise<GetInvoiceResponse>
  * POST /invoices/{invoice_id}/validate
  */
 export async function validateInvoice(invoiceId: number): Promise<ValidateInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/validate`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1104,18 +1040,9 @@ export async function validateInvoice(invoiceId: number): Promise<ValidateInvoic
  * GET /invoices/{invoice_id}/verification
  */
 export async function verifyInvoice(invoiceId: number): Promise<VerifyInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/verification`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1134,18 +1061,9 @@ export async function updateInvoice(
   invoiceId: number,
   data: UpdateInvoiceRequest
 ): Promise<UpdateInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -1165,18 +1083,9 @@ export async function addPayment(
   invoiceId: number,
   data: AddPaymentRequest
 ): Promise<AddPaymentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/payments`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -1197,18 +1106,9 @@ export async function addPayment(
  * DELETE /invoices/{invoice_id}
  */
 export async function deleteInvoice(invoiceId: number): Promise<DeleteInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1226,20 +1126,11 @@ export async function deleteInvoice(invoiceId: number): Promise<DeleteInvoiceRes
 export async function bulkDeleteInvoices(
   invoiceIds: number[]
 ): Promise<BulkDeleteInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: BulkDeleteInvoicesRequest = { invoice_ids: invoiceIds };
 
   const response = await fetch(`${BASE_URL}/invoices/delete-bulk`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1259,18 +1150,9 @@ export async function addLineItem(
   invoiceId: number,
   data: AddLineItemRequest
 ): Promise<AddLineItemResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/lines`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -1291,18 +1173,9 @@ export async function updateLineItem(
   lineId: number,
   data: UpdateLineItemRequest
 ): Promise<UpdateLineItemResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/lines/${lineId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -1322,18 +1195,9 @@ export async function deleteLineItem(
   invoiceId: number,
   lineId: number
 ): Promise<DeleteLineItemResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/lines/${lineId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1362,12 +1226,6 @@ export async function batchUploadInvoices(
     document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   // Step 1: Get presigned URLs for all files
   const filesMetadata = files.map(f => ({
     filename: f.name,
@@ -1391,10 +1249,7 @@ export async function batchUploadInvoices(
 
   const intentResponse = await fetch(intentUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify({ files: filesMetadata }),
   });
 
@@ -1419,10 +1274,7 @@ export async function batchUploadInvoices(
 
   const confirmResponse = await fetch(confirmUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify({ document_ids: items.map(item => item.document_id) }),
   });
 
@@ -1450,12 +1302,6 @@ export async function uploadInvoiceMultipart(
     document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const formData = new FormData();
   formData.append('file', file);
 
@@ -1479,9 +1325,7 @@ export async function uploadInvoiceMultipart(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -1511,12 +1355,6 @@ export async function batchUploadInvoicesMultipart(
     document_sub_type?: string;
   }
 ): Promise<BatchUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const formData = new FormData();
   files.forEach((file) => {
     formData.append('files', file);
@@ -1542,9 +1380,7 @@ export async function batchUploadInvoicesMultipart(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -1579,12 +1415,6 @@ export async function batchUploadSupportingDocuments(
     remark?: string;
   }
 ): Promise<BatchUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   if (files.length !== fileMetadata.length) {
     throw new Error('Number of files must match number of metadata entries');
   }
@@ -1612,9 +1442,7 @@ export async function batchUploadSupportingDocuments(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -1632,19 +1460,10 @@ export async function batchUploadSupportingDocuments(
  * GET /documents/batch-jobs/{job_id}
  */
 export async function getDocumentBatchJobStatus(jobId: string): Promise<GetBatchJobResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    return { success: false, error: { message: 'No access token found' } };
-  }
-
   try {
     const response = await fetch(`${BASE_URL}/documents/batch-jobs/${jobId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     });
 
     // Try to parse json (even for non-2xx)
@@ -1678,12 +1497,6 @@ export async function getDocumentBatchJobStatus(jobId: string): Promise<GetBatch
 export async function bulkVerifyInvoices(
   invoiceIds: number[]
 ): Promise<BulkVerifyInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   invoiceIds.forEach((id) => queryParams.append('invoice_ids', id.toString()));
 
@@ -1692,10 +1505,7 @@ export async function bulkVerifyInvoices(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1716,12 +1526,6 @@ export async function exportInvoicesCsv(
   invoiceIds: number[],
   template: 'default' | 'xero_bill' | 'xero_sales' | 'autocount' = 'default'
 ): Promise<ExportInvoicesCsvResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: ExportInvoicesRequest = { 
     invoice_ids: invoiceIds,
   };
@@ -1738,10 +1542,7 @@ export async function exportInvoicesCsv(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1772,20 +1573,11 @@ export async function exportInvoicesCsv(
 export async function downloadInvoicesZip(
   invoiceIds: number[]
 ): Promise<DownloadInvoicesZipResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const body: ExportInvoicesRequest = { invoice_ids: invoiceIds };
 
   const response = await fetch(`${BASE_URL}/invoices/download`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1816,12 +1608,6 @@ export async function downloadInvoicesZip(
 export async function checkDuplicateInvoice(
   params: CheckDuplicateInvoiceParams
 ): Promise<CheckDuplicateInvoiceResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   queryParams.append('invoice_no', params.invoice_no);
   if (params.vendor_id !== undefined) {
@@ -1834,10 +1620,7 @@ export async function checkDuplicateInvoice(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1855,12 +1638,6 @@ export async function checkDuplicateInvoice(
 export async function getInvoiceStatistics(
   filters?: InvoiceStatisticsFilters
 ): Promise<InvoiceStatisticsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (filters?.start_date) {
     queryParams.append('start_date', filters.start_date);
@@ -1883,10 +1660,7 @@ export async function getInvoiceStatistics(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -1902,19 +1676,10 @@ export async function getInvoiceStatistics(
  * GET /invoices/batch-jobs/{job_id}
  */
 export async function getBatchJobStatus(jobId: string): Promise<GetBatchJobResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    return { success: false, error: { message: 'No access token found' } };
-  }
-
   try {
     const response = await fetch(`${BASE_URL}/invoices/batch-jobs/${jobId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     });
 
     // Try to parse json (even for non-2xx)
@@ -1943,12 +1708,6 @@ export async function getBatchJobStatus(jobId: string): Promise<GetBatchJobRespo
  * GET /invoices/batch-jobs
  */
 export async function listBatchJobs(params?: ListBatchJobsParams): Promise<ListBatchJobsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.job_ids && params.job_ids.length > 0) {
     params.job_ids.forEach((jobId) => {
@@ -1960,10 +1719,7 @@ export async function listBatchJobs(params?: ListBatchJobsParams): Promise<ListB
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -2083,12 +1839,6 @@ export async function uploadMultiPageInvoice(
     document_type?: DocumentType;
   }
 ): Promise<UploadInvoiceResponse | AsyncMultiPageJobResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   if (files.length < 2) {
     throw new Error('At least 2 images are required for multi-page upload');
   }
@@ -2117,9 +1867,7 @@ export async function uploadMultiPageInvoice(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -2164,12 +1912,6 @@ export async function uploadToGroup(
     group_id?: string;
   }
 ): Promise<UploadGroupResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   if (pageNumber < 1) {
     throw new Error('Page number must be >= 1');
   }
@@ -2185,10 +1927,7 @@ export async function uploadToGroup(
 
   const intentResponse = await fetch(intentUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify({
       filename: file.name,
       content_type: file.type || 'application/octet-stream',
@@ -2214,10 +1953,7 @@ export async function uploadToGroup(
 
   const confirmResponse = await fetch(`${BASE_URL}/invoices/upload-group-confirm?${confirmParams.toString()}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!confirmResponse.ok) {
@@ -2233,18 +1969,9 @@ export async function uploadToGroup(
  * GET /invoices/group/{group_id}
  */
 export async function getGroupStatus(groupId: string): Promise<GetGroupStatusResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/group/${groupId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -2272,12 +1999,6 @@ export async function completeGroup(
     async_process?: boolean;
   }
 ): Promise<CompleteGroupResponse | AsyncMultiPageJobResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (options?.auto_classify !== undefined) {
     queryParams.append('auto_classify', String(options.auto_classify));
@@ -2291,10 +2012,7 @@ export async function completeGroup(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -2310,18 +2028,9 @@ export async function completeGroup(
  * DELETE /invoices/group/{group_id}
  */
 export async function cancelGroup(groupId: string): Promise<CancelGroupResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/invoices/group/${groupId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {

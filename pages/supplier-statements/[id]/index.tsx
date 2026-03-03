@@ -15,12 +15,14 @@ import {
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { API_BASE_URL } from "@/services/config";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 const SupplierStatementDetail = () => {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useLanguage();
   const { showToast } = useToast();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [statement, setStatement] = useState<(SupplierStatement & { line_items?: SupplierStatementLineItem[] }) | null>(null);
@@ -47,7 +49,7 @@ const SupplierStatementDetail = () => {
     if (id) {
       loadStatement();
     }
-  }, [id]);
+  }, [id, selectedOrganizationId]);
 
   useEffect(() => {
     if (id && statement) {
@@ -67,7 +69,7 @@ const SupplierStatementDetail = () => {
       // If statement not loaded yet, wait for it
       return;
     }
-  }, [id, currentPage, filters, statement]);
+  }, [id, currentPage, filters, statement, selectedOrganizationId]);
 
   const loadStatement = async () => {
     if (!id || typeof id !== 'string') return;

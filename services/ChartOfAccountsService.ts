@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 // Types
 export interface ChartOfAccount {
@@ -142,26 +143,13 @@ export interface UpdateDefaultCoaKeywordsResponse {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * List all chart of accounts for the current user
  * GET /chart-of-accounts
+ * Scoped by active organization.
  */
 export async function listChartOfAccounts(
   params?: ListChartOfAccountsParams
 ): Promise<ListChartOfAccountsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.active_only !== undefined) {
     queryParams.append('active_only', params.active_only.toString());
@@ -173,10 +161,7 @@ export async function listChartOfAccounts(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -200,12 +185,6 @@ export async function listChartOfAccounts(
 export async function listChartOfAccountsViewer(
   params?: ListChartOfAccountsViewerParams
 ): Promise<ListChartOfAccountsViewerResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.account_type) {
     queryParams.append('account_type', params.account_type);
@@ -229,10 +208,7 @@ export async function listChartOfAccountsViewer(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -256,12 +232,6 @@ export async function listChartOfAccountsViewer(
 export async function listChartOfAccountsGrouped(
   params?: ListChartOfAccountsGroupedParams
 ): Promise<ListChartOfAccountsGroupedResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.active_only !== undefined) {
     queryParams.append('active_only', params.active_only.toString());
@@ -273,10 +243,7 @@ export async function listChartOfAccountsGrouped(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -300,18 +267,9 @@ export async function listChartOfAccountsGrouped(
 export async function createChartOfAccount(
   data: CreateChartOfAccountRequest
 ): Promise<CreateChartOfAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/chart-of-accounts`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -336,20 +294,11 @@ export async function createChartOfAccount(
 export async function getChartOfAccount(
   accountId: number
 ): Promise<GetChartOfAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(
     `${BASE_URL}/chart-of-accounts/${accountId}`,
     {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     }
   );
 
@@ -375,20 +324,11 @@ export async function updateChartOfAccount(
   accountId: number,
   data: UpdateChartOfAccountRequest
 ): Promise<UpdateChartOfAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(
     `${BASE_URL}/chart-of-accounts/${accountId}`,
     {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
       body: JSON.stringify(data),
     }
   );
@@ -414,20 +354,11 @@ export async function updateChartOfAccount(
 export async function deleteChartOfAccount(
   accountId: number
 ): Promise<DeleteChartOfAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(
     `${BASE_URL}/chart-of-accounts/${accountId}`,
     {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     }
   );
 
@@ -450,20 +381,11 @@ export async function deleteChartOfAccount(
  * POST /chart-of-accounts/import-defaults
  */
 export async function importDefaultChartOfAccounts(): Promise<ImportDefaultCoaResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(
     `${BASE_URL}/chart-of-accounts/import-defaults`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     }
   );
 
@@ -486,20 +408,11 @@ export async function importDefaultChartOfAccounts(): Promise<ImportDefaultCoaRe
  * POST /chart-of-accounts/update-default-keywords
  */
 export async function updateDefaultCoaKeywords(): Promise<UpdateDefaultCoaKeywordsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(
     `${BASE_URL}/chart-of-accounts/update-default-keywords`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getScopedHeaders(),
     }
   );
 

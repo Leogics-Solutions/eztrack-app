@@ -10,13 +10,14 @@ import {
   LayoutDashboard,
   Settings,
   Users,
-  BarChart3,
   FileText,
   Menu,
   X,
   CreditCard,
   Receipt,
+  Briefcase,
 } from 'lucide-react';
+import { CompanySwitcher } from './CompanySwitcher';
 
 interface MobileSidebarProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
     { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
+    { href: '/jobs', label: t.nav.jobs, icon: Briefcase },
     { href: '/settings', label: t.nav.settings, icon: Settings },
   ];
 
@@ -114,6 +116,11 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
             >
               <X className="h-5 w-5" />
             </button>
+          </div>
+
+          {/* Company switcher */}
+          <div className="px-4 py-2 border-b" style={{ borderBottomColor: 'var(--border)' }}>
+            <CompanySwitcher />
           </div>
 
           {/* User Info */}

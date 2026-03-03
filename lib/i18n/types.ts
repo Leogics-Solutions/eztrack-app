@@ -24,6 +24,7 @@ export interface Translations {
   // Navigation
   nav: {
     dashboard: string;
+    jobs: string;
     documents: string;
     supportingDocuments: string;
     settlementDocuments: string;
@@ -39,6 +40,19 @@ export interface Translations {
   header: {
     addDocument: string;
     logout: string;
+  };
+
+  // Organizations / Companies (multi-company switcher)
+  organization: {
+    switchCompany: string;
+    currentCompany: string;
+    setAsDefault: string;
+    createCompany: string;
+    editCompany: string;
+    manageCompanies: string;
+    noCompany: string;
+    companiesLimit: string;
+    slotsRemaining: string;
   };
 
   // Documents
@@ -710,7 +724,95 @@ export interface Translations {
         loading: string;
         note: string;
       };
+      gmail: {
+        title: string;
+        description: string;
+        connect: string;
+        connecting: string;
+        connected: string;
+        notConnected: string;
+        notEnabledByAdmin: string;
+        connectSuccess: string;
+        connectFailed: string;
+        callbackFailed: string;
+        syncNow: string;
+        syncing: string;
+        syncSuccess: string;
+        syncFailed: string;
+        lastSync: string;
+        connectedAccount: string;
+        disconnect: string;
+        disconnecting: string;
+        disconnectConfirm: string;
+        disconnectSuccess: string;
+        disconnectFailed: string;
+        ingestKeywords: string;
+        ingestKeywordsDescription: string;
+        saveKeywords: string;
+        savingKeywords: string;
+        keywordsSaved: string;
+        keywordsSaveFailed: string;
+      };
+      drive: {
+        title: string;
+        description: string;
+        connect: string;
+        connecting: string;
+        connected: string;
+        notConnected: string;
+        notEnabledByAdmin: string;
+        connectSuccess: string;
+        connectFailed: string;
+        callbackFailed: string;
+        syncNow: string;
+        syncing: string;
+        syncSuccess: string;
+        syncFailed: string;
+        lastSync: string;
+        disconnect: string;
+        disconnecting: string;
+        disconnectConfirm: string;
+        disconnectSuccess: string;
+        disconnectFailed: string;
+        folderIds: string;
+        folderIdsDescription: string;
+        saveFolders: string;
+        savingFolders: string;
+        foldersSaved: string;
+        foldersSaveFailed: string;
+      };
     };
+  };
+
+  // Jobs
+  jobs: {
+    title: string;
+    description: string;
+    batchJobs: string;
+    batchJobsDescription: string;
+    syncHistory: string;
+    syncHistoryDescription: string;
+    driveSyncHistory: string;
+    driveSyncHistoryDescription: string;
+    filesProcessed: string;
+    jobId: string;
+    filename: string;
+    status: string;
+    createdAt: string;
+    completedAt: string;
+    messagesProcessed: string;
+    attachmentsIngested: string;
+    jobsEnqueued: string;
+    viewDocument: string;
+    noJobs: string;
+    noSyncLogs: string;
+    refresh: string;
+    loading: string;
+    pending: string;
+    processing: string;
+    success: string;
+    failed: string;
+    connection: string;
   };
 
   // Bank Statements
@@ -805,6 +907,9 @@ export interface Translations {
       credit: string;
       date: string;
       description: string;
+      payor: string;
+      description1: string;
+      description2: string;
       type: string;
       balance: string;
       linked: string;

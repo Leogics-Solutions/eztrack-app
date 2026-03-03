@@ -153,6 +153,9 @@ export type {
 
 // Organization Service
 export {
+  getUserOrganizations,
+  setPrimaryOrganization,
+  getOrganizationLimits,
   listOrganizations,
   createOrganization,
   updateOrganization,
@@ -163,6 +166,12 @@ export {
 } from './OrganizationService';
 
 export type {
+  UserOrganization,
+  GetUserOrganizationsResponse,
+  SetPrimaryOrganizationRequest,
+  SetPrimaryOrganizationResponse,
+  OrganizationLimits,
+  GetOrganizationLimitsResponse,
   Organization,
   OrganizationRole,
   OrganizationMember,

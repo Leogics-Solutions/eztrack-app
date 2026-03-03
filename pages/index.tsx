@@ -36,6 +36,7 @@ import {
   getDashboardSummary,
   type DashboardSummaryData,
 } from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 interface Filters {
   date_from: string;
@@ -46,6 +47,7 @@ interface Filters {
 
 export default function Home() {
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
   const [filters, setFilters] = useState<Filters>({
     date_from: '',
     date_to: '',
@@ -78,7 +80,7 @@ export default function Home() {
     };
 
     fetchDashboard();
-  }, [filters]);
+  }, [filters, selectedOrganizationId]);
 
   const kpis = dashboard?.kpis || {
     total_value: 0,

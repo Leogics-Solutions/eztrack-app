@@ -7,6 +7,7 @@ import {
     listChartOfAccountsViewer,
     COAViewerAccount,
 } from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
 interface Account {
@@ -26,6 +27,7 @@ interface SortConfig {
 
 const COAViewerList = () => {
     const { t } = useLanguage();
+    const { selectedOrganizationId } = useOrganization();
     // State
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [accountTypes, setAccountTypes] = useState<string[]>([]);
@@ -43,10 +45,10 @@ const COAViewerList = () => {
         date_to: '',
     });
 
-    // Data loading
+    // Data loading (refetch when company changes)
     useEffect(() => {
         loadData();
-    }, [filters, sortConfig]);
+    }, [filters, sortConfig, selectedOrganizationId]);
 
     const loadData = async () => {
         try {

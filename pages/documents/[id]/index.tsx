@@ -853,8 +853,6 @@ const InvoiceDetail = () => {
     );
   }
 
-  console.log("url",pageFiles[selectedPageIndex].url);
-
   return (
     <AppLayout pageName={`${t.documents.invoiceDetailPage.title} #${invoice.id}`}>
       {/* Invoice Header */}
@@ -2755,31 +2753,31 @@ function LineItemsCard({
       </div>
 
       <div className="overflow-x-auto mb-4">
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse min-w-[920px]">
           <thead>
             <tr className="border-b-2 border-[var(--border)] bg-[var(--muted)]/50">
-              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[32%]">
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[200px]">
                 {t.documents.invoiceDetailPage.description}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[9%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[80px]">
                 {t.documents.invoiceDetailPage.qty}
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[10%]">
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[80px]">
                 {t.documents.invoiceDetailPage.uom}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[12%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[100px]">
                 {t.documents.invoiceDetailPage.unitPrice}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[10%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[90px]">
                 Discount
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[12%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[100px]">
                 {t.documents.invoiceDetailPage.lineTotal}
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] w-[13%]">
+              <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
                 {t.documents.invoiceDetailPage.account}
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] w-[8%]">
+              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
                 Actions
               </th>
             </tr>
@@ -2798,7 +2796,7 @@ function LineItemsCard({
                   <>
                     <td className="px-4 py-3 align-top">
                       <input
-                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        className="w-full min-w-[10rem] px-3 py-2 border border-[var(--border)] rounded-md text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                         value={editingItem?.description ?? ""}
                         onChange={(e) => handleEditingItemChange("description", e.target.value)}
                         autoFocus
@@ -2808,14 +2806,14 @@ function LineItemsCard({
                       <input
                         type="number"
                         step="0.01"
-                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                         value={editingItem?.quantity ?? ""}
                         onChange={(e) => handleEditingItemChange("quantity", e.target.value)}
                       />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <input
-                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                         value={editingItem?.uom ?? ""}
                         onChange={(e) => handleEditingItemChange("uom", e.target.value)}
                       />
@@ -2824,7 +2822,7 @@ function LineItemsCard({
                       <input
                         type="number"
                         step="0.01"
-                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        className="w-full min-w-[5rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                         value={editingItem?.unit_price ?? ""}
                         onChange={(e) => handleEditingItemChange("unit_price", e.target.value)}
                       />
@@ -2833,7 +2831,7 @@ function LineItemsCard({
                       <input
                         type="number"
                         step="0.01"
-                        className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                        className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                         placeholder="0.00%"
                         value={editingItem?.discount ?? ""}
                         onChange={(e) => handleEditingItemChange("discount", e.target.value)}
@@ -2928,7 +2926,7 @@ function LineItemsCard({
             <tr className="bg-[var(--muted)]/20 border-t-2 border-[var(--border)]">
               <td className="px-4 py-3 text-sm align-top">
                 <input
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  className="w-full min-w-[10rem] px-3 py-2 border border-[var(--border)] rounded-md text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder={t.documents.invoiceDetailPage.description}
                   value={newItem.description}
                   onChange={(e) => handleNewItemChange("description", e.target.value)}
@@ -2943,7 +2941,7 @@ function LineItemsCard({
                 <input
                   type="number"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder="0"
                   value={newItem.quantity}
                   onChange={(e) => handleNewItemChange("quantity", e.target.value)}
@@ -2956,7 +2954,7 @@ function LineItemsCard({
               </td>
               <td className="px-4 py-3 text-sm align-top">
                 <input
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder={t.documents.invoiceDetailPage.uom}
                   value={newItem.uom}
                   onChange={(e) => handleNewItemChange("uom", e.target.value)}
@@ -2971,7 +2969,7 @@ function LineItemsCard({
                 <input
                   type="number"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  className="w-full min-w-[5rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder="0.00"
                   value={newItem.unit_price}
                   onChange={(e) => handleNewItemChange("unit_price", e.target.value)}
@@ -2986,7 +2984,7 @@ function LineItemsCard({
                 <input
                   type="number"
                   step="0.01"
-                  className="w-full px-3 py-2 border border-[var(--border)] rounded-md text-right text-sm bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+                  className="w-full min-w-[4rem] px-3 py-2 border border-[var(--border)] rounded-md text-right text-base bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder="0.00%"
                   value={newItem.discount}
                   onChange={(e) => handleNewItemChange("discount", e.target.value)}

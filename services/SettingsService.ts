@@ -21,8 +21,38 @@ export interface BusinessCentralIntegration {
   connections: BusinessCentralConnection[];
 }
 
+export interface GmailConnection {
+  id: number;
+  email: string;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+export interface GmailIntegration {
+  enabled: boolean;
+  connection_count: number;
+  connections: GmailConnection[];
+}
+
+export interface DriveConnection {
+  id: number;
+  email?: string;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+export interface DriveIntegration {
+  enabled: boolean;
+  connection_count: number;
+  connections: DriveConnection[];
+}
+
 export interface IntegrationSettings {
   business_central: BusinessCentralIntegration;
+  gmail?: GmailIntegration;
+  drive?: DriveIntegration;
   xero?: {
     enabled: boolean;
     connection_count: number;

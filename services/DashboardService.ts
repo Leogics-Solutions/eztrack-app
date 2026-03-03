@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 // Types
 export interface DashboardFilters {
@@ -85,26 +86,13 @@ export interface DashboardSummaryParams {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * Fetch dashboard summary data
  * GET /dashboard/summary
+ * Scoped by active organization (X-Organization-Id or primary).
  */
 export async function getDashboardSummary(
   params?: DashboardSummaryParams
 ): Promise<DashboardSummaryResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.date_from) {
@@ -126,10 +114,7 @@ export async function getDashboardSummary(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {

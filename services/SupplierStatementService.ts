@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
 // Types
 export interface SupplierStatement {
@@ -242,14 +243,6 @@ export interface DeleteSupplierStatementLinkResponse {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * Create upload intent and get presigned S3 URL
  * POST /supplier-statements/upload-intent
  */
@@ -259,12 +252,6 @@ export async function createUploadIntent(
   sizeBytes: number,
   supplierName?: string
 ): Promise<UploadIntentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: UploadIntentRequest = {
     filename,
     content_type: contentType,
@@ -274,10 +261,7 @@ export async function createUploadIntent(
 
   const response = await fetch(`${BASE_URL}/supplier-statements/upload-intent`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -296,18 +280,9 @@ export async function createUploadIntent(
 export async function confirmUpload(
   statementId: number
 ): Promise<ConfirmUploadResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/${statementId}/confirm-upload`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -331,12 +306,6 @@ export async function uploadSupplierStatement(
   asyncProcess: boolean = false,
   supplierName?: string
 ): Promise<UploadSupplierStatementResult> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const formData = new FormData();
   formData.append('file', file);
   if (supplierName) {
@@ -354,9 +323,7 @@ export async function uploadSupplierStatement(
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeadersForFormData(),
     body: formData,
   });
 
@@ -375,12 +342,6 @@ export async function uploadSupplierStatement(
 export async function listSupplierStatements(
   params?: ListSupplierStatementsParams
 ): Promise<ListSupplierStatementsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -405,10 +366,7 @@ export async function listSupplierStatements(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -429,18 +387,9 @@ export async function listSupplierStatements(
 export async function getSupplierStatement(
   id: number
 ): Promise<GetSupplierStatementResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/${id}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -515,12 +464,6 @@ export async function getSupplierStatementLineItems(
   statementId: number,
   params?: GetSupplierStatementLineItemsParams
 ): Promise<GetSupplierStatementLineItemsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -545,10 +488,7 @@ export async function getSupplierStatementLineItems(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -564,18 +504,9 @@ export async function getSupplierStatementLineItems(
  * GET /supplier-statements/suppliers/list
  */
 export async function getSupplierNames(): Promise<ListSupplierNamesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/suppliers/list`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -593,18 +524,9 @@ export async function getSupplierNames(): Promise<ListSupplierNamesResponse> {
 export async function deleteSupplierStatement(
   id: number
 ): Promise<DeleteSupplierStatementResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -654,12 +576,6 @@ export async function createSupplierStatementLink(
     notes?: string;
   }
 ): Promise<CreateSupplierStatementLinkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: CreateSupplierStatementLinkRequest = {
     supplier_statement_line_item_id: lineItemId,
     invoice_id: invoiceId,
@@ -670,10 +586,7 @@ export async function createSupplierStatementLink(
 
   const response = await fetch(`${BASE_URL}/supplier-statements/links`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -698,20 +611,11 @@ export async function createSupplierStatementLinksBulk(
     notes?: string;
   }>
 ): Promise<CreateSupplierStatementLinksBulkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const requestBody: CreateSupplierStatementLinksBulkRequest = { links };
 
   const response = await fetch(`${BASE_URL}/supplier-statements/links/bulk`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(requestBody),
   });
 
@@ -730,18 +634,9 @@ export async function createSupplierStatementLinksBulk(
 export async function getInvoiceSupplierStatementLinks(
   invoiceId: number
 ): Promise<GetInvoiceSupplierStatementLinksResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/invoices/${invoiceId}/links`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -771,18 +666,9 @@ export async function getInvoiceSupplierStatementLinks(
 export async function deleteSupplierStatementLink(
   linkId: number
 ): Promise<DeleteSupplierStatementLinkResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/supplier-statements/links/${linkId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {

@@ -19,11 +19,13 @@ import {
 } from "@/services";
 import { FileUpload } from "@/components/FileUpload";
 import { useToast } from "@/lib/toast";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 const BankStatementsList = () => {
   const router = useRouter();
   const { t } = useLanguage();
   const { showToast } = useToast();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [statements, setStatements] = useState<BankStatement[]>([]);
@@ -55,7 +57,7 @@ const BankStatementsList = () => {
   useEffect(() => {
     loadStatements();
     loadAccountNumbers();
-  }, [currentPage, filters]);
+  }, [currentPage, filters, selectedOrganizationId]);
 
   // Clear selections when statements change
   useEffect(() => {

@@ -15,6 +15,43 @@ export interface Organization {
   updated_at: string;
 }
 
+/** Organization as returned by GET /users/me/organizations (for company switcher) */
+export interface UserOrganization {
+  id: number;
+  name: string;
+  industry?: string;
+  is_primary: boolean;
+}
+
+export interface GetUserOrganizationsResponse {
+  success: boolean;
+  data: UserOrganization[];
+  message: string;
+}
+
+export interface SetPrimaryOrganizationRequest {
+  organization_id: number | null;
+}
+
+export interface SetPrimaryOrganizationResponse {
+  success: boolean;
+  data: { id: number; primary_organization_id: number | null };
+  message: string;
+}
+
+/** Organization limit fields from GET /users/me/organizations/limits (and /users/me) */
+export interface OrganizationLimits {
+  max_organizations: number;
+  current_organizations_count: number;
+  remaining_organizations_slots: number;
+}
+
+export interface GetOrganizationLimitsResponse {
+  success?: boolean;
+  data?: OrganizationLimits;
+  message?: string;
+}
+
 export interface ListOrganizationsResponse {
   success: boolean;
   data: Organization[];
@@ -96,6 +133,103 @@ export interface UpdateMemberRoleResponse {
 function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('access_token');
+}
+
+/**
+ * List organizations the current user can access (for company switcher).
+ * Includes is_primary so UI can preselect default company.
+ * GET /users/me/organizations
+ */
+export async function getUserOrganizations(): Promise<GetUserOrganizationsResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/users/me/organizations`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to list organizations');
+  }
+
+  return response.json();
+}
+
+/**
+ * Set or clear the user's primary organization (self-service).
+ * PUT /users/me/organizations/primary
+ */
+export async function setPrimaryOrganization(
+  organizationId: number | null
+): Promise<SetPrimaryOrganizationResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/users/me/organizations/primary`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ organization_id: organizationId }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to set primary organization');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get organization limits for the current user (max/current/remaining slots).
+ * GET /users/me/organizations/limits
+ */
+export async function getOrganizationLimits(): Promise<GetOrganizationLimitsResponse> {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error('No access token found');
+  }
+
+  const response = await fetch(`${BASE_URL}/users/me/organizations/limits`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to get organization limits');
+  }
+
+  const json = await response.json();
+  // API may return { max_organizations, current_organizations_count, remaining_organizations_slots } directly or wrapped
+  if (json.data) {
+    return json;
+  }
+  return {
+    success: true,
+    data: {
+      max_organizations: json.max_organizations ?? 0,
+      current_organizations_count: json.current_organizations_count ?? 0,
+      remaining_organizations_slots: json.remaining_organizations_slots ?? 0,
+    },
+  };
 }
 
 /**

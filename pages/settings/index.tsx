@@ -2,7 +2,8 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/router";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
     updateCurrentUser,
@@ -14,11 +15,24 @@ import {
     changePassword as apiChangePassword,
 } from "@/services/AuthService";
 import {
+    getUserOrganizations,
+    setPrimaryOrganization as apiSetPrimaryOrganization,
+    getOrganizationLimits,
     listOrganizations,
+    createOrganization,
+    updateOrganization,
     listOrganizationMembers,
+    addOrganizationMember,
+    updateMemberRole as apiUpdateMemberRole,
+    removeOrganizationMember,
     type Organization as ApiOrganization,
     type OrganizationMember as ApiOrganizationMember,
+    type UserOrganization,
+    type CreateOrganizationRequest,
+    type UpdateOrganizationRequest,
+    type OrganizationLimits,
 } from "@/services/OrganizationService";
+import { useOrganization } from "@/lib/OrganizationContext";
 import {
     getSettings,
     updateSettings,
@@ -31,6 +45,22 @@ import {
     type TestConnectionRequest,
     type TestConnectionResponse,
 } from "@/services/SettingsService";
+import {
+    getGmailConnect,
+    postGmailCallback,
+    postGmailSync,
+    deleteGmailConnection,
+    getGmailSettings,
+    patchGmailSettings,
+} from "@/services/GmailService";
+import {
+    getDriveConnect,
+    postDriveCallback,
+    postDriveSync,
+    deleteDriveConnection,
+    getDriveSettings,
+    patchDriveSettings,
+} from "@/services/DriveService";
 
 // Local view types
 interface SettingsUser {
@@ -47,6 +77,7 @@ interface OrganizationView {
 
 interface TeamMember {
     membership_id: string;
+    user_id: number;
     email: string;
     full_name?: string;
     role: 'admin' | 'uploader' | 'operator';
@@ -58,7 +89,9 @@ interface UsageStats {
 
 const SettingsPage = () => {
     const { t } = useLanguage();
+    const router = useRouter();
     const { user: authUser, isLoading: authLoading } = useAuth();
+    const { organizations: userOrgs, selectedOrganizationId, setPrimaryOrganization, refetchOrganizations } = useOrganization();
 
     // State
     const [user, setUser] = useState<SettingsUser>({
@@ -82,6 +115,7 @@ const SettingsPage = () => {
     });
 
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+    const [orgLimits, setOrgLimits] = useState<OrganizationLimits | null>(null);
 
     // Settings state
     const [appSettings, setAppSettings] = useState<SettingsResponse | null>(null);
@@ -95,6 +129,24 @@ const SettingsPage = () => {
     const [isDisablingBC, setIsDisablingBC] = useState(false);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
     const [testConnectionResult, setTestConnectionResult] = useState<TestConnectionResponse | null>(null);
+
+    // Gmail integration
+    const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+    const [isSyncingGmail, setIsSyncingGmail] = useState(false);
+    const [disconnectingConnectionId, setDisconnectingConnectionId] = useState<number | null>(null);
+    const [gmailKeywordsInput, setGmailKeywordsInput] = useState("");
+    const [isLoadingGmailKeywords, setIsLoadingGmailKeywords] = useState(false);
+    const [isSavingGmailKeywords, setIsSavingGmailKeywords] = useState(false);
+    const gmailCallbackProcessedRef = useRef(false);
+
+    // Drive integration
+    const [isConnectingDrive, setIsConnectingDrive] = useState(false);
+    const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+    const [disconnectingDriveConnectionId, setDisconnectingDriveConnectionId] = useState<number | null>(null);
+    const [driveFolderIdsInput, setDriveFolderIdsInput] = useState("");
+    const [isLoadingDriveFolders, setIsLoadingDriveFolders] = useState(false);
+    const [isSavingDriveFolders, setIsSavingDriveFolders] = useState(false);
+    const driveCallbackProcessedRef = useRef(false);
     
     // Business Central enable form fields
     const [bcTenantId, setBcTenantId] = useState('');
@@ -111,6 +163,15 @@ const SettingsPage = () => {
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
     const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+    const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
+    const [createCompanyName, setCreateCompanyName] = useState('');
+    const [createCompanyIndustry, setCreateCompanyIndustry] = useState('');
+    const [isCreatingCompany, setIsCreatingCompany] = useState(false);
+    const [showEditCompanyModal, setShowEditCompanyModal] = useState(false);
+    const [editingOrg, setEditingOrg] = useState<UserOrganization | null>(null);
+    const [editCompanyName, setEditCompanyName] = useState('');
+    const [editCompanyIndustry, setEditCompanyIndustry] = useState('');
+    const [isUpdatingCompany, setIsUpdatingCompany] = useState(false);
 
     // Form states
     const [profileFullName, setProfileFullName] = useState('');
@@ -144,16 +205,61 @@ const SettingsPage = () => {
         setOrg({ industry: settingsUser.industry });
     }, [authUser]);
 
-    // Initial load when auth state is ready
+    // Initial load when auth state is ready; reload team when selected company changes
     useEffect(() => {
         if (!authLoading) {
             hydrateUserFromAuth();
             loadQuota();
-            loadTeamMembers();
+            loadOrgLimits();
+            loadTeamMembers(selectedOrganizationId);
             loadSettings();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authLoading, hydrateUserFromAuth]);
+    }, [authLoading, hydrateUserFromAuth, selectedOrganizationId]);
+
+    // Handle OAuth callback (Gmail or Drive redirect with ?code=...&state=...)
+    useEffect(() => {
+        if (!router.isReady || typeof window === 'undefined') return;
+        const { code, state } = router.query as { code?: string; state?: string };
+        if (!code || !state) return;
+        if (gmailCallbackProcessedRef.current || driveCallbackProcessedRef.current) return;
+
+        const provider = typeof window !== 'undefined' ? sessionStorage.getItem('oauth_provider') : null;
+        if (provider === 'drive') {
+            driveCallbackProcessedRef.current = true;
+            sessionStorage.removeItem('oauth_provider');
+            const finishDriveCallback = async () => {
+                try {
+                    await postDriveCallback({ code, state });
+                    showNotification(t.settings.integrations.drive.connectSuccess, 'success');
+                    router.replace('/settings', undefined, { shallow: true });
+                    await loadSettings();
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : t.settings.integrations.drive.callbackFailed;
+                    showNotification(message, 'error');
+                    router.replace('/settings', undefined, { shallow: true });
+                }
+            };
+            finishDriveCallback();
+        } else {
+            gmailCallbackProcessedRef.current = true;
+            if (typeof window !== 'undefined') sessionStorage.removeItem('oauth_provider');
+            const finishGmailCallback = async () => {
+                try {
+                    await postGmailCallback({ code, state });
+                    showNotification(t.settings.integrations.gmail.connectSuccess, 'success');
+                    router.replace('/settings', undefined, { shallow: true });
+                    await loadSettings();
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : t.settings.integrations.gmail.callbackFailed;
+                    showNotification(message, 'error');
+                    router.replace('/settings', undefined, { shallow: true });
+                }
+            };
+            finishGmailCallback();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [router.isReady, router.query.code, router.query.state]);
 
     const loadQuota = async () => {
         try {
@@ -172,7 +278,25 @@ const SettingsPage = () => {
         }
     };
 
-    const loadTeamMembers = async () => {
+    const loadOrgLimits = async () => {
+        try {
+            const resp = await getOrganizationLimits();
+            const data = resp.data;
+            if (data && typeof data.max_organizations === 'number') {
+                setOrgLimits({
+                    max_organizations: data.max_organizations,
+                    current_organizations_count: data.current_organizations_count ?? 0,
+                    remaining_organizations_slots: data.remaining_organizations_slots ?? 0,
+                });
+            } else {
+                setOrgLimits(null);
+            }
+        } catch {
+            setOrgLimits(null);
+        }
+    };
+
+    const loadTeamMembers = async (preferredOrgId: number | null = null) => {
         try {
             if (!authUser) {
                 setHasOrganization(false);
@@ -193,8 +317,10 @@ const SettingsPage = () => {
                 return;
             }
 
-            // For now, use the first organization the user belongs to
-            const org: ApiOrganization = organizations[0];
+            const preferred = preferredOrgId && organizations.some((o) => o.id === preferredOrgId)
+                ? preferredOrgId
+                : organizations[0].id;
+            const org: ApiOrganization = organizations.find((o) => o.id === preferred) ?? organizations[0];
             setHasOrganization(true);
             setActiveOrgId(org.id);
 
@@ -209,6 +335,7 @@ const SettingsPage = () => {
 
             const mappedMembers: TeamMember[] = members.map((m) => ({
                 membership_id: String(m.id),
+                user_id: m.user_id,
                 email: m.email,
                 full_name: m.full_name || undefined,
                 role: m.role,
@@ -454,15 +581,11 @@ const SettingsPage = () => {
 
     // Team management
     const updateMemberRole = async (membershipId: string, role: 'admin' | 'uploader' | 'operator') => {
-        // TODO: Replace with actual API call
+        if (activeOrgId == null) return;
+        const member = teamMembers.find((m) => m.membership_id === membershipId);
+        if (!member) return;
         try {
-            // const resp = await fetch(`/api/org/members/${membershipId}/role`, {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({ role })
-            // });
-            // const data = await resp.json();
-
+            await apiUpdateMemberRole(activeOrgId, member.user_id, { role });
             setTeamMembers(teamMembers.map(m =>
                 m.membership_id === membershipId ? { ...m, role } : m
             ));
@@ -483,15 +606,11 @@ const SettingsPage = () => {
     };
 
     const confirmRemoveMember = async () => {
-        if (!memberToRemove) return;
-
-        // TODO: Replace with actual API call
+        if (!memberToRemove || activeOrgId == null) return;
+        const member = teamMembers.find((m) => m.membership_id === memberToRemove);
+        if (!member) return;
         try {
-            // const resp = await fetch(`/api/org/members/${memberToRemove}/remove`, {
-            //     method: 'POST'
-            // });
-            // const data = await resp.json();
-
+            await removeOrganizationMember(activeOrgId, member.user_id);
             setTeamMembers(teamMembers.filter(m => m.membership_id !== memberToRemove));
             showNotification(t.settings.memberRemoved, 'success');
             closeRemoveMemberModal();
@@ -520,31 +639,93 @@ const SettingsPage = () => {
         closeAddMemberModal();
     };
 
-    const addMember = async (email: string, full_name: string, role: 'admin' | 'uploader' | 'operator') => {
-        // TODO: Replace with actual API call
+    const openCreateCompanyModal = () => {
+        setCreateCompanyName('');
+        setCreateCompanyIndustry('');
+        setShowCreateCompanyModal(true);
+    };
+    const closeCreateCompanyModal = () => {
+        setShowCreateCompanyModal(false);
+        setCreateCompanyName('');
+        setCreateCompanyIndustry('');
+    };
+    const openEditCompanyModal = (org: UserOrganization) => {
+        setEditingOrg(org);
+        setEditCompanyName(org.name);
+        setEditCompanyIndustry(org.industry ?? '');
+        setShowEditCompanyModal(true);
+    };
+    const closeEditCompanyModal = () => {
+        setShowEditCompanyModal(false);
+        setEditingOrg(null);
+        setEditCompanyName('');
+        setEditCompanyIndustry('');
+    };
+    const handleUpdateCompany = async () => {
+        if (!editingOrg || !editCompanyName.trim()) return;
+        setIsUpdatingCompany(true);
         try {
-            // const resp = await fetch('/api/org/members/add', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({ email, full_name, role })
-            // });
-            // const data = await resp.json();
-
-            const newMember: TeamMember = {
-                membership_id: String(Date.now()),
-                email,
-                full_name: full_name || undefined,
-                role,
+            const payload: UpdateOrganizationRequest = {
+                name: editCompanyName.trim(),
+                industry: editCompanyIndustry.trim() || undefined,
             };
-
-            setTeamMembers([...teamMembers, newMember]);
-            showNotification(t.settings.memberAdded, 'success');
-            // If temp password is provided, show it
-            // if (data.temp_password) {
-            //     alert(`Temporary password for ${email}: ${data.temp_password}`);
-            // }
+            await updateOrganization(editingOrg.id, payload);
+            await refetchOrganizations();
+            showNotification(t.settings.profileUpdated || 'Company updated', 'success');
+            closeEditCompanyModal();
         } catch (error) {
+            showNotification(error instanceof Error ? error.message : 'Failed to update company', 'error');
+        } finally {
+            setIsUpdatingCompany(false);
+        }
+    };
+    const handleCreateCompany = async () => {
+        if (!createCompanyName.trim()) {
+            showNotification('Company name is required', 'error');
+            return;
+        }
+        setIsCreatingCompany(true);
+        try {
+            const payload: CreateOrganizationRequest = {
+                name: createCompanyName.trim(),
+                industry: createCompanyIndustry.trim() || undefined,
+                quota_pages: 0,
+            };
+            await createOrganization(payload);
+            await refetchOrganizations();
+            await loadOrgLimits();
+            showNotification(t.settings.profileUpdated || 'Company created', 'success');
+            closeCreateCompanyModal();
+        } catch (error) {
+            showNotification(error instanceof Error ? error.message : 'Failed to create company', 'error');
+        } finally {
+            setIsCreatingCompany(false);
+        }
+    };
+
+    const addMember = async (email: string, _full_name: string, role: 'admin' | 'uploader' | 'operator') => {
+        if (activeOrgId == null) {
             showNotification(t.settings.memberAddFailed, 'error');
+            return;
+        }
+        try {
+            const resp = await addOrganizationMember(activeOrgId, { email, role });
+            if (resp.success && resp.data) {
+                const m = resp.data;
+                const newMember: TeamMember = {
+                    membership_id: String(m.id),
+                    user_id: m.user_id,
+                    email: m.email,
+                    full_name: m.full_name || undefined,
+                    role: m.role,
+                };
+                setTeamMembers([...teamMembers, newMember]);
+                showNotification(t.settings.memberAdded, 'success');
+            } else {
+                showNotification(t.settings.memberAddFailed, 'error');
+            }
+        } catch (error) {
+            showNotification(error instanceof Error ? error.message : t.settings.memberAddFailed, 'error');
         }
     };
 
@@ -601,6 +782,20 @@ const SettingsPage = () => {
     const businessCentralConnections = appSettings?.integrations?.business_central?.connections ?? [];
     const businessCentralConnectionCount = appSettings?.integrations?.business_central?.connection_count ?? 0;
 
+    // Gmail: from GET /settings – enabled (admin), connection_count, connections[]
+    const gmailIntegration = appSettings?.integrations?.gmail;
+    const gmailEnabled = gmailIntegration?.enabled ?? false;
+    const gmailConnections = gmailIntegration?.connections ?? [];
+    const gmailConnectionCount = gmailIntegration?.connection_count ?? 0;
+    const gmailConnected = gmailConnectionCount > 0;
+
+    // Drive: from GET /settings
+    const driveIntegration = appSettings?.integrations?.drive;
+    const driveEnabled = driveIntegration?.enabled ?? false;
+    const driveConnections = driveIntegration?.connections ?? [];
+    const driveConnectionCount = driveIntegration?.connection_count ?? 0;
+    const driveConnected = driveConnectionCount > 0;
+
     // Business Central enable/disable handlers
     const openEnableBCModal = () => {
         setShowEnableBCModal(true);
@@ -616,6 +811,180 @@ const SettingsPage = () => {
     const closeEnableBCModal = () => {
         setShowEnableBCModal(false);
         setTestConnectionResult(null);
+    };
+
+    // Gmail: start OAuth flow (redirect to Google)
+    const handleConnectGmail = async () => {
+        setIsConnectingGmail(true);
+        try {
+            const { auth_url } = await getGmailConnect();
+            if (typeof window !== 'undefined') sessionStorage.setItem('oauth_provider', 'gmail');
+            window.location.href = auth_url;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.gmail.connectFailed;
+            showNotification(message, 'error');
+            setIsConnectingGmail(false);
+        }
+    };
+
+    // Gmail: trigger sync (ingest attachments from inbox)
+    const handleGmailSync = async () => {
+        setIsSyncingGmail(true);
+        try {
+            const res = await postGmailSync({});
+            const msg = res.job_ids?.length
+                ? `${t.settings.integrations.gmail.syncSuccess} Job IDs: ${res.job_ids.join(', ')}`
+                : res.message || t.settings.integrations.gmail.syncSuccess;
+            showNotification(msg, 'success');
+            void router.push('/jobs');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.gmail.syncFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSyncingGmail(false);
+        }
+    };
+
+    // Drive: start OAuth flow (redirect to Google)
+    const handleConnectDrive = async () => {
+        setIsConnectingDrive(true);
+        try {
+            const { auth_url } = await getDriveConnect();
+            if (typeof window !== 'undefined') sessionStorage.setItem('oauth_provider', 'drive');
+            window.location.href = auth_url;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.drive.connectFailed;
+            showNotification(message, 'error');
+            setIsConnectingDrive(false);
+        }
+    };
+
+    // Drive: trigger sync (ingest from Drive folders)
+    const handleDriveSync = async () => {
+        setIsSyncingDrive(true);
+        try {
+            const res = await postDriveSync({});
+            const msg = res.job_ids?.length
+                ? `${t.settings.integrations.drive.syncSuccess} Job IDs: ${res.job_ids.join(', ')}`
+                : res.message || t.settings.integrations.drive.syncSuccess;
+            showNotification(msg, 'success');
+            void router.push('/jobs');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.drive.syncFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSyncingDrive(false);
+        }
+    };
+
+    // Drive: disconnect
+    const handleDisconnectDrive = async (connectionId: number) => {
+        if (!confirm(t.settings.integrations.drive.disconnectConfirm)) return;
+        setDisconnectingDriveConnectionId(connectionId);
+        try {
+            await deleteDriveConnection(connectionId);
+            showNotification(t.settings.integrations.drive.disconnectSuccess, 'success');
+            await loadSettings();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.drive.disconnectFailed;
+            showNotification(message, 'error');
+        } finally {
+            setDisconnectingDriveConnectionId(null);
+        }
+    };
+
+    // Drive: load folder IDs when Drive is enabled
+    const loadDriveFolderIds = useCallback(async () => {
+        if (!driveEnabled) return;
+        setIsLoadingDriveFolders(true);
+        try {
+            const res = await getDriveSettings();
+            const ids = res.drive_default_folder_ids ?? [];
+            setDriveFolderIdsInput(ids.join(', '));
+        } catch (err) {
+            console.error('Failed to load Drive folder IDs', err);
+        } finally {
+            setIsLoadingDriveFolders(false);
+        }
+    }, [driveEnabled]);
+
+    useEffect(() => {
+        if (driveEnabled && !isLoadingSettings) {
+            loadDriveFolderIds();
+        }
+    }, [driveEnabled, isLoadingSettings, loadDriveFolderIds]);
+
+    // Drive: save folder IDs (PATCH /drive/settings)
+    const handleSaveDriveFolders = async () => {
+        setIsSavingDriveFolders(true);
+        try {
+            const ids = driveFolderIdsInput
+                .split(/[,\s]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+            await patchDriveSettings({ drive_default_folder_ids: ids });
+            showNotification(t.settings.integrations.drive.foldersSaved, 'success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.drive.foldersSaveFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSavingDriveFolders(false);
+        }
+    };
+
+    // Gmail: disconnect (DELETE /api/v1/gmail/connections/{connection_id})
+    const handleDisconnectGmail = async (connectionId: number) => {
+        if (!confirm(t.settings.integrations.gmail.disconnectConfirm)) return;
+        setDisconnectingConnectionId(connectionId);
+        try {
+            await deleteGmailConnection(connectionId);
+            showNotification(t.settings.integrations.gmail.disconnectSuccess, 'success');
+            await loadSettings();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.gmail.disconnectFailed;
+            showNotification(message, 'error');
+        } finally {
+            setDisconnectingConnectionId(null);
+        }
+    };
+
+    // Gmail: load ingest keywords when Gmail is enabled
+    const loadGmailKeywords = useCallback(async () => {
+        if (!gmailEnabled) return;
+        setIsLoadingGmailKeywords(true);
+        try {
+            const res = await getGmailSettings();
+            const kw = res.gmail_ingest_keywords ?? [];
+            setGmailKeywordsInput(kw.join(', '));
+        } catch (err) {
+            console.error('Failed to load Gmail keywords', err);
+        } finally {
+            setIsLoadingGmailKeywords(false);
+        }
+    }, [gmailEnabled]);
+
+    useEffect(() => {
+        if (gmailEnabled && !isLoadingSettings) {
+            loadGmailKeywords();
+        }
+    }, [gmailEnabled, isLoadingSettings, loadGmailKeywords]);
+
+    // Gmail: save ingest keywords (PATCH /gmail/settings)
+    const handleSaveGmailKeywords = async () => {
+        setIsSavingGmailKeywords(true);
+        try {
+            const keywords = gmailKeywordsInput
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            await patchGmailSettings({ gmail_ingest_keywords: keywords });
+            showNotification(t.settings.integrations.gmail.keywordsSaved, 'success');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.gmail.keywordsSaveFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSavingGmailKeywords(false);
+        }
     };
 
     const openDisableBCModal = () => {
@@ -1199,6 +1568,98 @@ const SettingsPage = () => {
                         </div>
                     </div>
 
+                    {/* Companies / Organizations card */}
+                    <div
+                        className="rounded-lg border lg:col-span-2"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b flex justify-between items-center flex-wrap gap-3" style={{ borderColor: 'var(--border)' }}>
+                            <div>
+                                <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                    {t.organization.manageCompanies}
+                                </h3>
+                                <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                    Create companies and set your default company for this account.
+                                </p>
+                                {orgLimits != null && (
+                                    <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.organization.companiesLimit
+                                            .replace('{current}', String(orgLimits.current_organizations_count))
+                                            .replace('{max}', String(orgLimits.max_organizations))}
+                                        {' · '}
+                                        {t.organization.slotsRemaining.replace('{count}', String(orgLimits.remaining_organizations_slots))}
+                                    </p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={openCreateCompanyModal}
+                                disabled={orgLimits != null && orgLimits.remaining_organizations_slots <= 0}
+                                className="px-4 py-2 rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+                            >
+                                {t.organization.createCompany}
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <ul className="space-y-2">
+                                {(userOrgs || []).map((org) => (
+                                    <li
+                                        key={org.id}
+                                        className="flex items-center justify-between gap-3 p-3 border rounded-md"
+                                        style={{ borderColor: 'var(--border)' }}
+                                    >
+                                        <div>
+                                            <span className="font-medium" style={{ color: 'var(--foreground)' }}>{org.name}</span>
+                                            {org.industry && (
+                                                <span className="text-sm ml-2" style={{ color: 'var(--muted-foreground)' }}>({org.industry})</span>
+                                            )}
+                                            {org.is_primary && (
+                                                <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                                                    Default
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => openEditCompanyModal(org)}
+                                                className="text-sm px-3 py-1.5 rounded border transition-colors"
+                                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                                            >
+                                                {t.common.edit}
+                                            </button>
+                                            {!org.is_primary && (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await setPrimaryOrganization(org.id);
+                                                            showNotification(t.organization.setAsDefault + ' – ' + org.name, 'success');
+                                                        } catch (e) {
+                                                            showNotification(e instanceof Error ? e.message : 'Failed to set default', 'error');
+                                                        }
+                                                    }}
+                                                    className="text-sm px-3 py-1.5 rounded border transition-colors"
+                                                    style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                                                >
+                                                    {t.organization.setAsDefault}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                            {(!userOrgs || userOrgs.length === 0) && (
+                                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                    No companies yet. Click &quot;{t.organization.createCompany}&quot; to create one.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Team Management Card - Only for admins with an organization */}
                     {hasOrganization && orgRole === 'admin' && (
                         <div
@@ -1274,6 +1735,292 @@ const SettingsPage = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* Gmail integration – connect and sync inbox for document ingestion */}
+                    <div
+                        className="rounded-lg border lg:col-span-2"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="text-3xl">📧</div>
+                                <div>
+                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                        {t.settings.integrations.gmail.title}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.integrations.gmail.description}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            {isLoadingSettings ? (
+                                <div className="text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
+                                    {t.settings.integrations.businessCentral.loading}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                                        <div className="space-y-1">
+                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                {!gmailEnabled
+                                                    ? t.settings.integrations.gmail.notEnabledByAdmin
+                                                    : gmailConnected
+                                                      ? t.settings.integrations.gmail.connected
+                                                      : t.settings.integrations.gmail.notConnected}
+                                            </p>
+                                            {gmailConnected && gmailConnections.length > 0 && (
+                                                <ul className="text-sm mt-1 space-y-1" style={{ color: 'var(--foreground)' }}>
+                                                    {gmailConnections.filter((c) => c.is_active).map((conn) => (
+                                                        <li key={conn.id} className="flex items-center gap-2 flex-wrap">
+                                                            <span>
+                                                                {conn.email}
+                                                                {conn.last_sync_at && (
+                                                                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                                        ({t.settings.integrations.gmail.lastSync}: {new Date(conn.last_sync_at).toLocaleString()})
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDisconnectGmail(conn.id)}
+                                                                disabled={disconnectingConnectionId === conn.id}
+                                                                className="text-sm px-2 py-1 rounded border transition-colors disabled:opacity-50"
+                                                                style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+                                                            >
+                                                                {disconnectingConnectionId === conn.id
+                                                                    ? t.settings.integrations.gmail.disconnecting
+                                                                    : t.settings.integrations.gmail.disconnect}
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {!gmailEnabled ? null : !gmailConnected ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleConnectGmail}
+                                                    disabled={isConnectingGmail}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50"
+                                                    style={{
+                                                        background: 'var(--primary)',
+                                                        color: 'var(--primary-foreground)',
+                                                    }}
+                                                >
+                                                    {isConnectingGmail
+                                                        ? t.settings.integrations.gmail.connecting
+                                                        : t.settings.integrations.gmail.connect}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleGmailSync}
+                                                    disabled={isSyncingGmail}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                >
+                                                    {isSyncingGmail
+                                                        ? t.settings.integrations.gmail.syncing
+                                                        : t.settings.integrations.gmail.syncNow}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {gmailEnabled && (
+                                        <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                                {t.settings.integrations.gmail.ingestKeywords}
+                                            </label>
+                                            <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.integrations.gmail.ingestKeywordsDescription}
+                                            </p>
+                                            <div className="flex gap-2 flex-wrap">
+                                                <input
+                                                    type="text"
+                                                    value={gmailKeywordsInput}
+                                                    onChange={(e) => setGmailKeywordsInput(e.target.value)}
+                                                    placeholder="invoice, receipt, statement"
+                                                    disabled={isLoadingGmailKeywords}
+                                                    className="flex-1 min-w-[200px] px-3 py-2 border rounded-md text-sm"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveGmailKeywords}
+                                                    disabled={isSavingGmailKeywords || isLoadingGmailKeywords}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                >
+                                                    {isSavingGmailKeywords
+                                                        ? t.settings.integrations.gmail.savingKeywords
+                                                        : t.settings.integrations.gmail.saveKeywords}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Google Drive integration */}
+                    <div
+                        className="rounded-lg border lg:col-span-2"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="text-3xl">📁</div>
+                                <div>
+                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                                        {t.settings.integrations.drive.title}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                        {t.settings.integrations.drive.description}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            {isLoadingSettings ? (
+                                <div className="text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
+                                    {t.settings.integrations.businessCentral.loading}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                                        <div className="space-y-1">
+                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                {!driveEnabled
+                                                    ? t.settings.integrations.drive.notEnabledByAdmin
+                                                    : driveConnected
+                                                      ? t.settings.integrations.drive.connected
+                                                      : t.settings.integrations.drive.notConnected}
+                                            </p>
+                                            {driveConnected && driveConnections.length > 0 && (
+                                                <ul className="text-sm mt-1 space-y-1" style={{ color: 'var(--foreground)' }}>
+                                                    {driveConnections.filter((c) => c.is_active).map((conn) => (
+                                                        <li key={conn.id} className="flex items-center gap-2 flex-wrap">
+                                                            <span>
+                                                                {conn.email || `Connection ${conn.id}`}
+                                                                {conn.last_sync_at && (
+                                                                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                                        ({t.settings.integrations.drive.lastSync}: {new Date(conn.last_sync_at).toLocaleString()})
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDisconnectDrive(conn.id)}
+                                                                disabled={disconnectingDriveConnectionId === conn.id}
+                                                                className="text-sm px-2 py-1 rounded border transition-colors disabled:opacity-50"
+                                                                style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+                                                            >
+                                                                {disconnectingDriveConnectionId === conn.id
+                                                                    ? t.settings.integrations.drive.disconnecting
+                                                                    : t.settings.integrations.drive.disconnect}
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {!driveEnabled ? null : !driveConnected ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleConnectDrive}
+                                                    disabled={isConnectingDrive}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50"
+                                                    style={{
+                                                        background: 'var(--primary)',
+                                                        color: 'var(--primary-foreground)',
+                                                    }}
+                                                >
+                                                    {isConnectingDrive
+                                                        ? t.settings.integrations.drive.connecting
+                                                        : t.settings.integrations.drive.connect}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleDriveSync}
+                                                    disabled={isSyncingDrive}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                >
+                                                    {isSyncingDrive
+                                                        ? t.settings.integrations.drive.syncing
+                                                        : t.settings.integrations.drive.syncNow}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {driveEnabled && (
+                                        <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                                {t.settings.integrations.drive.folderIds}
+                                            </label>
+                                            <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.integrations.drive.folderIdsDescription}
+                                            </p>
+                                            <div className="flex gap-2 flex-wrap">
+                                                <input
+                                                    type="text"
+                                                    value={driveFolderIdsInput}
+                                                    onChange={(e) => setDriveFolderIdsInput(e.target.value)}
+                                                    placeholder="1a2b3c4d5e6f, anotherFolderId"
+                                                    disabled={isLoadingDriveFolders}
+                                                    className="flex-1 min-w-[200px] px-3 py-2 border rounded-md text-sm"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveDriveFolders}
+                                                    disabled={isSavingDriveFolders || isLoadingDriveFolders}
+                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                >
+                                                    {isSavingDriveFolders
+                                                        ? t.settings.integrations.drive.savingFolders
+                                                        : t.settings.integrations.drive.saveFolders}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Integrations Card - hidden (Business Central UI disabled) */}
                     {false && (
@@ -1819,6 +2566,180 @@ const SettingsPage = () => {
                                 }}
                             >
                                 {t.settings.add}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Company Modal */}
+            {showCreateCompanyModal && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeCreateCompanyModal();
+                    }}
+                >
+                    <div
+                        className="rounded-lg max-w-md w-full"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+                            <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                                {t.organization.createCompany}
+                            </h3>
+                            <button
+                                onClick={closeCreateCompanyModal}
+                                className="text-2xl hover:opacity-70 transition-opacity"
+                                style={{ color: 'var(--foreground)' }}
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Company name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={createCompanyName}
+                                    onChange={(e) => setCreateCompanyName(e.target.value)}
+                                    placeholder="My New Company"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Industry (optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={createCompanyIndustry}
+                                    onChange={(e) => setCreateCompanyIndustry(e.target.value)}
+                                    placeholder="e.g. Retail, Professional Services"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                                onClick={closeCreateCompanyModal}
+                                className="px-6 py-2 border rounded-md transition-colors"
+                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                            >
+                                {t.settings.cancel}
+                            </button>
+                            <button
+                                onClick={handleCreateCompany}
+                                disabled={isCreatingCompany || !createCompanyName.trim()}
+                                className="px-6 py-2 rounded-md transition-colors hover:opacity-90 disabled:opacity-50"
+                                style={{
+                                    background: 'var(--primary)',
+                                    color: 'white',
+                                }}
+                            >
+                                {isCreatingCompany ? 'Creating...' : t.common.add}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Company Modal */}
+            {showEditCompanyModal && editingOrg && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeEditCompanyModal();
+                    }}
+                >
+                    <div
+                        className="rounded-lg max-w-md w-full"
+                        style={{
+                            background: 'var(--card)',
+                            borderColor: 'var(--border)',
+                        }}
+                    >
+                        <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+                            <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                                {t.organization.editCompany}
+                            </h3>
+                            <button
+                                onClick={closeEditCompanyModal}
+                                className="text-2xl hover:opacity-70 transition-opacity"
+                                style={{ color: 'var(--foreground)' }}
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Company name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editCompanyName}
+                                    onChange={(e) => setEditCompanyName(e.target.value)}
+                                    placeholder="My New Company"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Industry (optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editCompanyIndustry}
+                                    onChange={(e) => setEditCompanyIndustry(e.target.value)}
+                                    placeholder="e.g. Retail, Professional Services"
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                        background: 'var(--card)',
+                                        color: 'var(--foreground)',
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                                onClick={closeEditCompanyModal}
+                                className="px-6 py-2 border rounded-md transition-colors"
+                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                            >
+                                {t.settings.cancel}
+                            </button>
+                            <button
+                                onClick={handleUpdateCompany}
+                                disabled={isUpdatingCompany || !editCompanyName.trim()}
+                                className="px-6 py-2 rounded-md transition-colors hover:opacity-90 disabled:opacity-50"
+                                style={{
+                                    background: 'var(--primary)',
+                                    color: 'white',
+                                }}
+                            >
+                                {isUpdatingCompany ? 'Saving...' : t.common.save}
                             </button>
                         </div>
                     </div>

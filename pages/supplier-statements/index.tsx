@@ -14,11 +14,13 @@ import {
 } from "@/services";
 import { FileUpload } from "@/components/FileUpload";
 import { useToast } from "@/lib/toast";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 const SupplierStatementsList = () => {
   const router = useRouter();
   const { t } = useLanguage();
   const { showToast } = useToast();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [statements, setStatements] = useState<SupplierStatement[]>([]);
@@ -44,7 +46,7 @@ const SupplierStatementsList = () => {
   useEffect(() => {
     loadStatements();
     loadSupplierNames();
-  }, [currentPage, filters]);
+  }, [currentPage, filters, selectedOrganizationId]);
 
   const loadSupplierNames = async () => {
     try {

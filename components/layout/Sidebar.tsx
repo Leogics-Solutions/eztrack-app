@@ -9,12 +9,13 @@ import {
   LayoutDashboard,
   Settings,
   Users,
-  BarChart3,
   FileText,
   Menu,
   CreditCard,
   Receipt,
+  Briefcase,
 } from 'lucide-react';
+import { CompanySwitcher } from './CompanySwitcher';
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -33,6 +34,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
     { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
+    { href: '/jobs', label: t.nav.jobs, icon: Briefcase },
     { href: '/settings', label: t.nav.settings, icon: Settings },
   ];
 
@@ -79,6 +81,11 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
             </div>
           </Link>
         )}
+      </div>
+
+      {/* Company switcher */}
+      <div className="px-2 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
+        <CompanySwitcher compact={isCollapsed} />
       </div>
 
       {/* Navigation */}

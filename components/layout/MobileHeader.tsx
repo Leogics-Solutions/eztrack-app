@@ -5,6 +5,7 @@ import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, Menu, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import { CompanySwitcher } from './CompanySwitcher';
 // import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface MobileHeaderProps {
@@ -62,7 +63,7 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
         color: 'var(--card-foreground)'
       }}
     >
-      {/* Left side - Menu Button + Page Name */}
+      {/* Left side - Menu Button + Company Switcher + Page Name */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
           onClick={onMenuClick}
@@ -79,8 +80,13 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
           <Menu className="h-5 w-5" />
         </button>
 
+        {/* Company switcher dropdown (switch company + create company in dropdown) */}
+        <div className="flex-1 min-w-0 max-w-[180px]">
+          <CompanySwitcher compact={false} />
+        </div>
+
         {/* Page Name */}
-        <h1 className="text-lg font-semibold truncate" style={{ color: 'var(--foreground)' }}>
+        <h1 className="text-lg font-semibold truncate min-w-0" style={{ color: 'var(--foreground)' }}>
           {pageName}
         </h1>
       </div>

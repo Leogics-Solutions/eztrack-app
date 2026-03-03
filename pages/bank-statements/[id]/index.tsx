@@ -18,12 +18,14 @@ import {
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { API_BASE_URL } from "@/services/config";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 const BankStatementDetail = () => {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useLanguage();
   const { showToast } = useToast();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [statement, setStatement] = useState<BankStatement | null>(null);
@@ -55,13 +57,13 @@ const BankStatementDetail = () => {
       loadStatement();
       loadLinks();
     }
-  }, [id]);
+  }, [id, selectedOrganizationId]);
 
   useEffect(() => {
     if (id) {
       loadTransactions();
     }
-  }, [id, currentPage, filters]);
+  }, [id, currentPage, filters, selectedOrganizationId]);
 
   const loadStatement = async () => {
     if (!id || typeof id !== 'string') return;
@@ -520,7 +522,7 @@ const BankStatementDetail = () => {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[1000px]">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
@@ -528,6 +530,15 @@ const BankStatementDetail = () => {
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.detail.description || 'Description'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.payor || 'Payor'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.description1 || 'Description 1'}
+                      </th>
+                      <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
+                        {t.bankStatements.detail.description2 || 'Description 2'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.detail.debit || 'Debit'}
@@ -554,13 +565,22 @@ const BankStatementDetail = () => {
                           style={{ borderBottom: '1px solid var(--border)' }}
                           className={isLinked || invoiceLink ? 'bg-green-500/10' : ''}
                         >
-                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                          <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--foreground)' }}>
                             {formatDate(transaction.transaction_date)}
                           </td>
-                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                          <td className="py-3 px-4 max-w-[200px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.description}>
                             {transaction.description}
                           </td>
-                          <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
+                          <td className="py-3 px-4 max-w-[140px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.payor ?? ''}>
+                            {transaction.payor ?? '-'}
+                          </td>
+                          <td className="py-3 px-4 max-w-[180px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.description_1 ?? ''}>
+                            {transaction.description_1 ?? '-'}
+                          </td>
+                          <td className="py-3 px-4 max-w-[180px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.description_2 ?? ''}>
+                            {transaction.description_2 ?? '-'}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--foreground)' }}>
                             {formatCurrency(transaction.debit_amount, transaction.currency)}
                           </td>
                           <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>

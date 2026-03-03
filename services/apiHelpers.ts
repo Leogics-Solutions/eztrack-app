@@ -54,6 +54,77 @@ export function getAccessTokenOrRedirect(): string {
   return token;
 }
 
+/** localStorage key for the currently selected organization (multi-company context) */
+export const SELECTED_ORGANIZATION_ID_KEY = 'selected_organization_id';
+
+/**
+ * Get the currently selected organization ID for scoped API requests.
+ * When set, X-Organization-Id is sent; when null/absent, backend uses primary org or legacy scope.
+ */
+export function getSelectedOrganizationId(): number | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(SELECTED_ORGANIZATION_ID_KEY);
+  if (raw === null || raw === '') return null;
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * Set the selected organization ID (persisted to localStorage).
+ * Call this when the user switches company in the UI.
+ */
+export function setSelectedOrganizationId(organizationId: number | null): void {
+  if (typeof window === 'undefined') return;
+  if (organizationId === null) {
+    localStorage.removeItem(SELECTED_ORGANIZATION_ID_KEY);
+  } else {
+    localStorage.setItem(SELECTED_ORGANIZATION_ID_KEY, String(organizationId));
+  }
+}
+
+/**
+ * Build headers for scoped API requests (dashboard, documents, invoices, COA, etc.).
+ * Includes Authorization and, when set, X-Organization-Id.
+ * Use for all endpoints that respect active organization context.
+ */
+export function getScopedHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  if (!token) {
+    throw new Error('No access token found');
+  }
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  const orgId = getSelectedOrganizationId();
+  if (orgId !== null) {
+    headers['X-Organization-Id'] = String(orgId);
+  }
+  if (extra) {
+    Object.assign(headers, extra);
+  }
+  return headers;
+}
+
+/**
+ * Headers for FormData/multipart requests (no Content-Type; browser sets it with boundary).
+ * Use for upload endpoints that send FormData.
+ */
+export function getScopedHeadersForFormData(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  if (!token) {
+    throw new Error('No access token found');
+  }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+  const orgId = getSelectedOrganizationId();
+  if (orgId !== null) {
+    headers['X-Organization-Id'] = String(orgId);
+  }
+  return headers;
+}
+
 
 
 

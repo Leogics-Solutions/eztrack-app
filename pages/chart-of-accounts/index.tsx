@@ -13,6 +13,7 @@ import {
     updateDefaultCoaKeywords,
     ChartOfAccount,
 } from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
 interface Account {
@@ -133,6 +134,7 @@ const isPredefinedAccountType = (accountType: string): boolean => {
 
 const ChartOfAccounts = () => {
     const { t } = useLanguage();
+    const { selectedOrganizationId } = useOrganization();
     // State
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [accountTypes] = useState<string[]>(PREDEFINED_ACCOUNT_TYPES);
@@ -151,10 +153,10 @@ const ChartOfAccounts = () => {
         example_items: '',
     });
 
-    // Load accounts data
+    // Load accounts data (refetch when company changes)
     useEffect(() => {
         loadAccounts();
-    }, []);
+    }, [selectedOrganizationId]);
 
     // Group accounts by type whenever accounts change
     useEffect(() => {

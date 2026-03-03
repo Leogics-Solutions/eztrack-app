@@ -11,7 +11,7 @@ import {
   bulkDeleteDocuments,
   type Document,
 } from "@/services";
-
+import { useOrganization } from "@/lib/OrganizationContext";
 
 interface Pagination {
   page: number;
@@ -28,6 +28,7 @@ interface Pagination {
 const SupportingDocumentsListing = () => {
   const router = useRouter();
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -61,7 +62,7 @@ const SupportingDocumentsListing = () => {
 
   useEffect(() => {
     loadData();
-  }, [filters]);
+  }, [filters, selectedOrganizationId]);
 
 
   // Check if table needs horizontal scrolling

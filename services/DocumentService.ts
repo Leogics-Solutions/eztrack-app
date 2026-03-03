@@ -1,8 +1,5 @@
 import { BASE_URL } from './config';
-
-function getAccessToken(): string | null {
-  return typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-}
+import { getScopedHeaders } from './apiHelpers';
 
 // Document Types and Interfaces
 export interface DocumentTypeInfo {
@@ -126,12 +123,6 @@ export interface ListDocumentsResponse {
 export async function listDocuments(
   params?: ListDocumentsParams
 ): Promise<ListDocumentsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
@@ -172,10 +163,7 @@ export async function listDocuments(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -197,20 +185,11 @@ export interface GetDocumentResponse {
  * GET /documents/records/{document_id}
  */
 export async function getDocument(documentId: number): Promise<GetDocumentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const url = `${BASE_URL}/documents/records/${documentId}`;
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -248,20 +227,11 @@ export interface BulkDeleteDocumentsResponse {
  * DELETE /documents/records/{document_id}
  */
 export async function deleteDocument(documentId: number): Promise<DeleteDocumentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const url = `${BASE_URL}/documents/records/${documentId}`;
 
   const response = await fetch(url, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -279,20 +249,11 @@ export async function deleteDocument(documentId: number): Promise<DeleteDocument
 export async function bulkDeleteDocuments(
   documentIds: number[]
 ): Promise<BulkDeleteDocumentsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const url = `${BASE_URL}/documents/records/delete-bulk`;
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify({
       document_ids: documentIds,
     }),
@@ -335,20 +296,11 @@ export async function updateDocument(
   documentId: number,
   data: UpdateDocumentRequest
 ): Promise<UpdateDocumentResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const url = `${BASE_URL}/documents/records/${documentId}`;
 
   const response = await fetch(url, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
