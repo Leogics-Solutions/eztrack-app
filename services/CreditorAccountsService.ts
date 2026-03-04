@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 // Types
 export interface CreditorAccount {
@@ -119,26 +120,12 @@ export interface ListCreditorAccountInvoicesResponse {
 }
 
 /**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
-}
-
-/**
  * List all creditor accounts for the current user
  * GET /creditor-accounts
  */
 export async function listCreditorAccounts(
   params?: ListCreditorAccountsParams
 ): Promise<ListCreditorAccountsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.page !== undefined) {
     queryParams.append('page', params.page.toString());
@@ -157,10 +144,7 @@ export async function listCreditorAccounts(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -178,18 +162,9 @@ export async function listCreditorAccounts(
 export async function createCreditorAccount(
   data: CreateCreditorAccountRequest
 ): Promise<CreateCreditorAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/creditor-accounts`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -208,18 +183,9 @@ export async function createCreditorAccount(
 export async function getCreditorAccount(
   accountId: number
 ): Promise<GetCreditorAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/creditor-accounts/${accountId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -238,18 +204,9 @@ export async function updateCreditorAccount(
   accountId: number,
   data: UpdateCreditorAccountRequest
 ): Promise<UpdateCreditorAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/creditor-accounts/${accountId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -268,18 +225,9 @@ export async function updateCreditorAccount(
 export async function deleteCreditorAccount(
   accountId: number
 ): Promise<DeleteCreditorAccountResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/creditor-accounts/${accountId}`, {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -298,12 +246,6 @@ export async function getCreditorAccountInvoices(
   accountId: number,
   params?: ListCreditorAccountInvoicesParams
 ): Promise<ListCreditorAccountInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const queryParams = new URLSearchParams();
   if (params?.page !== undefined) {
     queryParams.append('page', params.page.toString());
@@ -319,10 +261,7 @@ export async function getCreditorAccountInvoices(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
