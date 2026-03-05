@@ -10,6 +10,7 @@ import {
   getSelectedOrganizationId,
   setSelectedOrganizationId as persistSelectedOrganizationId,
 } from '@/services/apiHelpers';
+import { useAuth } from '@/lib/auth';
 
 interface OrganizationContextType {
   /** Organizations the current user can access (for company switcher) */
@@ -29,6 +30,7 @@ interface OrganizationContextType {
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
 export function OrganizationProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [organizations, setOrganizations] = useState<UserOrganization[]>([]);
   const [selectedOrganizationId, setSelectedState] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,9 +68,18 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Only fetch organizations when user is authenticated (token is available).
+  // Avoids "No access token found" on login page or right after login before redirect.
   useEffect(() => {
-    refetchOrganizations();
-  }, [refetchOrganizations]);
+    if (user) {
+      refetchOrganizations();
+    } else {
+      setError(null);
+      setOrganizations([]);
+      setSelectedState(null);
+      setIsLoading(false);
+    }
+  }, [user, refetchOrganizations]);
 
   const setSelectedOrganizationId = useCallback((id: number | null) => {
     setSelectedState(id);

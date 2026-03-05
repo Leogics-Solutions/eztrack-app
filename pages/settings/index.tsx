@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
@@ -172,6 +172,17 @@ const SettingsPage = () => {
     const [editCompanyName, setEditCompanyName] = useState('');
     const [editCompanyIndustry, setEditCompanyIndustry] = useState('');
     const [isUpdatingCompany, setIsUpdatingCompany] = useState(false);
+    const [companiesSearchQuery, setCompaniesSearchQuery] = useState('');
+
+    const filteredCompanies = useMemo(() => {
+        const list = userOrgs || [];
+        const q = companiesSearchQuery.trim().toLowerCase();
+        if (!q) return list;
+        return list.filter((o) =>
+            o.name.toLowerCase().includes(q) ||
+            (o.industry && o.industry.toLowerCase().includes(q))
+        );
+    }, [userOrgs, companiesSearchQuery]);
 
     // Form states
     const [profileFullName, setProfileFullName] = useState('');
@@ -1604,57 +1615,80 @@ const SettingsPage = () => {
                             </button>
                         </div>
                         <div className="p-6">
-                            <ul className="space-y-2">
-                                {(userOrgs || []).map((org) => (
-                                    <li
-                                        key={org.id}
-                                        className="flex items-center justify-between gap-3 p-3 border rounded-md"
-                                        style={{ borderColor: 'var(--border)' }}
-                                    >
-                                        <div>
-                                            <span className="font-medium" style={{ color: 'var(--foreground)' }}>{org.name}</span>
-                                            {org.industry && (
-                                                <span className="text-sm ml-2" style={{ color: 'var(--muted-foreground)' }}>({org.industry})</span>
-                                            )}
-                                            {org.is_primary && (
-                                                <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                                                    Default
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => openEditCompanyModal(org)}
-                                                className="text-sm px-3 py-1.5 rounded border transition-colors"
-                                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                                            >
-                                                {t.common.edit}
-                                            </button>
-                                            {!org.is_primary && (
+                            {(userOrgs && userOrgs.length > 0) && (
+                                <div className="mb-3">
+                                    <input
+                                        type="text"
+                                        value={companiesSearchQuery}
+                                        onChange={(e) => setCompaniesSearchQuery(e.target.value)}
+                                        placeholder="Search companies..."
+                                        className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                        style={{
+                                            background: 'var(--background)',
+                                            borderColor: 'var(--border)',
+                                            color: 'var(--foreground)',
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            <div className="max-h-[320px] min-h-0 overflow-y-auto">
+                                <ul className="space-y-2">
+                                    {filteredCompanies.map((org) => (
+                                        <li
+                                            key={org.id}
+                                            className="flex items-center justify-between gap-3 p-3 border rounded-md"
+                                            style={{ borderColor: 'var(--border)' }}
+                                        >
+                                            <div>
+                                                <span className="font-medium" style={{ color: 'var(--foreground)' }}>{org.name}</span>
+                                                {org.industry && (
+                                                    <span className="text-sm ml-2" style={{ color: 'var(--muted-foreground)' }}>({org.industry})</span>
+                                                )}
+                                                {org.is_primary && (
+                                                    <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                                                        Default
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await setPrimaryOrganization(org.id);
-                                                            showNotification(t.organization.setAsDefault + ' – ' + org.name, 'success');
-                                                        } catch (e) {
-                                                            showNotification(e instanceof Error ? e.message : 'Failed to set default', 'error');
-                                                        }
-                                                    }}
+                                                    onClick={() => openEditCompanyModal(org)}
                                                     className="text-sm px-3 py-1.5 rounded border transition-colors"
                                                     style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                                                 >
-                                                    {t.organization.setAsDefault}
+                                                    {t.common.edit}
                                                 </button>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
+                                                {!org.is_primary && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            try {
+                                                                await setPrimaryOrganization(org.id);
+                                                                showNotification(t.organization.setAsDefault + ' – ' + org.name, 'success');
+                                                            } catch (e) {
+                                                                showNotification(e instanceof Error ? e.message : 'Failed to set default', 'error');
+                                                            }
+                                                        }}
+                                                        className="text-sm px-3 py-1.5 rounded border transition-colors"
+                                                        style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                                                    >
+                                                        {t.organization.setAsDefault}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                             {(!userOrgs || userOrgs.length === 0) && (
                                 <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
                                     No companies yet. Click &quot;{t.organization.createCompany}&quot; to create one.
+                                </p>
+                            )}
+                            {(userOrgs && userOrgs.length > 0 && filteredCompanies.length === 0) && (
+                                <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>
+                                    No companies match your search.
                                 </p>
                             )}
                         </div>
