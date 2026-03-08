@@ -529,7 +529,7 @@ const BankStatementDetail = () => {
                         {t.bankStatements.detail.date || 'Date'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
-                        {t.bankStatements.detail.description || 'Description'}
+                        {t.bankStatements.detail.transactionType || 'Transaction Type'}
                       </th>
                       <th className="text-left py-3 px-4" style={{ color: 'var(--muted-foreground)' }}>
                         {t.bankStatements.detail.payor || 'Payor'}
@@ -568,8 +568,8 @@ const BankStatementDetail = () => {
                           <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--foreground)' }}>
                             {formatDate(transaction.transaction_date)}
                           </td>
-                          <td className="py-3 px-4 max-w-[200px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.description}>
-                            {transaction.description}
+                          <td className="py-3 px-4 max-w-[200px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.transaction_type ?? ''}>
+                            {transaction.transaction_type ?? '-'}
                           </td>
                           <td className="py-3 px-4 max-w-[140px] truncate" style={{ color: 'var(--foreground)' }} title={transaction.payor ?? ''}>
                             {transaction.payor ?? '-'}
