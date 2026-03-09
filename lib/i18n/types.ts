@@ -1,4 +1,4 @@
-export type Language = 'en' | 'zh';
+export type Language = 'en';
 
 export interface Translations {
   // Common
@@ -1057,4 +1057,3 @@ export interface Translations {
     };
   };
 }
-

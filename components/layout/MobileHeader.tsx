@@ -26,9 +26,7 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
       setTheme(savedTheme);
       document.documentElement.setAttribute('data-theme', savedTheme);
     } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const defaultTheme = prefersDark ? 'dark' : 'light';
+      const defaultTheme = 'light';
       setTheme(defaultTheme);
       document.documentElement.setAttribute('data-theme', defaultTheme);
     }
@@ -158,4 +156,3 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
     </header>
   );
 }
-

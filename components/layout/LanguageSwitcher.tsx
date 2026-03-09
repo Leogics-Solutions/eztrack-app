@@ -2,17 +2,14 @@
 
 import { useLanguage } from '@/lib/i18n';
 import { Globe } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function LanguageSwitcher() {
   const { language, setLanguage } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const languages = [
-    { code: 'en' as const, name: 'English', flag: '🇺🇸' },
-    { code: 'zh' as const, name: '中文', flag: '🇨🇳' },
-  ];
+  const languages = [{ code: 'en' as const, name: 'English', flag: 'EN' }];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -31,7 +28,7 @@ export function LanguageSwitcher() {
     };
   }, [isOpen]);
 
-  const currentLanguage = languages.find(lang => lang.code === language) || languages[0];
+  const currentLanguage = languages.find((lang) => lang.code === language) || languages[0];
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -85,9 +82,7 @@ export function LanguageSwitcher() {
             >
               <span>{lang.flag}</span>
               <span>{lang.name}</span>
-              {language === lang.code && (
-                <span className="ml-auto">✓</span>
-              )}
+              {language === lang.code && <span className="ml-auto">OK</span>}
             </button>
           ))}
         </div>
@@ -95,4 +90,3 @@ export function LanguageSwitcher() {
     </div>
   );
 }
-

@@ -3,11 +3,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Language, Translations } from './types';
 import { en } from './translations/en';
-import { zh } from './translations/zh';
 
 const translations: Record<Language, Translations> = {
   en,
-  zh,
 };
 
 interface LanguageContextType {
@@ -21,23 +19,12 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>('en');
 
-  // Initialize language from localStorage or browser preference
+  // Force English by default while other languages are disabled.
   useEffect(() => {
-    // Ensure we're in the browser environment
     if (typeof window === 'undefined') return;
-    
-    const savedLanguage = localStorage.getItem('language') as Language | null;
-    if (savedLanguage && (savedLanguage === 'en' || savedLanguage === 'zh')) {
-      setLanguageState(savedLanguage);
-    } else {
-      // Check browser language
-      const browserLang = navigator.language.toLowerCase();
-      if (browserLang.startsWith('zh')) {
-        setLanguageState('zh');
-      } else {
-        setLanguageState('en');
-      }
-    }
+
+    localStorage.setItem('language', 'en');
+    document.documentElement.setAttribute('lang', 'en');
   }, []);
 
   const setLanguage = (lang: Language) => {
@@ -76,4 +63,3 @@ export function useLanguage() {
   }
   return context;
 }
-

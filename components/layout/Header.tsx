@@ -5,7 +5,6 @@ import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { LanguageSwitcher } from './LanguageSwitcher';
 // import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
@@ -26,9 +25,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
       setTheme(savedTheme);
       document.documentElement.setAttribute('data-theme', savedTheme);
     } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const defaultTheme = prefersDark ? 'dark' : 'light';
+      const defaultTheme = 'light';
       setTheme(defaultTheme);
       document.documentElement.setAttribute('data-theme', defaultTheme);
     }
