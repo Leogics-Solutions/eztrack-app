@@ -498,7 +498,7 @@ const ChartOfAccounts = () => {
                                 className="px-3 py-1.5 text-sm border rounded-md hover:bg-[var(--hover-bg)] transition-colors"
                                 style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             >
-                                {t.common?.cancel || 'Cancel'}
+                                {t.accounts.cancel}
                             </button>
                         </div>
                     )}
@@ -515,7 +515,24 @@ const ChartOfAccounts = () => {
                         </div>
                     )}
                     {/* Predefined Account Types */}
-                    {accountTypes.map(accountType => (
+                    {accountTypes.map(accountType => {
+                        const groupAccounts = accountGroups[accountType] || [];
+                        const visibleAccounts = groupAccounts.filter((acc) => matchesSearch(acc, searchQuery));
+                        if (visibleAccounts.length === 0 && groupAccounts.length === 0) return null;
+                        if (visibleAccounts.length === 0) {
+                            return (
+                                <div key={accountType} className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0">
+                                    <h3 className="text-sm md:text-base font-bold mb-3 md:mb-4 px-3 py-2 rounded border-l-4" style={{ color: 'var(--accent)', backgroundColor: 'rgba(106,166,255,0.1)', borderLeftColor: 'var(--primary)' }}>
+                                        {getAccountTypeLabel(accountType)}
+                                    </h3>
+                                    <div className="py-5 px-4 text-center text-sm italic rounded-lg" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                                        {searchQuery.trim() ? t.accounts.coaViewer?.noAccountsFound ?? 'No accounts match your search.' : t.accounts.noAccounts}
+                                    </div>
+                                </div>
+                            );
+                        }
+                        const allInGroupSelected = visibleAccounts.length > 0 && visibleAccounts.every((acc) => selectedIds.has(acc.id));
+                        return (
                         <div
                             key={accountType}
                             className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0"
@@ -531,17 +548,24 @@ const ChartOfAccounts = () => {
                                 {getAccountTypeLabel(accountType)}
                             </h3>
 
-                            {accountGroups[accountType] && accountGroups[accountType].length > 0 ? (
-                                <>
-                                    {/* Mobile Card Layout */}
-                                    <div className="md:hidden space-y-3">
-                                        {accountGroups[accountType].map(account => (
-                                            <div
-                                                key={account.id}
-                                                className="border border-[var(--border)] rounded-lg overflow-hidden"
-                                                style={{ backgroundColor: 'var(--card)' }}
-                                            >
-                                                <div className="p-4">
+                            <>
+                                {/* Mobile Card Layout */}
+                                <div className="md:hidden space-y-3">
+                                    {visibleAccounts.map(account => (
+                                        <div
+                                            key={account.id}
+                                            className="border border-[var(--border)] rounded-lg overflow-hidden"
+                                            style={{ backgroundColor: 'var(--card)' }}
+                                        >
+                                            <div className="p-4 flex items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(account.id)}
+                                                    onChange={() => toggleSelect(account.id)}
+                                                    className="mt-1 rounded border-[var(--border)]"
+                                                    aria-label={t.accounts.deleteSelected}
+                                                />
+                                                <div className="flex-1 min-w-0">
                                                     <h4 className="font-semibold text-base mb-1" style={{ color: 'var(--foreground)' }}>
                                                         {account.account_name}
                                                     </h4>
@@ -551,22 +575,191 @@ const ChartOfAccounts = () => {
                                                         </p>
                                                     )}
                                                 </div>
+                                            </div>
+                                            <div className="flex w-full border-t" style={{ borderTopColor: 'var(--border)' }}>
+                                                <button
+                                                    onClick={() => editAccount(account)}
+                                                    className="flex-1 flex items-center justify-center py-3 border-r transition-colors"
+                                                    style={{ borderRightColor: 'var(--border)', color: 'var(--foreground)' }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary-foreground)'; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--foreground)'; }}
+                                                    aria-label={t.accounts.edit}
+                                                >
+                                                    <Edit className="h-5 w-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteAccount(account.id, account.account_name)}
+                                                    className="flex-1 flex items-center justify-center py-3 transition-colors"
+                                                    style={{ color: 'var(--error)' }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--error)'; e.currentTarget.style.color = 'white'; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--error)'; }}
+                                                    aria-label={t.accounts.delete}
+                                                >
+                                                    <Trash2 className="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Desktop Table Layout */}
+                                <div className="hidden md:block overflow-x-auto">
+                                    <table className="w-full min-w-[600px]">
+                                        <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
+                                            <tr>
+                                                <th className="px-2 py-3 text-left w-10">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={allInGroupSelected}
+                                                        onChange={() => toggleSelectAllInGroup(groupAccounts)}
+                                                        className="rounded border-[var(--border)]"
+                                                        aria-label={t.accounts.deleteSelected}
+                                                    />
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '28%', color: 'var(--foreground)' }}>
+                                                    {t.accounts.accountNameHeader}
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '42%', color: 'var(--foreground)' }}>
+                                                    {t.accounts.descriptionHeader}
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '20%', color: 'var(--foreground)' }}>
+                                                    {t.accounts.actionsHeader}
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[var(--border)]">
+                                            {visibleAccounts.map(account => (
+                                                <tr
+                                                    key={account.id}
+                                                    className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
+                                                >
+                                                    <td className="px-2 py-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedIds.has(account.id)}
+                                                            onChange={() => toggleSelect(account.id)}
+                                                            className="rounded border-[var(--border)]"
+                                                            aria-label={t.accounts.deleteSelected}
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <strong className="text-base">{account.account_name}</strong>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                        {account.description || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => editAccount(account)}
+                                                                className="px-3 py-1 text-sm border border-[var(--border)] rounded hover:bg-[var(--primary)] hover:text-white hover:border-[var(--primary)] transition-colors whitespace-nowrap"
+                                                            >
+                                                                {t.accounts.edit}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteAccount(account.id, account.account_name)}
+                                                                className="px-3 py-1 text-sm border border-red-500 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors whitespace-nowrap"
+                                                            >
+                                                                {t.accounts.delete}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        </div>
+                        );
+                    })}
+                    {accountTypes.every(accountType => {
+                        const groupAccounts = accountGroups[accountType] || [];
+                        const visibleAccounts = groupAccounts.filter((acc) => matchesSearch(acc, searchQuery));
+                        return visibleAccounts.length === 0;
+                    }) && Object.keys(accountGroups).filter(t => !PREDEFINED_ACCOUNT_TYPES.includes(t)).every(customType => {
+                        const groupAccounts = accountGroups[customType] || [];
+                        return groupAccounts.filter((acc) => matchesSearch(acc, searchQuery)).length === 0;
+                    }) && accounts.length > 0 && searchQuery.trim() && (
+                        <div
+                            className="py-5 px-4 text-center text-sm italic rounded-lg"
+                            style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(255,255,255,0.03)' }}
+                        >
+                            {t.accounts.coaViewer?.noAccountsFound ?? 'No accounts match your search.'}
+                        </div>
+                    )}
+                    
+                    {/* Custom Account Types */}
+                    {Object.keys(accountGroups)
+                        .filter(type => !PREDEFINED_ACCOUNT_TYPES.includes(type))
+                        .map(customType => {
+                            const groupAccounts = accountGroups[customType] || [];
+                            const visibleAccounts = groupAccounts.filter((acc) => matchesSearch(acc, searchQuery));
+                            if (visibleAccounts.length === 0 && groupAccounts.length === 0) return null;
+                            if (visibleAccounts.length === 0) {
+                                return (
+                                    <div key={customType} className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0">
+                                        <h3 className="text-sm md:text-base font-bold mb-3 md:mb-4 px-3 py-2 rounded border-l-4" style={{ color: 'var(--accent)', backgroundColor: 'rgba(106,166,255,0.1)', borderLeftColor: 'var(--primary)' }}>
+                                            {getAccountTypeLabel(customType)}
+                                        </h3>
+                                        <div className="py-5 px-4 text-center text-sm italic rounded-lg" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                                            {searchQuery.trim() ? t.accounts.coaViewer?.noAccountsFound ?? 'No accounts match your search.' : t.accounts.noAccounts}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            const allInGroupSelected = visibleAccounts.every((acc) => selectedIds.has(acc.id));
+                            return (
+                            <div
+                                key={customType}
+                                className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0"
+                            >
+                                <h3
+                                    className="text-sm md:text-base font-bold mb-3 md:mb-4 px-3 py-2 rounded border-l-4"
+                                    style={{
+                                        color: 'var(--accent)',
+                                        backgroundColor: 'rgba(106,166,255,0.1)',
+                                        borderLeftColor: 'var(--primary)',
+                                    }}
+                                >
+                                    {getAccountTypeLabel(customType)}
+                                </h3>
+
+                                <>
+                                    {/* Mobile Card Layout */}
+                                    <div className="md:hidden space-y-3">
+                                        {visibleAccounts.map(account => (
+                                            <div
+                                                key={account.id}
+                                                className="border border-[var(--border)] rounded-lg overflow-hidden"
+                                                style={{ backgroundColor: 'var(--card)' }}
+                                            >
+                                                <div className="p-4 flex items-start gap-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedIds.has(account.id)}
+                                                        onChange={() => toggleSelect(account.id)}
+                                                        className="mt-1 rounded border-[var(--border)]"
+                                                        aria-label={t.accounts.deleteSelected}
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-semibold text-base mb-1" style={{ color: 'var(--foreground)' }}>
+                                                            {account.account_name}
+                                                        </h4>
+                                                        {account.description && (
+                                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {account.description}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
                                                 <div className="flex w-full border-t" style={{ borderTopColor: 'var(--border)' }}>
                                                     <button
                                                         onClick={() => editAccount(account)}
                                                         className="flex-1 flex items-center justify-center py-3 border-r transition-colors"
-                                                        style={{ 
-                                                            borderRightColor: 'var(--border)',
-                                                            color: 'var(--foreground)'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'var(--primary)';
-                                                            e.currentTarget.style.color = 'var(--primary-foreground)';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'transparent';
-                                                            e.currentTarget.style.color = 'var(--foreground)';
-                                                        }}
+                                                        style={{ borderRightColor: 'var(--border)', color: 'var(--foreground)' }}
+                                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary-foreground)'; }}
+                                                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--foreground)'; }}
                                                         aria-label={t.accounts.edit}
                                                     >
                                                         <Edit className="h-5 w-5" />
@@ -575,14 +768,8 @@ const ChartOfAccounts = () => {
                                                         onClick={() => deleteAccount(account.id, account.account_name)}
                                                         className="flex-1 flex items-center justify-center py-3 transition-colors"
                                                         style={{ color: 'var(--error)' }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'var(--error)';
-                                                            e.currentTarget.style.color = 'white';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'transparent';
-                                                            e.currentTarget.style.color = 'var(--error)';
-                                                        }}
+                                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--error)'; e.currentTarget.style.color = 'white'; }}
+                                                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--error)'; }}
                                                         aria-label={t.accounts.delete}
                                                     >
                                                         <Trash2 className="h-5 w-5" />
@@ -597,39 +784,45 @@ const ChartOfAccounts = () => {
                                         <table className="w-full min-w-[600px]">
                                             <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
                                                 <tr>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-sm font-semibold"
-                                                        style={{ width: '30%', color: 'var(--foreground)' }}
-                                                    >
+                                                    <th className="px-2 py-3 text-left w-10">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={allInGroupSelected}
+                                                            onChange={() => toggleSelectAllInGroup(groupAccounts)}
+                                                            className="rounded border-[var(--border)]"
+                                                            aria-label={t.accounts.deleteSelected}
+                                                        />
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '28%', color: 'var(--foreground)' }}>
                                                         {t.accounts.accountNameHeader}
                                                     </th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-sm font-semibold"
-                                                        style={{ width: '50%', color: 'var(--foreground)' }}
-                                                    >
+                                                    <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '42%', color: 'var(--foreground)' }}>
                                                         {t.accounts.descriptionHeader}
                                                     </th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-sm font-semibold"
-                                                        style={{ width: '20%', color: 'var(--foreground)' }}
-                                                    >
+                                                    <th className="px-4 py-3 text-left text-sm font-semibold" style={{ width: '20%', color: 'var(--foreground)' }}>
                                                         {t.accounts.actionsHeader}
                                                     </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-[var(--border)]">
-                                                {accountGroups[accountType].map(account => (
+                                                {visibleAccounts.map(account => (
                                                     <tr
                                                         key={account.id}
                                                         className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                                                     >
+                                                        <td className="px-2 py-3">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedIds.has(account.id)}
+                                                                onChange={() => toggleSelect(account.id)}
+                                                                className="rounded border-[var(--border)]"
+                                                                aria-label={t.accounts.deleteSelected}
+                                                            />
+                                                        </td>
                                                         <td className="px-4 py-3">
                                                             <strong className="text-base">{account.account_name}</strong>
                                                         </td>
-                                                        <td
-                                                            className="px-4 py-3 text-sm"
-                                                            style={{ color: 'var(--muted-foreground)' }}
-                                                        >
+                                                        <td className="px-4 py-3 text-sm" style={{ color: 'var(--muted-foreground)' }}>
                                                             {account.description || '-'}
                                                         </td>
                                                         <td className="px-4 py-3">
@@ -654,175 +847,9 @@ const ChartOfAccounts = () => {
                                         </table>
                                     </div>
                                 </>
-                            ) : (
-                                <div
-                                    className="py-5 px-4 text-center text-sm italic rounded-lg"
-                                    style={{
-                                        color: 'var(--muted-foreground)',
-                                        backgroundColor: 'rgba(255,255,255,0.03)',
-                                    }}
-                                >
-                                    {t.accounts.noAccounts}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                    
-                    {/* Custom Account Types */}
-                    {Object.keys(accountGroups)
-                        .filter(type => !PREDEFINED_ACCOUNT_TYPES.includes(type))
-                        .map(customType => (
-                            <div
-                                key={customType}
-                                className="mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[var(--border)] last:border-b-0"
-                            >
-                                <h3
-                                    className="text-sm md:text-base font-bold mb-3 md:mb-4 px-3 py-2 rounded border-l-4"
-                                    style={{
-                                        color: 'var(--accent)',
-                                        backgroundColor: 'rgba(106,166,255,0.1)',
-                                        borderLeftColor: 'var(--primary)',
-                                    }}
-                                >
-                                    {getAccountTypeLabel(customType)}
-                                </h3>
-
-                                {accountGroups[customType] && accountGroups[customType].length > 0 ? (
-                                    <>
-                                        {/* Mobile Card Layout */}
-                                        <div className="md:hidden space-y-3">
-                                            {accountGroups[customType].map(account => (
-                                                <div
-                                                    key={account.id}
-                                                    className="border border-[var(--border)] rounded-lg overflow-hidden"
-                                                    style={{ backgroundColor: 'var(--card)' }}
-                                                >
-                                                    <div className="p-4">
-                                                        <h4 className="font-semibold text-base mb-1" style={{ color: 'var(--foreground)' }}>
-                                                            {account.account_name}
-                                                        </h4>
-                                                        {account.description && (
-                                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                                                {account.description}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex w-full border-t" style={{ borderTopColor: 'var(--border)' }}>
-                                                        <button
-                                                            onClick={() => editAccount(account)}
-                                                            className="flex-1 flex items-center justify-center py-3 border-r transition-colors"
-                                                            style={{ 
-                                                                borderRightColor: 'var(--border)',
-                                                                color: 'var(--foreground)'
-                                                            }}
-                                                            onMouseEnter={(e) => {
-                                                                e.currentTarget.style.background = 'var(--primary)';
-                                                                e.currentTarget.style.color = 'var(--primary-foreground)';
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                e.currentTarget.style.background = 'transparent';
-                                                                e.currentTarget.style.color = 'var(--foreground)';
-                                                            }}
-                                                            aria-label={t.accounts.edit}
-                                                        >
-                                                            <Edit className="h-5 w-5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => deleteAccount(account.id, account.account_name)}
-                                                            className="flex-1 flex items-center justify-center py-3 transition-colors"
-                                                            style={{ color: 'var(--error)' }}
-                                                            onMouseEnter={(e) => {
-                                                                e.currentTarget.style.background = 'var(--error)';
-                                                                e.currentTarget.style.color = 'white';
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                e.currentTarget.style.background = 'transparent';
-                                                                e.currentTarget.style.color = 'var(--error)';
-                                                            }}
-                                                            aria-label={t.accounts.delete}
-                                                        >
-                                                            <Trash2 className="h-5 w-5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        {/* Desktop Table Layout */}
-                                        <div className="hidden md:block overflow-x-auto">
-                                            <table className="w-full min-w-[600px]">
-                                                <thead className="bg-[var(--muted)] border-b border-[var(--border)]">
-                                                    <tr>
-                                                        <th
-                                                            className="px-4 py-3 text-left text-sm font-semibold"
-                                                            style={{ width: '30%', color: 'var(--foreground)' }}
-                                                        >
-                                                            {t.accounts.accountNameHeader}
-                                                        </th>
-                                                        <th
-                                                            className="px-4 py-3 text-left text-sm font-semibold"
-                                                            style={{ width: '50%', color: 'var(--foreground)' }}
-                                                        >
-                                                            {t.accounts.descriptionHeader}
-                                                        </th>
-                                                        <th
-                                                            className="px-4 py-3 text-left text-sm font-semibold"
-                                                            style={{ width: '20%', color: 'var(--foreground)' }}
-                                                        >
-                                                            {t.accounts.actionsHeader}
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-[var(--border)]">
-                                                    {accountGroups[customType].map(account => (
-                                                        <tr
-                                                            key={account.id}
-                                                            className="hover:bg-[var(--hover-bg)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] transition-colors"
-                                                        >
-                                                            <td className="px-4 py-3">
-                                                                <strong className="text-base">{account.account_name}</strong>
-                                                            </td>
-                                                            <td
-                                                                className="px-4 py-3 text-sm"
-                                                                style={{ color: 'var(--muted-foreground)' }}
-                                                            >
-                                                                {account.description || '-'}
-                                                            </td>
-                                                            <td className="px-4 py-3">
-                                                                <div className="flex gap-2">
-                                                                    <button
-                                                                        onClick={() => editAccount(account)}
-                                                                        className="px-3 py-1 text-sm border border-[var(--border)] rounded hover:bg-[var(--primary)] hover:text-white hover:border-[var(--primary)] transition-colors whitespace-nowrap"
-                                                                    >
-                                                                        {t.accounts.edit}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => deleteAccount(account.id, account.account_name)}
-                                                                        className="px-3 py-1 text-sm border border-red-500 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors whitespace-nowrap"
-                                                                    >
-                                                                        {t.accounts.delete}
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div
-                                        className="py-5 px-4 text-center text-sm italic rounded-lg"
-                                        style={{
-                                            color: 'var(--muted-foreground)',
-                                            backgroundColor: 'rgba(255,255,255,0.03)',
-                                        }}
-                                    >
-                                        {t.accounts.noAccounts}
-                                    </div>
-                                )}
                             </div>
-                        ))}
+                            );
+                        })}
                 </div>
             </div>
 
