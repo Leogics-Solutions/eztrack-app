@@ -2,7 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
     listChartOfAccounts,
@@ -132,6 +132,14 @@ const isPredefinedAccountType = (accountType: string): boolean => {
     return PREDEFINED_ACCOUNT_TYPES.includes(normalized);
 };
 
+const matchesSearch = (account: Account, q: string): boolean => {
+    if (!q.trim()) return true;
+    const lower = q.trim().toLowerCase();
+    return [account.account_name, account.description, account.account_type].some(
+        (s) => (s || '').toLowerCase().includes(lower)
+    );
+};
+
 const ChartOfAccounts = () => {
     const { t } = useLanguage();
     const { selectedOrganizationId } = useOrganization();
@@ -142,6 +150,8 @@ const ChartOfAccounts = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isCustomType, setIsCustomType] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     // Form state
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -320,6 +330,47 @@ const ChartOfAccounts = () => {
         }
     };
 
+    const toggleSelect = (id: number) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAllInGroup = (groupAccounts: Account[]) => {
+        const filtered = groupAccounts.filter((acc) => matchesSearch(acc, searchQuery));
+        const allSelected = filtered.length > 0 && filtered.every((acc) => selectedIds.has(acc.id));
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allSelected) {
+                filtered.forEach((acc) => next.delete(acc.id));
+            } else {
+                filtered.forEach((acc) => next.add(acc.id));
+            }
+            return next;
+        });
+    };
+
+    const deleteSelectedAccounts = async () => {
+        const count = selectedIds.size;
+        if (count === 0 || !confirm(t.accounts.deleteSelectedConfirm.replace('{count}', String(count)))) {
+            return;
+        }
+        try {
+            for (const id of selectedIds) {
+                await deleteChartOfAccount(id);
+            }
+            alert(t.accounts.accountDeleted);
+            setSelectedIds(new Set());
+            await loadAccounts();
+        } catch (error: any) {
+            console.error('Failed to delete accounts', error);
+            alert(error?.message || 'Failed to delete accounts');
+        }
+    };
+
     const importDefaultAccounts = async () => {
         if (!confirm(t.accounts.importDefaultsConfirm)) {
             return;
@@ -408,6 +459,49 @@ const ChartOfAccounts = () => {
                             </button>
                         </div>
                     </div>
+
+                    {/* Search */}
+                    <div className="mt-4">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder={t.accounts.searchPlaceholder}
+                                className="w-full pl-9 pr-3 py-2 border rounded-md outline-none focus:ring-2 focus:ring-[var(--primary)] text-sm"
+                                style={{
+                                    backgroundColor: 'var(--background)',
+                                    borderColor: 'var(--border)',
+                                    color: 'var(--foreground)',
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Selection toolbar */}
+                    {selectedIds.size > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 py-2 px-3 rounded-md" style={{ backgroundColor: 'var(--muted)' }}>
+                            <span className="text-sm" style={{ color: 'var(--foreground)' }}>
+                                {selectedIds.size} {t.accounts.deleteSelected.toLowerCase()}
+                            </span>
+                            <button
+                                onClick={deleteSelectedAccounts}
+                                className="px-3 py-1.5 text-sm rounded-md flex items-center gap-1.5 transition-colors"
+                                style={{ backgroundColor: 'var(--error)', color: 'white' }}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                {t.accounts.deleteSelected}
+                            </button>
+                            <button
+                                onClick={() => setSelectedIds(new Set())}
+                                className="px-3 py-1.5 text-sm border rounded-md hover:bg-[var(--hover-bg)] transition-colors"
+                                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                            >
+                                {t.common?.cancel || 'Cancel'}
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Account Groups */}

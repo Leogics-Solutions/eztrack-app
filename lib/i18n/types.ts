@@ -517,6 +517,10 @@ export interface Translations {
     importDefaultsSuccess: string;
     importCustomCOASuccess: string;
     customTypeRequired: string;
+    search: string;
+    searchPlaceholder: string;
+    deleteSelected: string;
+    deleteSelectedConfirm: string;
     accountTypes: {
       assets: string;
       liabilities: string;

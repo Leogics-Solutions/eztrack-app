@@ -500,6 +500,10 @@ export const en: Translations = {
     importDefaultsSuccess: 'Default accounts imported successfully!',
     importCustomCOASuccess: 'Custom accounts imported successfully!',
     customTypeRequired: 'Please enter a custom account type',
+    search: 'Search',
+    searchPlaceholder: 'Account name, description or type...',
+    deleteSelected: 'Delete selected',
+    deleteSelectedConfirm: 'Are you sure you want to delete {count} account(s)? This cannot be undone.',
     accountTypes: {
       assets: 'Assets',
       liabilities: 'Liabilities',

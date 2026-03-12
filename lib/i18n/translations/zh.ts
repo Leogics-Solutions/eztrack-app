@@ -500,6 +500,10 @@ export const zh: Translations = {
     importDefaultsSuccess: '默认账户导入成功！',
     importCustomCOASuccess: '自定义账户导入成功！',
     customTypeRequired: '请输入自定义账户类型',
+    search: '搜索',
+    searchPlaceholder: '账户名称、描述或类型...',
+    deleteSelected: '删除所选',
+    deleteSelectedConfirm: '确定要删除 {count} 个账户吗？此操作无法撤销。',
     accountTypes: {
       assets: '资产',
       liabilities: '负债',
