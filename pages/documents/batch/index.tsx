@@ -469,7 +469,7 @@ const BatchUpload = () => {
                   <option value="petty_cash">Petty Cash</option>
                   <option value="claims_compilation">Claims Compilation</option>
                   <option value="combined_docs">Combined Documents</option>
-                  <option value="handwritten_invoice">Handwritten Invoice</option>
+                  <option value="handwritten_invoice">Handwritten Invoice (Beta)</option>
                 </select>
               </div>
               {(documentCategory === 'petty_cash' || documentCategory === 'claims_compilation') && (
@@ -507,7 +507,7 @@ const BatchUpload = () => {
                 : documentType === 'claims_compilation'
                 ? 'Claims compilation processes scanned multi-receipt PDFs.'
                 : documentType === 'handwritten_invoice'
-                ? 'Handwritten Invoice: Processes handwritten invoices using specialized OCR and arithmetic reconciliation workflows.'
+                ? 'Handwritten Invoice (Beta): Processes handwritten invoices using specialized OCR and arithmetic reconciliation workflows.'
                 : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
               }
             </small>
