@@ -248,7 +248,8 @@ export interface Translations {
       id: string;
       vendor: string;
       invoiceNo: string;
-      date: string;
+      documentDate: string;
+      createdDate: string;
       currency: string;
       total: string;
       remarkTag: string;

@@ -1583,7 +1583,8 @@ const DocumentsListing = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.vendor}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.date}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.documentDate}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.createdDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.remarkTag}</th>
@@ -1643,7 +1644,8 @@ const DocumentsListing = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">{invoice.invoice_no || '-'}</td>
-                  <td className="px-4 py-3 text-sm">{invoice.invoice_date || '-'}</td>
+                  <td className="px-4 py-3 text-sm">{invoice.invoice_date ? formatDate(invoice.invoice_date) : '-'}</td>
+                  <td className="px-4 py-3 text-sm">{invoice.created_at ? formatDate(invoice.created_at) : '-'}</td>
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>
                   <td className="px-4 py-3 text-sm">{(invoice.total || 0).toFixed(2)}</td>
                   <td className="px-4 py-3">
