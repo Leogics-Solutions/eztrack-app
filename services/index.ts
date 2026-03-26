@@ -447,3 +447,12 @@ export type {
   BulkDeleteDocumentsData,
   BulkDeleteDocumentsResponse,
 } from './DocumentService';
+
+// Agent Service
+export { chatWithAgent } from './AgentService';
+
+export type {
+  AgentChatRequest,
+  AgentChatData,
+  AgentChatResponse,
+} from './AgentService';

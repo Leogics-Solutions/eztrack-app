@@ -30,6 +30,7 @@ export const zh: Translations = {
     coaViewer: '会计科目表查看器',
     accounts: '会计科目表',
     creditors: '债权人',
+    smartdokAgent: 'Smartdok Agent',
     settings: '设置',
   },
   header: {
@@ -1035,4 +1036,3 @@ export const zh: Translations = {
     },
   },
 };
-

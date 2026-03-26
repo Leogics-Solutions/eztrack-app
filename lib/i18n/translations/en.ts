@@ -30,6 +30,7 @@ export const en: Translations = {
     coaViewer: 'COA Viewer',
     accounts: 'Chart of Accounts',
     creditors: 'Creditors',
+    smartdokAgent: 'Smartdok Agent',
     settings: 'Settings',
   },
   header: {
@@ -1035,4 +1036,3 @@ export const en: Translations = {
     },
   },
 };
-

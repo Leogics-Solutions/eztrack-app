@@ -33,6 +33,7 @@ export interface Translations {
     coaViewer: string;
     accounts: string;
     creditors: string;
+    smartdokAgent: string;
     settings: string;
   };
 
