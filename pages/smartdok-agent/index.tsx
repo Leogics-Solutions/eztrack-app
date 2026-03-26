@@ -12,7 +12,7 @@ interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-  createdAt: string;
+  createdAt: string | null;
   toolsUsed?: string[];
 }
 
@@ -20,21 +20,23 @@ const STARTER_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
   content:
-    'Ask Smartdok Agent about invoices, bank statements, supplier statements, Gmail sync, or exports. This beta can use backend tools directly against your active organisation.',
-  createdAt: new Date().toISOString(),
+    'Ask Smartdok Agent about invoices, duplicates, missing DO or custom form flags, bank statements, supplier statements, Gmail sync, or exports. This beta can use backend tools directly against your active organisation.',
+  createdAt: null,
 };
 
 const SUGGESTIONS = [
   'Give me a summary of my invoices this month',
   'List all unpaid invoices from Grab',
+  'Show me duplicate invoices',
+  'Show me invoices missing DO',
   'Show me my uploaded bank statements',
-  'Fetch invoices from my email then export pending ones to AutoCount',
+  'Check unmatched supplier items and unreconciled bank transactions',
 ];
 
 const CAPABILITIES = [
   {
     title: 'Invoice search and detail',
-    description: 'Find invoices by vendor, status, date, amount, then drill into a specific record.',
+    description: 'Find invoices by vendor, status, date, amount, duplicate state, or missing DO and custom form flags.',
     icon: Search,
   },
   {
@@ -44,12 +46,12 @@ const CAPABILITIES = [
   },
   {
     title: 'Statement follow-up',
-    description: 'Check unreconciled transactions and unmatched supplier statement items in natural language.',
+    description: 'Check unreconciled bank transactions and unmatched supplier statement items in natural language.',
     icon: Receipt,
   },
   {
     title: 'Operational actions',
-    description: 'Trigger Gmail invoice sync, queue uploaded files, and export pending invoices when needed.',
+    description: 'Trigger Gmail invoice sync, queue uploaded S3 files for OCR, and export pending invoices to AutoCount.',
     icon: Mail,
   },
 ];
@@ -64,12 +66,14 @@ function createMessage(role: ChatRole, content: string, toolsUsed?: string[]): C
   };
 }
 
-function formatTime(isoString: string): string {
+function formatTime(isoString: string | null): string {
+  if (!isoString) return '';
   try {
-    return new Date(isoString).toLocaleTimeString([], {
+    return new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-    });
+      hour12: true,
+    }).format(new Date(isoString));
   } catch {
     return '';
   }
@@ -224,7 +228,7 @@ export default function SmartdokAgentPage() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-6">
             <section
               className="rounded-2xl border p-5"
@@ -290,7 +294,7 @@ export default function SmartdokAgentPage() {
           </div>
 
           <section
-            className="flex min-h-[70vh] flex-col rounded-3xl border"
+            className="flex h-[70vh] min-h-[34rem] max-h-[54rem] min-w-0 flex-col overflow-hidden rounded-3xl border"
             style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
           >
             <div
@@ -302,12 +306,12 @@ export default function SmartdokAgentPage() {
                   Conversation
                 </h2>
                 <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Replies can include live results from invoices, statements, Gmail, and exports.
+                  Replies can include live results from invoices, statements, duplicates, missing document flags, Gmail, and exports.
                 </p>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-5 md:px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-5">
               <div className="mx-auto flex max-w-4xl flex-col gap-4">
                 {messages.map((message) => {
                   const isAssistant = message.role === 'assistant';
@@ -329,16 +333,18 @@ export default function SmartdokAgentPage() {
                       >
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em]">
                           {isAssistant ? 'Smartdok Agent' : 'You'}
-                          <span
-                            className="font-medium normal-case tracking-normal"
-                            style={{
-                              color: isAssistant
-                                ? 'var(--muted-foreground)'
-                                : 'color-mix(in srgb, var(--primary-foreground) 75%, transparent)',
-                            }}
-                          >
-                            {formatTime(message.createdAt)}
-                          </span>
+                          {formatTime(message.createdAt) && (
+                            <span
+                              className="font-medium normal-case tracking-normal"
+                              style={{
+                                color: isAssistant
+                                  ? 'var(--muted-foreground)'
+                                  : 'color-mix(in srgb, var(--primary-foreground) 75%, transparent)',
+                              }}
+                            >
+                              {formatTime(message.createdAt)}
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-2 whitespace-pre-wrap text-sm leading-7">
@@ -421,7 +427,7 @@ export default function SmartdokAgentPage() {
                         void sendMessage();
                       }
                     }}
-                    placeholder="Ask about invoices, unreconciled transactions, Gmail sync, exports, or statement follow-up..."
+                    placeholder="Ask about duplicates, missing DO/custom form, unreconciled transactions, Gmail sync, exports, or statement follow-up..."
                     className="min-h-[110px] w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
                     style={{ color: 'var(--foreground)' }}
                   />
