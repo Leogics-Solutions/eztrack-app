@@ -294,7 +294,7 @@ export default function SmartdokAgentPage() {
           </div>
 
           <section
-            className="flex h-[70vh] min-h-[34rem] max-h-[54rem] min-w-0 flex-col overflow-hidden rounded-3xl border"
+            className="flex h-[76vh] min-h-[38rem] max-h-[60rem] min-w-0 flex-col overflow-hidden rounded-3xl border"
             style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
           >
             <div
