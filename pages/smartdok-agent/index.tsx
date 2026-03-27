@@ -440,7 +440,7 @@ export default function SmartdokAgentPage() {
                       }
                     }}
                     placeholder="Ask about duplicates, missing DO/custom form, unreconciled transactions, Gmail sync, exports, or statement follow-up..."
-                    className="min-h-[110px] w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
+                    className="min-h-[84px] w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
                     style={{ color: 'var(--foreground)' }}
                   />
 
