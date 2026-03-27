@@ -85,6 +85,12 @@ function formatSessionId(sessionId: string | null): string {
   return `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}`;
 }
 
+function getConversationPanelHeight(messageCount: number): string {
+  if (messageCount <= 4) return '76vh';
+  if (messageCount <= 8) return '82vh';
+  return '88vh';
+}
+
 export default function SmartdokAgentPage() {
   const { error: showError, success: showSuccess } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([STARTER_MESSAGE]);
@@ -294,8 +300,14 @@ export default function SmartdokAgentPage() {
           </div>
 
           <section
-            className="flex h-[76vh] min-h-[38rem] max-h-[60rem] min-w-0 flex-col overflow-hidden rounded-3xl border"
-            style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+            className="flex min-w-0 flex-col overflow-hidden rounded-3xl border"
+            style={{
+              background: 'var(--card)',
+              borderColor: 'var(--border)',
+              height: getConversationPanelHeight(messages.length),
+              minHeight: '38rem',
+              maxHeight: '68rem',
+            }}
           >
             <div
               className="flex items-center justify-between gap-4 border-b px-5 py-4"
