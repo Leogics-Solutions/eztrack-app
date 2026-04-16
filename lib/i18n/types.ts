@@ -644,6 +644,18 @@ export interface Translations {
     never: string;
     monthlyUsage: string;
     pagesUsed: string;
+    quotaAllocations: string;
+    quotaAllocationsDescription: string;
+    validFromTo: string;
+    validFrom: string;
+    validUntil: string;
+    active: string;
+    invoiceLabel: string;
+    noExpiry: string;
+    notAvailableShort: string;
+    totalLabel: string;
+    usedLabel: string;
+    remainingLabel: string;
     quickActions: string;
     quickActionsDescription: string;
     changePassword: string;

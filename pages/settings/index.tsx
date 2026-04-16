@@ -10,6 +10,7 @@ import {
     getUserQuota,
     type UpdateUserRequest,
     type QuotaData,
+    type QuotaAllocation,
 } from "@/services/UserService";
 import {
     changePassword as apiChangePassword,
@@ -1113,6 +1114,41 @@ const SettingsPage = () => {
         effectiveQuota && effectiveQuota.total_quota > 0
             ? (effectiveQuota.used_quota / effectiveQuota.total_quota) * 100
             : 0;
+    const effectiveAllocations = useMemo(
+        () => effectiveQuota?.allocations ?? [],
+        [effectiveQuota]
+    );
+
+    const formatQuotaDate = useCallback((value: string | null | undefined) => {
+        if (!value) return t.settings.notAvailableShort;
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return t.settings.notAvailableShort;
+        }
+
+        return parsed.toLocaleDateString();
+    }, [t.settings.notAvailableShort]);
+
+    const getAllocationWindowLabel = useCallback((allocation: QuotaAllocation) => {
+        if (allocation.valid_from && allocation.valid_until) {
+            return t.settings.validFromTo
+                .replace('{from}', formatQuotaDate(allocation.valid_from))
+                .replace('{until}', formatQuotaDate(allocation.valid_until));
+        }
+
+        if (allocation.valid_from) {
+            return t.settings.validFrom
+                .replace('{date}', formatQuotaDate(allocation.valid_from));
+        }
+
+        if (allocation.valid_until) {
+            return t.settings.validUntil
+                .replace('{date}', formatQuotaDate(allocation.valid_until));
+        }
+
+        return t.settings.noExpiry;
+    }, [formatQuotaDate, t.settings.noExpiry, t.settings.validFrom, t.settings.validFromTo, t.settings.validUntil]);
 
     const industries = [
         { name: t.settings.industries.technologySoftware, icon: '💻' },
@@ -1471,6 +1507,75 @@ const SettingsPage = () => {
                                                 effectiveQuota.used_quota.toString()
                                             )
                                             .replace('{quota}', effectiveQuota.total_quota.toString())}
+                                    </div>
+                                </div>
+                            )}
+
+                            {effectiveAllocations.length > 0 && (
+                                <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--border)' }}>
+                                    <div className="mb-4">
+                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                            {t.settings.quotaAllocations}
+                                        </h4>
+                                        <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                            {t.settings.quotaAllocationsDescription}
+                                        </p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {effectiveAllocations.map((allocation) => (
+                                            <div
+                                                key={allocation.allocation_id}
+                                                className="rounded-md border p-4"
+                                                style={{
+                                                    borderColor: 'var(--border)',
+                                                    backgroundColor: 'var(--muted)',
+                                                }}
+                                            >
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                {getAllocationWindowLabel(allocation)}
+                                                            </span>
+                                                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
+                                                                {allocation.status || t.settings.active}
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                                            {allocation.billing_invoice_id
+                                                                ? `${t.settings.invoiceLabel} #${allocation.billing_invoice_id}`
+                                                                : `${t.settings.invoiceLabel}: ${t.settings.notAvailableShort}`}
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-4 text-sm min-w-[220px]">
+                                                        <div>
+                                                            <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {t.settings.totalLabel}
+                                                            </div>
+                                                            <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                {allocation.quota_pages}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {t.settings.usedLabel}
+                                                            </div>
+                                                            <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                {allocation.used_quota}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {t.settings.remainingLabel}
+                                                            </div>
+                                                            <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                {allocation.remaining_quota}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}

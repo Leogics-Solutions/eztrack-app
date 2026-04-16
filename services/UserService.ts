@@ -6,6 +6,18 @@
 import { BASE_URL } from './config';
 
 // Types
+export interface QuotaAllocation {
+  allocation_id: number;
+  billing_invoice_id: number | null;
+  quota_pages: number;
+  used_quota: number;
+  remaining_quota: number;
+  valid_from: string | null;
+  valid_until: string | null;
+  status: string;
+  allocated_at: string | null;
+}
+
 export interface UpdateUserRequest {
   full_name?: string;
   phone?: string;
@@ -31,6 +43,7 @@ export interface PersonalQuota {
   used_quota: number;
   remaining_quota: number;
   last_processed_at: string | null;
+  allocations: QuotaAllocation[];
 }
 
 export interface OrganizationQuota {
@@ -39,6 +52,7 @@ export interface OrganizationQuota {
   total_quota: number;
   used_quota: number;
   remaining_quota: number;
+  allocations: QuotaAllocation[];
 }
 
 export interface EffectiveQuota {
@@ -46,6 +60,7 @@ export interface EffectiveQuota {
   total_quota: number;
   used_quota: number;
   remaining_quota: number;
+  allocations: QuotaAllocation[];
 }
 
 export interface QuotaData {
@@ -186,4 +201,3 @@ export async function getUserQuota(): Promise<GetUserQuotaResponse> {
 
   return response.json();
 }
-
