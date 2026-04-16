@@ -16,7 +16,6 @@ import {
   CreditCard,
   Receipt,
   Briefcase,
-  Sparkles,
 } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
 
@@ -40,7 +39,6 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
     { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
     { href: '/jobs', label: t.nav.jobs, icon: Briefcase },
-    { href: '/smartdok-agent', label: t.nav.smartdokAgent, icon: Sparkles },
     { href: '/settings', label: t.nav.settings, icon: Settings },
   ];
 
