@@ -1129,7 +1129,17 @@ const SettingsPage = () => {
         return usageStats.quotaData.personal_quota;
     }, [usageStats.quotaData]);
     const invoiceUsage = useMemo(
-        () => activeQuotaSource?.usage_breakdown?.invoice_usage ?? [],
+        () => {
+            const items = activeQuotaSource?.usage_breakdown?.invoice_usage ?? [];
+
+            return [...items]
+                .sort((a, b) => {
+                    const aTime = a.last_used_at ? new Date(a.last_used_at).getTime() : 0;
+                    const bTime = b.last_used_at ? new Date(b.last_used_at).getTime() : 0;
+                    return bTime - aTime;
+                })
+                .slice(0, 5);
+        },
         [activeQuotaSource]
     );
     const nonInvoiceUsedQuota = activeQuotaSource?.usage_breakdown?.non_invoice_used_quota ?? 0;
@@ -1571,9 +1581,9 @@ const SettingsPage = () => {
                                                             </span>
                                                         </div>
                                                         <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                                                            {allocation.billing_invoice_id
-                                                                ? `${t.settings.invoiceLabel} #${allocation.billing_invoice_id}`
-                                                                : `${t.settings.invoiceLabel}: ${t.settings.notAvailableShort}`}
+                                                            {allocation.allocated_at
+                                                                ? `${t.settings.lastUsedAt}: ${formatQuotaDateTime(allocation.allocated_at)}`
+                                                                : `${t.settings.lastUsedAt}: ${t.settings.notAvailableShort}`}
                                                         </div>
                                                     </div>
                                                     <div className="grid grid-cols-3 gap-4 text-sm min-w-[220px]">
