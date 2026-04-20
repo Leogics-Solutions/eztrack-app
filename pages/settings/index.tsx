@@ -11,6 +11,7 @@ import {
     type UpdateUserRequest,
     type QuotaData,
     type QuotaAllocation,
+    type InvoiceUsageItem,
 } from "@/services/UserService";
 import {
     changePassword as apiChangePassword,
@@ -1118,6 +1119,20 @@ const SettingsPage = () => {
         () => effectiveQuota?.allocations ?? [],
         [effectiveQuota]
     );
+    const activeQuotaSource = useMemo(() => {
+        if (!usageStats.quotaData) return null;
+
+        if (usageStats.quotaData.quota_mode === 'organization') {
+            return usageStats.quotaData.organization_quota ?? usageStats.quotaData.personal_quota;
+        }
+
+        return usageStats.quotaData.personal_quota;
+    }, [usageStats.quotaData]);
+    const invoiceUsage = useMemo(
+        () => activeQuotaSource?.usage_breakdown?.invoice_usage ?? [],
+        [activeQuotaSource]
+    );
+    const nonInvoiceUsedQuota = activeQuotaSource?.usage_breakdown?.non_invoice_used_quota ?? 0;
 
     const formatQuotaDate = useCallback((value: string | null | undefined) => {
         if (!value) return t.settings.notAvailableShort;
@@ -1128,6 +1143,17 @@ const SettingsPage = () => {
         }
 
         return parsed.toLocaleDateString();
+    }, [t.settings.notAvailableShort]);
+
+    const formatQuotaDateTime = useCallback((value: string | null | undefined) => {
+        if (!value) return t.settings.notAvailableShort;
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return t.settings.notAvailableShort;
+        }
+
+        return parsed.toLocaleString();
     }, [t.settings.notAvailableShort]);
 
     const getAllocationWindowLabel = useCallback((allocation: QuotaAllocation) => {
@@ -1520,6 +1546,9 @@ const SettingsPage = () => {
                                         <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
                                             {t.settings.quotaAllocationsDescription}
                                         </p>
+                                        <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                            {t.settings.quotaAllocationUsageNote}
+                                        </p>
                                     </div>
                                     <div className="space-y-3">
                                         {effectiveAllocations.map((allocation) => (
@@ -1558,7 +1587,7 @@ const SettingsPage = () => {
                                                         </div>
                                                         <div>
                                                             <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                                                                {t.settings.usedLabel}
+                                                                {t.settings.cumulativeUsedLabel}
                                                             </div>
                                                             <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
                                                                 {allocation.used_quota}
@@ -1577,6 +1606,85 @@ const SettingsPage = () => {
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+
+                            {(invoiceUsage.length > 0 || nonInvoiceUsedQuota > 0) && (
+                                <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--border)' }}>
+                                    <div className="mb-4">
+                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                            {t.settings.invoiceUsageBreakdown}
+                                        </h4>
+                                        <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                            {t.settings.invoiceUsageBreakdownDescription}
+                                        </p>
+                                    </div>
+
+                                    {invoiceUsage.length > 0 && (
+                                        <div className="space-y-3">
+                                            {invoiceUsage.map((item: InvoiceUsageItem) => (
+                                                <div
+                                                    key={item.invoice_id}
+                                                    className="rounded-md border p-4"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        backgroundColor: 'var(--muted)',
+                                                    }}
+                                                >
+                                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                                        <div className="min-w-[220px]">
+                                                            <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                {item.invoice_no || `${t.settings.invoiceLabel} #${item.invoice_id}`}
+                                                            </div>
+                                                            <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {t.settings.vendorName}: {item.vendor_name || t.settings.notAvailableShort}
+                                                            </div>
+                                                            <div className="mt-1 text-xs break-all" style={{ color: 'var(--muted-foreground)' }}>
+                                                                {t.settings.fileName}: {item.original_filename || t.settings.notAvailableShort}
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4 text-sm min-w-[220px]">
+                                                            <div>
+                                                                <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                    {t.settings.usedLabel}
+                                                                </div>
+                                                                <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                    {item.used_quota}
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                                    {t.settings.lastUsedAt}
+                                                                </div>
+                                                                <div className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                    {formatQuotaDateTime(item.last_used_at)}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {nonInvoiceUsedQuota > 0 && (
+                                        <div
+                                            className="mt-3 rounded-md border p-4"
+                                            style={{
+                                                borderColor: 'var(--border)',
+                                                backgroundColor: 'var(--muted)',
+                                            }}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    {t.settings.nonInvoiceUsage}
+                                                </div>
+                                                <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                    {nonInvoiceUsedQuota}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -11,11 +11,26 @@ export interface QuotaAllocation {
   billing_invoice_id: number | null;
   quota_pages: number;
   used_quota: number;
+  used_quota_scope?: 'allocation_cumulative' | string;
   remaining_quota: number;
   valid_from: string | null;
   valid_until: string | null;
   status: string;
   allocated_at: string | null;
+}
+
+export interface InvoiceUsageItem {
+  invoice_id: number;
+  invoice_no: string | null;
+  vendor_name: string | null;
+  original_filename: string | null;
+  used_quota: number;
+  last_used_at: string | null;
+}
+
+export interface UsageBreakdown {
+  invoice_usage: InvoiceUsageItem[];
+  non_invoice_used_quota: number;
 }
 
 export interface UpdateUserRequest {
@@ -44,6 +59,7 @@ export interface PersonalQuota {
   remaining_quota: number;
   last_processed_at: string | null;
   allocations: QuotaAllocation[];
+  usage_breakdown?: UsageBreakdown;
 }
 
 export interface OrganizationQuota {
@@ -53,6 +69,7 @@ export interface OrganizationQuota {
   used_quota: number;
   remaining_quota: number;
   allocations: QuotaAllocation[];
+  usage_breakdown?: UsageBreakdown;
 }
 
 export interface EffectiveQuota {

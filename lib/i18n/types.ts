@@ -646,6 +646,15 @@ export interface Translations {
     pagesUsed: string;
     quotaAllocations: string;
     quotaAllocationsDescription: string;
+    quotaAllocationUsageNote: string;
+    invoiceUsageBreakdown: string;
+    invoiceUsageBreakdownDescription: string;
+    invoiceNumber: string;
+    vendorName: string;
+    fileName: string;
+    nonInvoiceUsage: string;
+    cumulativeUsedLabel: string;
+    lastUsedAt: string;
     validFromTo: string;
     validFrom: string;
     validUntil: string;
