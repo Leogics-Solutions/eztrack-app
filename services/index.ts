@@ -436,6 +436,7 @@ export type {
   StructuredFields,
   ExtractedMetadata,
   DuplicateDocument,
+  LinkedInvoice,
   ListDocumentsParams,
   ListDocumentsData,
   ListDocumentsResponse,

@@ -1,7 +1,6 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
-import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { getDocument, updateDocument, type Document, type StructuredFields, type UpdateDocumentRequest } from "@/services";
@@ -10,7 +9,6 @@ import { useToast } from "@/lib/toast";
 const DocumentDetail = () => {
   const router = useRouter();
   const { id } = router.query;
-  const { t } = useLanguage();
 
   // State
   const [document, setDocument] = useState<Document | null>(null);
@@ -232,6 +230,16 @@ const DocumentDetail = () => {
   const previewUrl = document.preview_url;
   const contentType = previewUrl ? (previewUrl.includes('.pdf') ? 'application/pdf' : 'image/*') : null;
   const structuredFields = document.structured_fields || document.extracted_metadata?.structured_fields;
+  const linkedInvoices = document.linked_invoices || [];
+
+  const formatAmount = (amount?: number | null, currency?: string | null) => {
+    if (amount === null || amount === undefined) return '-';
+
+    return `${currency || 'MYR'} ${amount.toLocaleString('en-MY', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
 
   return (
     <AppLayout pageName={`Document ${document.id}`}>
@@ -591,6 +599,56 @@ const DocumentDetail = () => {
               </div>
             )}
 
+            {/* Linked Invoices */}
+            {linkedInvoices.length > 0 && (
+              <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+                <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
+                  Linked Invoices
+                </h3>
+                <div className="space-y-3">
+                  {linkedInvoices.map((invoice) => {
+                    const invoiceLabel = invoice.invoice_no || `Invoice #${invoice.id}`;
+
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="flex flex-col gap-4 p-4 border border-[var(--border)] rounded-md hover:bg-[var(--muted)] transition-colors sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/documents/${invoice.id}`)}
+                            className="text-left text-sm font-medium hover:underline"
+                            style={{ color: 'var(--primary)' }}
+                          >
+                            {invoiceLabel}
+                          </button>
+                          <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2" style={{ color: 'var(--muted-foreground)' }}>
+                            <div>Invoice ID: {invoice.id}</div>
+                            {invoice.document_id && <div>Document ID: {invoice.document_id}</div>}
+                            {invoice.invoice_date && (
+                              <div>Date: {new Date(invoice.invoice_date).toLocaleDateString()}</div>
+                            )}
+                            {invoice.po_number && <div>PO: {invoice.po_number}</div>}
+                            {invoice.vendor_name && <div>Vendor: {invoice.vendor_name}</div>}
+                            {invoice.customer_name && <div>Customer: {invoice.customer_name}</div>}
+                            <div>Total: {formatAmount(invoice.total, invoice.currency)}</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/documents/${invoice.id}`)}
+                          className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors text-sm font-medium whitespace-nowrap"
+                        >
+                          View Invoice
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Duplicate Information */}
             {document.duplicate_count && document.duplicate_count > 1 && (
               <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
@@ -650,4 +708,3 @@ const DocumentDetail = () => {
 };
 
 export default DocumentDetail;
-

@@ -13,7 +13,8 @@ export interface DocumentTypeInfo {
 }
 
 export interface StructuredFields {
-  [key: string]: any;
+  [key: string]: unknown;
+  exchange_rate?: number;
   // Transfer Note fields
   transfer_note_number?: string;
   date?: string;
@@ -58,6 +59,21 @@ export interface DuplicateDocument {
   created_at: string;
 }
 
+export interface LinkedInvoice {
+  id: number;
+  document_id?: number | null;
+  invoice_no?: string | null;
+  po_number?: string | null;
+  invoice_date?: string | null;
+  vendor_name?: string | null;
+  customer_name?: string | null;
+  currency?: string | null;
+  total?: number | null;
+  upload_status?: string | null;
+  s3_key?: string | null;
+  original_filename?: string | null;
+}
+
 export interface Document {
   id: number;
   document_type: DocumentTypeInfo;
@@ -79,9 +95,12 @@ export interface Document {
   raw_text?: string | null;
   preview_url?: string | null;
   duplicate_documents?: DuplicateDocument[] | null;
-  parent_links?: any[] | null;
-  child_links?: any[] | null;
-  matches?: any[] | null;
+  is_linked?: boolean;
+  linked_invoice_count?: number;
+  linked_invoices?: LinkedInvoice[] | null;
+  parent_links?: unknown[] | null;
+  child_links?: unknown[] | null;
+  matches?: unknown[] | null;
   created_at?: string;
   updated_at?: string;
   organization_id?: number;
@@ -311,4 +330,3 @@ export async function updateDocument(
 
   return response.json();
 }
-

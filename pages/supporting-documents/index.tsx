@@ -151,7 +151,7 @@ const SupportingDocumentsListing = () => {
         const pages: (number | null)[] = [];
         const windowSize = 5;
         let startPage = Math.max(1, page - 2);
-        let endPage = Math.min(totalPages, startPage + windowSize - 1);
+        const endPage = Math.min(totalPages, startPage + windowSize - 1);
         if (endPage - startPage < windowSize - 1) {
           startPage = Math.max(1, endPage - windowSize + 1);
         }
@@ -243,7 +243,7 @@ const SupportingDocumentsListing = () => {
     });
   };
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = (key: string, value: string) => {
     setFilters({ ...filters, [key]: value, page: 1 });
   };
 
@@ -341,6 +341,13 @@ const SupportingDocumentsListing = () => {
           : t.supportingDocuments.alerts.deleteFailed
       );
     }
+  };
+
+  const formatLinkedInvoiceLabel = (doc: Document) => {
+    const firstInvoice = doc.linked_invoices?.[0];
+    if (!firstInvoice) return null;
+
+    return firstInvoice.invoice_no || `Invoice #${firstInvoice.id}`;
   };
 
   return (
@@ -611,6 +618,7 @@ const SupportingDocumentsListing = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Amount</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Filename</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Linked Invoice</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Duplicate</th>
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.supportingDocuments.table.actions}</th>
@@ -677,6 +685,28 @@ const SupportingDocumentsListing = () => {
                         {doc.upload_status}
                       </span>
                     ) : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {doc.is_linked && doc.linked_invoices && doc.linked_invoices.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        <span
+                          className="inline-flex w-fit items-center px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                          title={`${doc.linked_invoice_count || doc.linked_invoices.length} linked invoice(s)`}
+                        >
+                          Linked{(doc.linked_invoice_count || doc.linked_invoices.length) > 1 ? ` (${doc.linked_invoice_count || doc.linked_invoices.length})` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/documents/${doc.linked_invoices![0].id}`)}
+                          className="w-fit text-left text-sm font-medium text-[var(--primary)] hover:underline"
+                          title="View linked invoice"
+                        >
+                          {formatLinkedInvoiceLabel(doc)}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[var(--muted-foreground)]">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {doc.is_duplicate && doc.duplicate_count ? (
@@ -811,4 +841,3 @@ const SupportingDocumentsListing = () => {
 };
 
 export default SupportingDocumentsListing;
-
