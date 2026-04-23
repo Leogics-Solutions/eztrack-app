@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus, ChevronDown } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   listDocuments,
   deleteDocument as deleteDocumentService,
@@ -25,6 +25,24 @@ interface Pagination {
   iter_pages: () => (number | null)[];
 }
 
+type LinkedStatusFilter = '' | 'linked' | 'unlinked';
+
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: 'proforma_invoice', label: 'Proforma Invoice' },
+  { value: 'expense_receipt', label: 'Expense Receipt' },
+  { value: 'transport_receipt', label: 'Transport Receipt' },
+  { value: 'pos_receipt', label: 'POS Receipt' },
+  { value: 'weighbridge_ticket', label: 'Weighbridge Ticket' },
+  { value: 'delivery_order', label: 'Delivery Order' },
+  { value: 'transfer_note', label: 'Transfer Note' },
+  { value: 'purchase_order', label: 'Purchase Order' },
+  { value: 'payment_voucher', label: 'Payment Voucher' },
+  { value: 'bank_proof', label: 'Bank Proof' },
+  { value: 'bill_of_lading', label: 'Bill of Lading' },
+  { value: 'custom_form', label: 'Custom Form' },
+  { value: 'bank_statement', label: 'Bank Statement' },
+];
+
 const SupportingDocumentsListing = () => {
   const router = useRouter();
   const { t } = useLanguage();
@@ -38,7 +56,6 @@ const SupportingDocumentsListing = () => {
   const [advancedFiltersVisible, setAdvancedFiltersVisible] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [orgRole, setOrgRole] = useState<string>('member');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
@@ -55,7 +72,7 @@ const SupportingDocumentsListing = () => {
     min_amount: '',
     max_amount: '',
     upload_status: '',
-    status: [] as string[],
+    linked_status: '' as LinkedStatusFilter,
     page: 1,
     per_page: 20,
   });
@@ -132,7 +149,8 @@ const SupportingDocumentsListing = () => {
       const data: Document[] = rawData.documents || [];
       // Sort by ID in descending order (largest to smallest)
       const sortedData = [...data].sort((a, b) => b.id - a.id);
-      setDocuments(sortedData);
+      const filteredData = applyClientSideFilters(sortedData);
+      setDocuments(filteredData);
 
       // Use backend pagination metadata
       const total = rawData.total || 0;
@@ -201,7 +219,7 @@ const SupportingDocumentsListing = () => {
       min_amount: '',
       max_amount: '',
       upload_status: '',
-      status: [],
+      linked_status: '',
       page: 1,
       per_page: 20,
     });
@@ -245,13 +263,6 @@ const SupportingDocumentsListing = () => {
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters({ ...filters, [key]: value, page: 1 });
-  };
-
-  const handleStatusChange = (status: string, checked: boolean) => {
-    const newStatus = checked
-      ? [...filters.status, status]
-      : filters.status.filter((s) => s !== status);
-    setFilters({ ...filters, status: newStatus, page: 1 });
   };
 
   const applyFilters = (e: React.FormEvent) => {
@@ -349,6 +360,21 @@ const SupportingDocumentsListing = () => {
 
     return firstInvoice.invoice_no || `Invoice #${firstInvoice.id}`;
   };
+
+  const isDocumentLinked = (doc: Document) => {
+    return Boolean(doc.is_linked || (doc.linked_invoice_count && doc.linked_invoice_count > 0) || (doc.linked_invoices && doc.linked_invoices.length > 0));
+  };
+
+  const applyClientSideFilters = (docs: Document[]) => {
+    if (!filters.linked_status) return docs;
+
+    return docs.filter((doc) => {
+      const linked = isDocumentLinked(doc);
+      return filters.linked_status === 'linked' ? linked : !linked;
+    });
+  };
+
+  const isClientLinkedFilterActive = Boolean(filters.linked_status);
 
   return (
     <AppLayout pageName={t.supportingDocuments.title}>
@@ -448,9 +474,11 @@ const SupportingDocumentsListing = () => {
                       className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                     >
                       <option value="">All Types</option>
-                      <option value="delivery_order">Delivery Order (DO)</option>
-                      <option value="transfer_note">Transfer Note</option>
-                      <option value="purchase_order">Purchase Order (PO)</option>
+                      {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -485,8 +513,8 @@ const SupportingDocumentsListing = () => {
                   </div>
                 </div>
 
-                {/* Upload Status & Amount Range */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Upload Status, Link Status & Amount Range */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Upload Status */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Upload Status</label>
@@ -501,6 +529,23 @@ const SupportingDocumentsListing = () => {
                       <option value="completed">Completed</option>
                       <option value="failed">Failed</option>
                     </select>
+                  </div>
+
+                  {/* Linked Invoice Status */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Linked Invoice</label>
+                    <select
+                      value={filters.linked_status}
+                      onChange={(e) => handleFilterChange('linked_status', e.target.value)}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                    >
+                      <option value="">All Link Statuses</option>
+                      <option value="linked">Linked to invoice</option>
+                      <option value="unlinked">Not linked to invoice</option>
+                    </select>
+                    <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      Applied to the current result page until backend filtering is available.
+                    </div>
                   </div>
 
                   {/* Amount Range */}
@@ -559,7 +604,19 @@ const SupportingDocumentsListing = () => {
             <h2 className="text-2xl font-bold m-0">{t.supportingDocuments.title}</h2>
             {totalCount > 0 && (
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Showing {documents.length} of {totalCount} documents
+                {isClientLinkedFilterActive
+                  ? `Showing ${documents.length} matching documents on this page of ${totalCount} server-filtered documents`
+                  : `Showing ${documents.length} of ${totalCount} documents`}
+              </p>
+            )}
+            {isLoading && (
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Loading documents...
+              </p>
+            )}
+            {isClientLinkedFilterActive && (
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Linked invoice filtering is applied after this page is loaded because the API does not support an is_linked query filter yet.
               </p>
             )}
             {error && (
