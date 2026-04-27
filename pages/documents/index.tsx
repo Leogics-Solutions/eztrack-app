@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Edit2, Plus, X } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -14,6 +14,7 @@ import {
   downloadInvoicesZip,
   getSettings,
   pushInvoicesToBusinessCentral,
+  updateInvoice,
   matchInvoicesAcrossStatements,
   createLink,
   createLinksBulk,
@@ -97,6 +98,9 @@ const DocumentsListing = () => {
   const [orgRole, setOrgRole] = useState<string>('member');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
+  const [remarkDraft, setRemarkDraft] = useState('');
+  const [savingRemarkId, setSavingRemarkId] = useState<number | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -404,6 +408,61 @@ const DocumentsListing = () => {
       page: 1,
       per_page: 20,
     });
+  };
+
+  const startRemarkEdit = (invoice: Invoice) => {
+    setEditingRemarkId(invoice.id);
+    setRemarkDraft(invoice.remarks || '');
+  };
+
+  const cancelRemarkEdit = () => {
+    setEditingRemarkId(null);
+    setRemarkDraft('');
+  };
+
+  const saveRemarkEdit = async (invoice: Invoice) => {
+    const nextRemark = remarkDraft.trim();
+    const currentRemark = (invoice.remarks || '').trim();
+
+    if (nextRemark === currentRemark) {
+      cancelRemarkEdit();
+      return;
+    }
+
+    setSavingRemarkId(invoice.id);
+
+    try {
+      await updateInvoice(invoice.id, { remarks: nextRemark });
+
+      setInvoices((currentInvoices) =>
+        currentInvoices.map((currentInvoice) =>
+          currentInvoice.id === invoice.id
+            ? { ...currentInvoice, remarks: nextRemark || undefined }
+            : currentInvoice
+        )
+      );
+
+      setRemarks((currentRemarks) => {
+        const values = new Set(
+          currentRemarks
+            .map((remark) => remark.remarks)
+            .filter((remark) => remark && remark !== currentRemark)
+        );
+
+        if (nextRemark) {
+          values.add(nextRemark);
+        }
+
+        return Array.from(values).map((remarks) => ({ remarks }));
+      });
+
+      cancelRemarkEdit();
+      showToast('Remark updated', { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update remark', { type: 'error' });
+    } finally {
+      setSavingRemarkId(null);
+    }
   };
 
   const setDateRange = (preset: string) => {
@@ -1649,12 +1708,63 @@ const DocumentsListing = () => {
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>
                   <td className="px-4 py-3 text-sm">{(invoice.total || 0).toFixed(2)}</td>
                   <td className="px-4 py-3">
-                    {invoice.remarks ? (
-                      <span className="inline-block px-2 py-1 text-xs rounded-md bg-[var(--primary)] text-white">
-                        {invoice.remarks}
-                      </span>
+                    {editingRemarkId === invoice.id ? (
+                      <div className="flex min-w-[260px] items-start gap-2">
+                        <textarea
+                          value={remarkDraft}
+                          onChange={(e) => setRemarkDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              cancelRemarkEdit();
+                            }
+                          }}
+                          disabled={savingRemarkId === invoice.id}
+                          rows={3}
+                          autoFocus
+                          className="w-full min-w-[200px] rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
+                        />
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => saveRemarkEdit(invoice)}
+                            disabled={savingRemarkId === invoice.id}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                            title="Save remark"
+                            aria-label="Save remark"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelRemarkEdit}
+                            disabled={savingRemarkId === invoice.id}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
+                            title="Cancel remark edit"
+                            aria-label="Cancel remark edit"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-[var(--muted-foreground)]">-</span>
+                      <div className="flex min-w-[220px] items-start gap-2">
+                        {invoice.remarks ? (
+                          <span className="inline-block max-w-[360px] whitespace-pre-wrap rounded-md bg-[var(--primary)] px-2 py-1 text-xs text-white">
+                            {invoice.remarks}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--muted-foreground)]">-</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => startRemarkEdit(invoice)}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
+                          title="Edit remark"
+                          aria-label="Edit remark"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3">
