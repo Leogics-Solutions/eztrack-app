@@ -89,6 +89,51 @@ interface UsageStats {
     quotaData: QuotaData | null;
 }
 
+type CompanyProfileFieldKey =
+    | 'registration_number'
+    | 'registration_number_old'
+    | 'tax_number'
+    | 'sst_number'
+    | 'address'
+    | 'phone'
+    | 'email';
+
+type CompanyProfileFields = Record<CompanyProfileFieldKey, string>;
+
+const emptyCompanyProfile: CompanyProfileFields = {
+    registration_number: '',
+    registration_number_old: '',
+    tax_number: '',
+    sst_number: '',
+    address: '',
+    phone: '',
+    email: '',
+};
+
+const companyProfileFieldDefinitions: Array<{
+    key: CompanyProfileFieldKey;
+    label: string;
+    placeholder: string;
+    type?: string;
+    multiline?: boolean;
+}> = [
+    { key: 'registration_number', label: 'Registration number', placeholder: 'e.g. 202001012345' },
+    { key: 'registration_number_old', label: 'Old registration number', placeholder: 'e.g. 123456-A' },
+    { key: 'tax_number', label: 'Tax number / TIN', placeholder: 'e.g. C1234567890' },
+    { key: 'sst_number', label: 'SST number', placeholder: 'e.g. W10-1234-56789012' },
+    { key: 'phone', label: 'Company phone', placeholder: 'e.g. +60312345678', type: 'tel' },
+    { key: 'email', label: 'Company email', placeholder: 'e.g. accounts@example.com', type: 'email' },
+    { key: 'address', label: 'Company address', placeholder: 'Registered business address', multiline: true },
+];
+
+const normalizeCompanyProfile = (profile: CompanyProfileFields): CompanyProfileFields =>
+    Object.fromEntries(
+        Object.entries(profile).map(([key, value]) => [key, String(value ?? '').trim()])
+    ) as CompanyProfileFields;
+
+const getCompanyProfileValue = (org: Partial<Record<CompanyProfileFieldKey, string | null | undefined>>, key: CompanyProfileFieldKey) =>
+    String(org[key] ?? '').trim();
+
 const SettingsPage = () => {
     const { t } = useLanguage();
     const router = useRouter();
@@ -168,23 +213,36 @@ const SettingsPage = () => {
     const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
     const [createCompanyName, setCreateCompanyName] = useState('');
     const [createCompanyIndustry, setCreateCompanyIndustry] = useState('');
+    const [createCompanyProfile, setCreateCompanyProfile] = useState<CompanyProfileFields>(emptyCompanyProfile);
     const [isCreatingCompany, setIsCreatingCompany] = useState(false);
     const [showEditCompanyModal, setShowEditCompanyModal] = useState(false);
     const [editingOrg, setEditingOrg] = useState<UserOrganization | null>(null);
     const [editCompanyName, setEditCompanyName] = useState('');
     const [editCompanyIndustry, setEditCompanyIndustry] = useState('');
+    const [editCompanyProfile, setEditCompanyProfile] = useState<CompanyProfileFields>(emptyCompanyProfile);
     const [isUpdatingCompany, setIsUpdatingCompany] = useState(false);
     const [companiesSearchQuery, setCompaniesSearchQuery] = useState('');
+    const [organizationProfiles, setOrganizationProfiles] = useState<Record<number, Partial<ApiOrganization>>>({});
+
+    const companiesForDisplay = useMemo(() => {
+        return (userOrgs || []).map((org) => ({
+            ...organizationProfiles[org.id],
+            ...org,
+        }));
+    }, [organizationProfiles, userOrgs]);
 
     const filteredCompanies = useMemo(() => {
-        const list = userOrgs || [];
+        const list = companiesForDisplay;
         const q = companiesSearchQuery.trim().toLowerCase();
         if (!q) return list;
         return list.filter((o) =>
             o.name.toLowerCase().includes(q) ||
-            (o.industry && o.industry.toLowerCase().includes(q))
+            (o.industry && o.industry.toLowerCase().includes(q)) ||
+            companyProfileFieldDefinitions.some(({ key }) =>
+                getCompanyProfileValue(o, key).toLowerCase().includes(q)
+            )
         );
-    }, [userOrgs, companiesSearchQuery]);
+    }, [companiesForDisplay, companiesSearchQuery]);
 
     // Form states
     const [profileFullName, setProfileFullName] = useState('');
@@ -316,17 +374,20 @@ const SettingsPage = () => {
                 setTeamMembers([]);
                 setOrgRole('operator');
                 setActiveOrgId(null);
+                setOrganizationProfiles({});
                 return;
             }
 
             const orgsResp = await listOrganizations();
             const organizations = orgsResp.success ? orgsResp.data : [];
+            setOrganizationProfiles(Object.fromEntries(organizations.map((org) => [org.id, org])));
 
             if (!organizations || organizations.length === 0) {
                 setHasOrganization(false);
                 setTeamMembers([]);
                 setOrgRole('operator');
                 setActiveOrgId(null);
+                setOrganizationProfiles({});
                 return;
             }
 
@@ -371,6 +432,7 @@ const SettingsPage = () => {
             setTeamMembers([]);
             setOrgRole('operator');
             setActiveOrgId(null);
+            setOrganizationProfiles({});
         }
     };
 
@@ -655,17 +717,28 @@ const SettingsPage = () => {
     const openCreateCompanyModal = () => {
         setCreateCompanyName('');
         setCreateCompanyIndustry('');
+        setCreateCompanyProfile(emptyCompanyProfile);
         setShowCreateCompanyModal(true);
     };
     const closeCreateCompanyModal = () => {
         setShowCreateCompanyModal(false);
         setCreateCompanyName('');
         setCreateCompanyIndustry('');
+        setCreateCompanyProfile(emptyCompanyProfile);
     };
     const openEditCompanyModal = (org: UserOrganization) => {
         setEditingOrg(org);
         setEditCompanyName(org.name);
         setEditCompanyIndustry(org.industry ?? '');
+        setEditCompanyProfile({
+            registration_number: org.registration_number ?? '',
+            registration_number_old: org.registration_number_old ?? '',
+            tax_number: org.tax_number ?? '',
+            sst_number: org.sst_number ?? '',
+            address: org.address ?? '',
+            phone: org.phone ?? '',
+            email: org.email ?? '',
+        });
         setShowEditCompanyModal(true);
     };
     const closeEditCompanyModal = () => {
@@ -673,6 +746,13 @@ const SettingsPage = () => {
         setEditingOrg(null);
         setEditCompanyName('');
         setEditCompanyIndustry('');
+        setEditCompanyProfile(emptyCompanyProfile);
+    };
+    const setCreateCompanyProfileField = (key: keyof CompanyProfileFields, value: string) => {
+        setCreateCompanyProfile((prev) => ({ ...prev, [key]: value }));
+    };
+    const setEditCompanyProfileField = (key: keyof CompanyProfileFields, value: string) => {
+        setEditCompanyProfile((prev) => ({ ...prev, [key]: value }));
     };
     const handleUpdateCompany = async () => {
         if (!editingOrg || !editCompanyName.trim()) return;
@@ -681,9 +761,11 @@ const SettingsPage = () => {
             const payload: UpdateOrganizationRequest = {
                 name: editCompanyName.trim(),
                 industry: editCompanyIndustry.trim() || undefined,
+                ...normalizeCompanyProfile(editCompanyProfile),
             };
             await updateOrganization(editingOrg.id, payload);
             await refetchOrganizations();
+            await loadTeamMembers(selectedOrganizationId);
             showNotification(t.settings.profileUpdated || 'Company updated', 'success');
             closeEditCompanyModal();
         } catch (error) {
@@ -702,10 +784,12 @@ const SettingsPage = () => {
             const payload: CreateOrganizationRequest = {
                 name: createCompanyName.trim(),
                 industry: createCompanyIndustry.trim() || undefined,
+                ...normalizeCompanyProfile(createCompanyProfile),
                 quota_pages: 0,
             };
             await createOrganization(payload);
             await refetchOrganizations();
+            await loadTeamMembers(selectedOrganizationId);
             await loadOrgLimits();
             showNotification(t.settings.profileUpdated || 'Company created', 'success');
             closeCreateCompanyModal();
@@ -1143,6 +1227,13 @@ const SettingsPage = () => {
         [activeQuotaSource]
     );
     const nonInvoiceUsedQuota = activeQuotaSource?.usage_breakdown?.non_invoice_used_quota ?? 0;
+
+    const [invoiceDirectionTab, setInvoiceDirectionTab] = useState<'all' | 'AR' | 'AP'>('all');
+
+    const filteredInvoiceUsage = useMemo(() => {
+        if (invoiceDirectionTab === 'all') return invoiceUsage;
+        return invoiceUsage.filter((item) => item.direction === invoiceDirectionTab);
+    }, [invoiceUsage, invoiceDirectionTab]);
 
     const formatQuotaDate = useCallback((value: string | null | undefined) => {
         if (!value) return t.settings.notAvailableShort;
@@ -1621,18 +1712,42 @@ const SettingsPage = () => {
 
                             {(invoiceUsage.length > 0 || nonInvoiceUsedQuota > 0) && (
                                 <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--border)' }}>
-                                    <div className="mb-4">
-                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                                            {t.settings.invoiceUsageBreakdown}
-                                        </h4>
-                                        <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                                            {t.settings.invoiceUsageBreakdownDescription}
-                                        </p>
+                                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <h4 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                {t.settings.invoiceUsageBreakdown}
+                                            </h4>
+                                            <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                                                {t.settings.invoiceUsageBreakdownDescription}
+                                            </p>
+                                        </div>
+                                        {invoiceUsage.length > 0 && (
+                                            <div className="flex rounded-md overflow-hidden border text-xs font-medium" style={{ borderColor: 'var(--border)' }}>
+                                                {(['all', 'AR', 'AP'] as const).map((tab) => (
+                                                    <button
+                                                        key={tab}
+                                                        onClick={() => setInvoiceDirectionTab(tab)}
+                                                        className="px-3 py-1.5 transition-colors"
+                                                        style={{
+                                                            backgroundColor: invoiceDirectionTab === tab ? 'var(--primary)' : 'var(--card)',
+                                                            color: invoiceDirectionTab === tab ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                                                            borderRight: tab !== 'AP' ? '1px solid var(--border)' : undefined,
+                                                        }}
+                                                    >
+                                                        {tab === 'all' ? 'All' : tab}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {invoiceUsage.length > 0 && (
                                         <div className="space-y-3">
-                                            {invoiceUsage.map((item: InvoiceUsageItem) => (
+                                            {filteredInvoiceUsage.length === 0 ? (
+                                                <div className="text-xs py-4 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                                                    No {invoiceDirectionTab} invoices in recent usage.
+                                                </div>
+                                            ) : filteredInvoiceUsage.map((item: InvoiceUsageItem) => (
                                                 <div
                                                     key={item.invoice_id}
                                                     className="rounded-md border p-4"
@@ -1643,8 +1758,21 @@ const SettingsPage = () => {
                                                 >
                                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                                         <div className="min-w-[220px]">
-                                                            <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                                                                {item.invoice_no || `${t.settings.invoiceLabel} #${item.invoice_id}`}
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                                                                    {item.invoice_no || `${t.settings.invoiceLabel} #${item.invoice_id}`}
+                                                                </div>
+                                                                {item.direction && item.direction !== 'NEUTRAL' && (
+                                                                    <span
+                                                                        className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase"
+                                                                        style={{
+                                                                            backgroundColor: item.direction === 'AR' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                                                            color: item.direction === 'AR' ? 'rgb(22,163,74)' : 'rgb(220,38,38)',
+                                                                        }}
+                                                                    >
+                                                                        {item.direction}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
                                                                 {t.settings.vendorName}: {item.vendor_name || t.settings.notAvailableShort}
@@ -1863,15 +1991,24 @@ const SettingsPage = () => {
                                             style={{ borderColor: 'var(--border)' }}
                                         >
                                             <div>
-                                                <span className="font-medium" style={{ color: 'var(--foreground)' }}>{org.name}</span>
-                                                {org.industry && (
-                                                    <span className="text-sm ml-2" style={{ color: 'var(--muted-foreground)' }}>({org.industry})</span>
-                                                )}
-                                                {org.is_primary && (
-                                                    <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                                                        Default
-                                                    </span>
-                                                )}
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-medium" style={{ color: 'var(--foreground)' }}>{org.name}</span>
+                                                    {org.industry && (
+                                                        <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>({org.industry})</span>
+                                                    )}
+                                                    {org.is_primary && (
+                                                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                                                            Default
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                                    {org.registration_number && <span>Reg: {org.registration_number}</span>}
+                                                    {org.tax_number && <span>TIN: {org.tax_number}</span>}
+                                                    {org.sst_number && <span>SST: {org.sst_number}</span>}
+                                                    {org.email && <span>{org.email}</span>}
+                                                    {org.phone && <span>{org.phone}</span>}
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <button
@@ -2891,6 +3028,50 @@ const SettingsPage = () => {
                                     }}
                                 />
                             </div>
+                            <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                                <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Company profile
+                                </h4>
+                                <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+                                    Used by invoice processing to detect AP/AR direction from company identity matches.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {companyProfileFieldDefinitions.map((field) => (
+                                        <div key={field.key} className={field.multiline ? 'md:col-span-2' : undefined}>
+                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                                {field.label} (optional)
+                                            </label>
+                                            {field.multiline ? (
+                                                <textarea
+                                                    value={String(createCompanyProfile[field.key] ?? '')}
+                                                    onChange={(e) => setCreateCompanyProfileField(field.key, e.target.value)}
+                                                    placeholder={field.placeholder}
+                                                    rows={3}
+                                                    className="w-full px-3 py-2 border rounded-md resize-y"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                            ) : (
+                                                <input
+                                                    type={field.type ?? 'text'}
+                                                    value={String(createCompanyProfile[field.key] ?? '')}
+                                                    onChange={(e) => setCreateCompanyProfileField(field.key, e.target.value)}
+                                                    placeholder={field.placeholder}
+                                                    className="w-full px-3 py-2 border rounded-md"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>
                             <button
@@ -2925,7 +3106,7 @@ const SettingsPage = () => {
                     }}
                 >
                     <div
-                        className="rounded-lg max-w-md w-full"
+                        className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
                         style={{
                             background: 'var(--card)',
                             borderColor: 'var(--border)',
@@ -2977,6 +3158,50 @@ const SettingsPage = () => {
                                         color: 'var(--foreground)',
                                     }}
                                 />
+                            </div>
+                            <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                                <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--foreground)' }}>
+                                    Company profile
+                                </h4>
+                                <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+                                    Used by invoice processing to detect AP/AR direction from company identity matches.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {companyProfileFieldDefinitions.map((field) => (
+                                        <div key={field.key} className={field.multiline ? 'md:col-span-2' : undefined}>
+                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+                                                {field.label} (optional)
+                                            </label>
+                                            {field.multiline ? (
+                                                <textarea
+                                                    value={String(editCompanyProfile[field.key] ?? '')}
+                                                    onChange={(e) => setEditCompanyProfileField(field.key, e.target.value)}
+                                                    placeholder={field.placeholder}
+                                                    rows={3}
+                                                    className="w-full px-3 py-2 border rounded-md resize-y"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                            ) : (
+                                                <input
+                                                    type={field.type ?? 'text'}
+                                                    value={String(editCompanyProfile[field.key] ?? '')}
+                                                    onChange={(e) => setEditCompanyProfileField(field.key, e.target.value)}
+                                                    placeholder={field.placeholder}
+                                                    className="w-full px-3 py-2 border rounded-md"
+                                                    style={{
+                                                        borderColor: 'var(--border)',
+                                                        background: 'var(--card)',
+                                                        color: 'var(--foreground)',
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                         <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: 'var(--border)' }}>

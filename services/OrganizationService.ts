@@ -10,6 +10,13 @@ export interface Organization {
   id: number;
   name: string;
   industry?: string;
+  registration_number?: string | null;
+  registration_number_old?: string | null;
+  tax_number?: string | null;
+  sst_number?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
   quota_pages: number;
   created_at: string;
   updated_at: string;
@@ -20,6 +27,13 @@ export interface UserOrganization {
   id: number;
   name: string;
   industry?: string;
+  registration_number?: string | null;
+  registration_number_old?: string | null;
+  tax_number?: string | null;
+  sst_number?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
   is_primary: boolean;
 }
 
@@ -61,6 +75,13 @@ export interface ListOrganizationsResponse {
 export interface CreateOrganizationRequest {
   name: string;
   industry?: string;
+  registration_number?: string;
+  registration_number_old?: string;
+  tax_number?: string;
+  sst_number?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
   quota_pages: number;
 }
 
@@ -73,6 +94,13 @@ export interface CreateOrganizationResponse {
 export interface UpdateOrganizationRequest {
   name?: string;
   industry?: string;
+  registration_number?: string;
+  registration_number_old?: string;
+  tax_number?: string;
+  sst_number?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
   quota_pages?: number;
 }
 
@@ -441,4 +469,3 @@ export async function updateMemberRole(
 
   return response.json();
 }
-

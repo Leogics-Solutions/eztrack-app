@@ -26,6 +26,7 @@ export interface InvoiceUsageItem {
   original_filename: string | null;
   used_quota: number;
   last_used_at: string | null;
+  direction?: 'AP' | 'AR' | 'NEUTRAL' | null;
 }
 
 export interface UsageBreakdown {
