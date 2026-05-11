@@ -751,12 +751,8 @@ const SettingsPage = () => {
         alert(t.settings.downloadDataMessage);
     };
 
-    const viewBilling = () => {
-        alert(t.settings.viewBillingMessage);
-    };
-
     const contactSupport = () => {
-        alert(t.settings.contactSupportMessage);
+        window.location.href = 'mailto:info@leogics.com';
     };
 
     // Settings functions
@@ -1722,7 +1718,7 @@ const SettingsPage = () => {
                             </div>
                         </div>
                         <div className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {/* Change Password */}
                                 <button
                                     onClick={openChangePassword}
@@ -1756,25 +1752,6 @@ const SettingsPage = () => {
                                             </div>
                                             <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
                                                 {t.settings.exportDataDescription}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                {/* Billing */}
-                                <button
-                                    onClick={viewBilling}
-                                    className="group p-4 border rounded-lg transition-all hover:bg-[var(--hover-bg-light)] hover:text-[var(--hover-text)] dark:hover:bg-[var(--hover-bg)] dark:hover:text-[var(--hover-text)] text-left"
-                                    style={{ borderColor: 'var(--border)' }}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className="text-3xl">💳</div>
-                                        <div>
-                                            <div className="font-semibold mb-1">
-                                                {t.settings.billingInvoices}
-                                            </div>
-                                            <div className="text-xs group-hover:text-[var(--hover-text)]" style={{ color: 'var(--muted-foreground)' }}>
-                                                {t.settings.billingInvoicesDescription}
                                             </div>
                                         </div>
                                     </div>
