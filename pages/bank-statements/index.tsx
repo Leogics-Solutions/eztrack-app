@@ -1,13 +1,15 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { BankLedgerReconciliationPanel } from "@/components/bank-statements/BankLedgerReconciliationPanel";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Plus, Upload, Eye, Trash2, CreditCard, Download, ChevronDown } from "lucide-react";
+import { Upload, Eye, Edit2, Check, X, Trash2, Download, ChevronDown } from "lucide-react";
 import {
   listBankStatements,
   deleteBankStatement,
+  updateBankStatement,
   getAccountNumbers,
   batchUploadBankStatements,
   getBankStatementJobStatus,
@@ -15,11 +17,12 @@ import {
   exportBankStatementsCsv,
   type BankStatement,
   type BankStatementJobStatus,
-  type BatchUploadBankStatementJob,
 } from "@/services";
 import { FileUpload } from "@/components/FileUpload";
 import { useToast } from "@/lib/toast";
 import { useOrganization } from "@/lib/OrganizationContext";
+
+type BankStatementsTab = 'statements' | 'ledger';
 
 const BankStatementsList = () => {
   const router = useRouter();
@@ -46,6 +49,10 @@ const BankStatementsList = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const [editingField, setEditingField] = useState<{ id: number; field: string } | null>(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [savingField, setSavingField] = useState(false);
+  const [activeTab, setActiveTab] = useState<BankStatementsTab>('statements');
 
   // Filters
   const [filters, setFilters] = useState({
@@ -413,23 +420,50 @@ const BankStatementsList = () => {
     }
   };
 
-  const isAllSelected = statements.length > 0 && selectedStatementIds.size === statements.length;
-  const isIndeterminate = selectedStatementIds.size > 0 && selectedStatementIds.size < statements.length;
+  const startFieldEdit = (statement: BankStatement, field: string, currentValue: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingField({ id: statement.id, field });
+    setFieldDraft(currentValue);
+  };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-';
+  const cancelFieldEdit = () => {
+    setEditingField(null);
+    setFieldDraft('');
+  };
+
+  const saveFieldEdit = async (statement: BankStatement) => {
+    if (!editingField) return;
+    const nextValue = fieldDraft.trim();
+    const numericFields = ['opening_balance', 'closing_balance'];
+    const currentRaw = statement[editingField.field as keyof BankStatement];
+    const currentValue = currentRaw !== undefined && currentRaw !== null ? String(currentRaw) : '';
+    if (nextValue === currentValue) {
+      cancelFieldEdit();
+      return;
+    }
+    setSavingField(true);
     try {
-      return new Date(dateString).toLocaleDateString();
-    } catch {
-      return dateString;
+      const apiValue = numericFields.includes(editingField.field) && nextValue !== ''
+        ? nextValue
+        : nextValue || undefined;
+      await updateBankStatement(statement.id, { [editingField.field]: apiValue });
+      const localValue = numericFields.includes(editingField.field)
+        ? (nextValue === '' ? undefined : Number(nextValue))
+        : nextValue || undefined;
+      setStatements((prev) =>
+        prev.map((s) => s.id === statement.id ? { ...s, [editingField.field]: localValue } : s)
+      );
+      cancelFieldEdit();
+      showToast('Updated successfully', { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update', { type: 'error' });
+    } finally {
+      setSavingField(false);
     }
   };
 
-  const formatCurrency = (amount?: number, currency?: string) => {
-    if (amount === undefined || amount === null) return '-';
-    const currencyCode = currency || 'MYR';
-    return `${currencyCode} ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const isAllSelected = statements.length > 0 && selectedStatementIds.size === statements.length;
+  const isIndeterminate = selectedStatementIds.size > 0 && selectedStatementIds.size < statements.length;
 
   return (
     <AppLayout pageName={t.bankStatements.title || 'Bank Statements'}>
@@ -444,18 +478,48 @@ const BankStatementsList = () => {
               {t.bankStatements.description || 'Upload and manage bank statements for invoice reconciliation'}
             </p>
           </div>
+          {activeTab === 'statements' && (
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all"
+              style={{
+                background: 'var(--primary)',
+                color: 'var(--primary-foreground)',
+              }}
+            >
+              <Upload className="h-5 w-5" />
+              {t.bankStatements.upload.button || 'Upload Statement'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 border-b" style={{ borderColor: 'var(--border)' }}>
           <button
-            onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all"
+            type="button"
+            onClick={() => setActiveTab('statements')}
+            className="px-4 py-2 text-sm font-medium transition-colors"
             style={{
-              background: 'var(--primary)',
-              color: 'var(--primary-foreground)',
+              borderBottom: activeTab === 'statements' ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === 'statements' ? 'var(--foreground)' : 'var(--muted-foreground)',
             }}
           >
-            <Upload className="h-5 w-5" />
-            {t.bankStatements.upload.button || 'Upload Statement'}
+            Bank Statements
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ledger')}
+            className="px-4 py-2 text-sm font-medium transition-colors"
+            style={{
+              borderBottom: activeTab === 'ledger' ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === 'ledger' ? 'var(--foreground)' : 'var(--muted-foreground)',
+            }}
+          >
+            Ledger Reconciliation
           </button>
         </div>
+
+        {activeTab === 'statements' ? (
+          <>
 
         {/* Filters */}
         <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
@@ -677,90 +741,152 @@ const BankStatementsList = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {statements.map((statement) => (
-                      <tr
-                        key={statement.id}
-                        style={{ borderBottom: '1px solid var(--border)' }}
-                        className="hover:bg-[var(--muted)] cursor-pointer"
-                        onClick={() => router.push(`/bank-statements/${statement.id}`)}
-                      >
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedStatementIds.has(statement.id)}
-                            onChange={(e) => handleSelectStatement(statement.id, e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {statement.bank_name || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {statement.account_number || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatDate(statement.statement_date_from)} - {formatDate(statement.statement_date_to)}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {statement.transaction_count || 0}
-                        </td>
-                        <td className="py-3 px-4">
-                          {statement.matched_transaction_count !== undefined ? (
-                            <div className="flex items-center gap-2">
-                              <span style={{ color: 'var(--foreground)' }}>
-                                {statement.matched_transaction_count}
-                              </span>
-                              {statement.transaction_count && statement.transaction_count > 0 && (
-                                <span className="text-xs px-2 py-1 rounded" style={{ 
-                                  background: statement.matched_transaction_count === statement.transaction_count 
-                                    ? 'var(--success)' 
-                                    : statement.matched_transaction_count > 0 
-                                    ? 'var(--warning)' 
-                                    : 'var(--muted)',
-                                  color: statement.matched_transaction_count === statement.transaction_count || statement.matched_transaction_count > 0
-                                    ? 'white'
-                                    : 'var(--muted-foreground)'
-                                }}>
-                                  {Math.round((statement.matched_transaction_count / statement.transaction_count) * 100)}%
-                                </span>
-                              )}
+                    {statements.map((statement) => {
+                      const isEditingThisRow = editingField?.id === statement.id;
+
+                      const inlineCell = (field: string, displayValue: string, inputType: 'text' | 'date' | 'number' = 'text') => {
+                        const isActive = isEditingThisRow && editingField?.field === field;
+                        if (isActive) {
+                          return (
+                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type={inputType}
+                                value={fieldDraft}
+                                onChange={(e) => setFieldDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') cancelFieldEdit();
+                                  if (e.key === 'Enter') saveFieldEdit(statement);
+                                }}
+                                disabled={savingField}
+                                autoFocus
+                                className="min-w-[80px] w-full rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
+                              />
+                              <div className="flex shrink-0 gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => saveFieldEdit(statement)}
+                                  disabled={savingField}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                                  title="Save"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelFieldEdit}
+                                  disabled={savingField}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--card)]"
+                                  title="Cancel"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          ) : (
-                            <span style={{ color: 'var(--muted-foreground)' }}>-</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {statement.currency || '-'}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(statement.opening_balance, statement.currency)}
-                        </td>
-                        <td className="py-3 px-4" style={{ color: 'var(--foreground)' }}>
-                          {formatCurrency(statement.closing_balance, statement.currency)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-1">
+                            <span>{displayValue || '-'}</span>
                             <button
-                              onClick={() => router.push(`/bank-statements/${statement.id}`)}
-                              className="p-2 rounded hover:bg-[var(--muted)] transition-colors"
-                              style={{ color: 'var(--foreground)' }}
-                              title={t.bankStatements.list.view || 'View'}
+                              type="button"
+                              onClick={(e) => startFieldEdit(statement, field, displayValue, e)}
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)]"
+                              title={`Edit ${field.replace(/_/g, ' ')}`}
                             >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(statement.id)}
-                              className="p-2 rounded hover:bg-red-500/10 transition-colors"
-                              style={{ color: 'var(--error)' }}
-                              title={t.bankStatements.list.delete || 'Delete'}
-                            >
-                              <Trash2 className="h-4 w-4" />
+                              <Edit2 className="h-3 w-3" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
+                        );
+                      };
+
+                      return (
+                        <tr
+                          key={statement.id}
+                          style={{ borderBottom: '1px solid var(--border)' }}
+                          className="group hover:bg-[var(--muted)] cursor-pointer"
+                          onClick={() => router.push(`/bank-statements/${statement.id}`)}
+                        >
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedStatementIds.has(statement.id)}
+                              onChange={(e) => handleSelectStatement(statement.id, e.target.checked)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {inlineCell('bank_name', statement.bank_name || '')}
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {inlineCell('account_number', statement.account_number || '')}
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            <div className="flex flex-col gap-1">
+                              {inlineCell('statement_date_from', statement.statement_date_from || '', 'date')}
+                              {inlineCell('statement_date_to', statement.statement_date_to || '', 'date')}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {statement.transaction_count || 0}
+                          </td>
+                          <td className="py-3 px-4">
+                            {statement.matched_transaction_count !== undefined ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm" style={{ color: 'var(--foreground)' }}>
+                                  {statement.matched_transaction_count}
+                                </span>
+                                {statement.transaction_count && statement.transaction_count > 0 && (
+                                  <span className="text-xs px-2 py-1 rounded" style={{
+                                    background: statement.matched_transaction_count === statement.transaction_count
+                                      ? 'var(--success)'
+                                      : statement.matched_transaction_count > 0
+                                      ? 'var(--warning)'
+                                      : 'var(--muted)',
+                                    color: statement.matched_transaction_count === statement.transaction_count || statement.matched_transaction_count > 0
+                                      ? 'white'
+                                      : 'var(--muted-foreground)'
+                                  }}>
+                                    {Math.round((statement.matched_transaction_count / statement.transaction_count) * 100)}%
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--muted-foreground)' }}>-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {inlineCell('currency', statement.currency || '')}
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {inlineCell('opening_balance', statement.opening_balance !== undefined ? String(statement.opening_balance) : '', 'number')}
+                          </td>
+                          <td className="py-3 px-4 text-sm" style={{ color: 'var(--foreground)' }}>
+                            {inlineCell('closing_balance', statement.closing_balance !== undefined ? String(statement.closing_balance) : '', 'number')}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => router.push(`/bank-statements/${statement.id}`)}
+                                className="p-2 rounded hover:bg-[var(--muted)] transition-colors"
+                                style={{ color: 'var(--foreground)' }}
+                                title={t.bankStatements.list.view || 'View'}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(statement.id); }}
+                                className="p-2 rounded hover:bg-red-500/10 transition-colors"
+                                style={{ color: 'var(--error)' }}
+                                title={t.bankStatements.list.delete || 'Delete'}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -807,10 +933,14 @@ const BankStatementsList = () => {
             </>
           )}
         </div>
+          </>
+        ) : (
+          <BankLedgerReconciliationPanel selectedOrganizationId={selectedOrganizationId} />
+        )}
       </div>
 
       {/* Upload Modal */}
-      {showUploadModal && (
+      {activeTab === 'statements' && showUploadModal && (
         <>
           <div
             className="fixed inset-0 z-[9998] bg-black/50"

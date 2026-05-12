@@ -86,6 +86,17 @@ export interface Invoice {
   missing_do?: boolean;
   missing_custom_form?: boolean;
   is_bank_reconciled?: boolean;
+  // Finance record / Malaysia compliance summary fields
+  finance_record_id?: number | null;
+  compliance_check_id?: number | null;
+  compliance_status?: 'pass' | 'warning' | 'fail' | 'needs_review' | null;
+  compliance_readiness_score?: number | null;
+  compliance_findings_count?: number | null;
+  requires_wht_review?: boolean;
+  requires_k1_review?: boolean;
+  requires_sst_review?: boolean;
+  requires_einvoice_review?: boolean;
+  compliance_action_items?: string[];
   // Supplier statement links
   supplier_statement_links?: Array<{
     id: number;
@@ -2040,4 +2051,3 @@ export async function cancelGroup(groupId: string): Promise<CancelGroupResponse>
 
   return response.json();
 }
-

@@ -29,7 +29,18 @@ export interface Translations {
     supportingDocuments: string;
     settlementDocuments: string;
     bankStatements: string;
+    paymentGateways: string;
     supplierStatements: string;
+    sales: string;
+    purchases: string;
+    arInvoices: string;
+    creditNotes: string;
+    receipts: string;
+    apBills: string;
+    debitNotes: string;
+    paymentRequests: string;
+    paymentProofs: string;
+    importDeclarations: string;
     coaViewer: string;
     accounts: string;
     creditors: string;

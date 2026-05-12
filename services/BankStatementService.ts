@@ -925,6 +925,43 @@ export async function deleteBankStatement(
   }
 }
 
+export interface UpdateBankStatementRequest {
+  bank_name?: string;
+  account_number?: string;
+  account_holder_name?: string;
+  account_type?: string;
+  branch?: string;
+  statement_date_from?: string;
+  statement_date_to?: string;
+  opening_balance?: string | number;
+  closing_balance?: string | number;
+  currency?: string;
+}
+
+export interface UpdateBankStatementResponse {
+  success: boolean;
+  message: string;
+  data: BankStatement;
+}
+
+export async function updateBankStatement(
+  id: number,
+  payload: UpdateBankStatementRequest
+): Promise<UpdateBankStatementResponse> {
+  const response = await fetch(`${BASE_URL}/bank-statements/${id}`, {
+    method: 'PATCH',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to update bank statement');
+  }
+
+  return response.json();
+}
+
 /**
  * Get all unique account numbers for the current user
  * GET /bank-statements/accounts/list

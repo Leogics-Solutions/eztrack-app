@@ -250,6 +250,41 @@ export {
   getCreditorAccountInvoices,
 } from './CreditorAccountsService';
 
+// Finance Records / AP AR / Compliance Service
+export {
+  syncInvoicesIntoFinanceRecords,
+  listFinanceRecords,
+  getFinanceRecord,
+  getEntityTaxProfile,
+  updateEntityTaxProfile,
+  listCounterparties,
+  updateCounterparty,
+  runMalaysiaComplianceCheck,
+  getLatestComplianceCheck,
+} from './FinanceRecordsService';
+
+export type {
+  FinanceRecordDirection,
+  FinanceRecordType,
+  FinanceRecordStatus,
+  ComplianceStatus,
+  ComplianceApplicability,
+  ComplianceSeverity,
+  FinanceCounterparty,
+  FinanceRecord,
+  ComplianceFinding,
+  ComplianceCheck,
+  EntityTaxProfile,
+  ListFinanceRecordsParams,
+  PaginatedFinanceRecords,
+  ListFinanceRecordsResponse,
+  SyncInvoicesResponse,
+  FinanceRecordResponse,
+  CounterpartiesResponse,
+  EntityTaxProfileResponse,
+  ComplianceCheckResponse,
+} from './FinanceRecordsService';
+
 export type {
   CreditorAccount,
   ListCreditorAccountsParams,
@@ -327,6 +362,7 @@ export {
   getStatementLinks,
   deleteLink,
   deleteBankStatement,
+  updateBankStatement,
   getAccountNumbers,
   reprocessTransactions,
   exportBankStatementsCsv,
@@ -372,6 +408,8 @@ export type {
   GetStatementLinksResponse,
   DeleteLinkResponse,
   DeleteBankStatementResponse,
+  UpdateBankStatementRequest,
+  UpdateBankStatementResponse,
   GetAccountNumbersResponse,
   ReprocessTransactionsResponse,
   ExportBankStatementsCsvResponse,
@@ -379,6 +417,38 @@ export type {
   ExportBankStatementsExcelResponse,
   ExportBankStatementsExcelRequest,
 } from './BankStatementService';
+
+// Bank Ledger Reconciliation Service
+export {
+  uploadBankLedger,
+  listBankLedgerReconciliations,
+  getBankLedgerReconciliation,
+  deleteBankLedgerReconciliation,
+  autoReconcileBankLedger,
+  listBankLedgerBankReconciliationLinks,
+  deleteBankLedgerBankReconciliationLink,
+  deleteBankLedgerBankTransactionLinks,
+  deleteAllBankLedgerBankReconciliationLinks,
+} from './BankLedgerService';
+
+export type {
+  BankLedgerBatchStatus,
+  BankLedgerMatchStatus,
+  BankLedgerBatch,
+  BankLedgerEntry,
+  BankLedgerBankTransaction,
+  BankLedgerBankReconciliationLink,
+  ListBankLedgerReconciliationsParams,
+  ListBankLedgerReconciliationsResponse,
+  UploadBankLedgerResponse,
+  GetBankLedgerReconciliationResponse,
+  DeleteBankLedgerReconciliationResponse,
+  AutoReconcileBankLedgerRequest,
+  AutoReconcileBankLedgerResponse,
+  ListBankLedgerBankLinksResponse,
+  DeleteBankLedgerBankLinkResponse,
+  DeleteAllBankLedgerBankLinksResponse,
+} from './BankLedgerService';
 
 // Supplier Statement Service
 export {
@@ -420,6 +490,51 @@ export type {
   GetInvoiceSupplierStatementLinksResponse,
   DeleteSupplierStatementLinkResponse,
 } from './SupplierStatementService';
+
+// Payment Gateway Reconciliation Service
+export {
+  uploadPaymentGatewayReconciliation,
+  listPaymentGatewayReconciliations,
+  getPaymentGatewayReconciliation,
+  deletePaymentGatewayReconciliation,
+  listPaymentGatewayTransactions,
+  listPaymentGatewaySettlementRows,
+  createPaymentGatewayBankReconciliationLink,
+  listPaymentGatewayBankReconciliationLinks,
+  deletePaymentGatewayBankReconciliationLink,
+  autoReconcileBank,
+  deleteAllPaymentGatewayBankReconciliationLinks,
+} from './PaymentGatewayService';
+
+export type {
+  PaymentGatewayProvider,
+  PaymentGatewayBatchStatus,
+  PaymentGatewayMatchStatus,
+  PaymentGatewayMatchType,
+  PaymentGatewayBatch,
+  PaymentGatewayFile,
+  PaymentGatewayTransactionRow,
+  PaymentGatewaySettlementRow,
+  PaymentGatewayReconciliationLink,
+  ListPaymentGatewayBatchesParams,
+  ListPaymentGatewayBatchesResponse,
+  UploadPaymentGatewayReconciliationResponse,
+  GetPaymentGatewayReconciliationResponse,
+  DeletePaymentGatewayReconciliationResponse,
+  ListPaymentGatewayTransactionsParams,
+  ListPaymentGatewaySettlementRowsParams,
+  PaginatedRowsResponse,
+  PaymentGatewayBankReconciliationLink,
+  PaymentGatewayRowLink,
+  PaymentGatewayBankLink,
+  CreatePaymentGatewayBankReconciliationLinkRequest,
+  CreatePaymentGatewayBankReconciliationLinkResponse,
+  ListPaymentGatewayBankReconciliationLinksResponse,
+  DeletePaymentGatewayBankReconciliationLinkResponse,
+  AutoReconcileBankRequest,
+  AutoReconcileBankResponse,
+  DeleteAllBankReconciliationLinksResponse,
+} from './PaymentGatewayService';
 
 // Document Service
 export {

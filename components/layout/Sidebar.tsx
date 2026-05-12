@@ -12,6 +12,7 @@ import {
   FileText,
   Menu,
   CreditCard,
+  Landmark,
   Receipt,
   Briefcase,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
     { href: '/documents', label: t.nav.documents, icon: FileCheck },
     { href: '/supporting-documents', label: t.nav.supportingDocuments, icon: FileCheck },
     { href: '/bank-statements', label: t.nav.bankStatements, icon: CreditCard },
+    { href: '/payment-gateways', label: t.nav.paymentGateways, icon: Landmark },
     { href: '/supplier-statements', label: t.nav.supplierStatements, icon: Receipt },
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
@@ -37,6 +39,40 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
     { href: '/jobs', label: t.nav.jobs, icon: Briefcase },
     { href: '/settings', label: t.nav.settings, icon: Settings },
   ];
+
+  const renderNavItem = (item: { href: string; label: string; icon: typeof LayoutDashboard }) => {
+    const Icon = item.icon;
+    const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+
+    return (
+      <li key={item.href}>
+        <Link
+          href={item.href}
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          style={{
+            background: isActive ? 'var(--secondary)' : 'transparent',
+            color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)',
+          }}
+          onMouseEnter={(e) => {
+            if (!isActive) {
+              e.currentTarget.style.background = 'var(--muted)';
+              e.currentTarget.style.color = 'var(--foreground)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isActive) {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--muted-foreground)';
+            }
+          }}
+          title={isCollapsed ? item.label : undefined}
+        >
+          <Icon className="h-5 w-5 flex-shrink-0" />
+          {!isCollapsed && <span>{item.label}</span>}
+        </Link>
+      </li>
+    );
+  };
 
   return (
     <aside
@@ -91,39 +127,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
-
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                  style={{
-                    background: isActive ? 'var(--secondary)' : 'transparent',
-                    color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'var(--muted)';
-                      e.currentTarget.style.color = 'var(--foreground)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'var(--muted-foreground)';
-                    }
-                  }}
-                  title={isCollapsed ? item.label : undefined}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.label}</span>}
-                </Link>
-              </li>
-            );
-          })}
+          {navItems.map(renderNavItem)}
         </ul>
       </nav>
 

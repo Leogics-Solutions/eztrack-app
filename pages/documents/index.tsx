@@ -60,6 +60,16 @@ interface Invoice extends ApiInvoice {
   missing_do?: boolean;
   missing_custom_form?: boolean;
   is_bank_reconciled?: boolean;
+  finance_record_id?: number | null;
+  compliance_check_id?: number | null;
+  compliance_status?: 'pass' | 'warning' | 'fail' | 'needs_review' | null;
+  compliance_readiness_score?: number | null;
+  compliance_findings_count?: number | null;
+  requires_wht_review?: boolean;
+  requires_k1_review?: boolean;
+  requires_sst_review?: boolean;
+  requires_einvoice_review?: boolean;
+  compliance_action_items?: string[];
 }
 
 interface VerifyStatus {
@@ -756,6 +766,35 @@ const DocumentsListing = () => {
       maximumFractionDigits: 2,
     });
     return currency ? `${currency} ${formatted}` : formatted;
+  };
+
+  const getComplianceBadgeClass = (status?: Invoice['compliance_status']) => {
+    switch (status) {
+      case 'pass':
+        return 'bg-[var(--success)] text-white';
+      case 'warning':
+        return 'bg-[var(--warning)] text-[var(--warning-foreground)]';
+      case 'fail':
+        return 'bg-[var(--error)] text-white';
+      case 'needs_review':
+        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400';
+      default:
+        return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+    }
+  };
+
+  const formatComplianceStatus = (status?: Invoice['compliance_status']) => {
+    if (!status) return 'Not checked';
+    return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const getComplianceReviewChips = (invoice: Invoice) => {
+    const chips: string[] = [];
+    if (invoice.requires_wht_review) chips.push('WHT');
+    if (invoice.requires_k1_review) chips.push('K1');
+    if (invoice.requires_sst_review) chips.push('SST');
+    if (invoice.requires_einvoice_review) chips.push('e-Invoice');
+    return chips;
   };
 
   const getConfidenceColor = (confidence?: string | null) => {
@@ -1652,6 +1691,7 @@ const DocumentsListing = () => {
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Compliance</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
@@ -1856,6 +1896,51 @@ const DocumentsListing = () => {
                     ) : (
                       <span className="inline-block px-2 py-1 text-xs rounded-md bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">-</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex min-w-[150px] flex-col gap-1">
+                      <span
+                        className={`inline-flex w-fit items-center px-2 py-1 text-xs rounded-md font-semibold ${getComplianceBadgeClass(invoice.compliance_status)}`}
+                        title={
+                          invoice.compliance_check_id
+                            ? `Compliance check #${invoice.compliance_check_id}`
+                            : invoice.finance_record_id
+                            ? `Finance record #${invoice.finance_record_id}`
+                            : 'No compliance check found'
+                        }
+                      >
+                        {formatComplianceStatus(invoice.compliance_status)}
+                      </span>
+                      {invoice.compliance_readiness_score !== null && invoice.compliance_readiness_score !== undefined && (
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          Score {Math.round(invoice.compliance_readiness_score)}%
+                          {invoice.compliance_findings_count !== null && invoice.compliance_findings_count !== undefined
+                            ? ` / ${invoice.compliance_findings_count} finding${invoice.compliance_findings_count === 1 ? '' : 's'}`
+                            : ''}
+                        </span>
+                      )}
+                      {getComplianceReviewChips(invoice).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {getComplianceReviewChips(invoice).map((chip) => (
+                            <span
+                              key={chip}
+                              className="inline-flex items-center rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--foreground)]"
+                              title={`${chip} review required`}
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {invoice.compliance_action_items && invoice.compliance_action_items.length > 0 && (
+                        <span
+                          className="text-xs text-[var(--warning-dark)]"
+                          title={invoice.compliance_action_items.join('\n')}
+                        >
+                          {invoice.compliance_action_items.length} action item{invoice.compliance_action_items.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1">
