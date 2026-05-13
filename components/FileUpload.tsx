@@ -12,7 +12,8 @@ interface FileUploadProps {
   label?: string;
   helpText?: string;
   requiredText?: string;
-  autoUpload?: boolean; // If false, files are only selected, not uploaded immediately
+  /** Kept for API compatibility; parent is always notified on selection (see `onFilesSelect` / `onFileSelect`). */
+  autoUpload?: boolean;
 }
 
 export function FileUpload({
@@ -24,7 +25,7 @@ export function FileUpload({
   label,
   helpText,
   requiredText,
-  autoUpload = true,
+  autoUpload: _autoUpload = true,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -54,24 +55,12 @@ export function FileUpload({
     
     setSelectedFiles(updatedFiles);
 
-    // Only call callbacks if autoUpload is true (default behavior)
-    if (autoUpload) {
-      if (multiple && onFilesSelect) {
-        onFilesSelect(updatedFiles);
-      } else if (!multiple && onFileSelect) {
-        onFileSelect(updatedFiles[0] || null);
-      } else if (multiple && !onFilesSelect && onFileSelect) {
-        // Fallback: if multiple is true but only onFileSelect is provided, use first file
-        onFileSelect(updatedFiles[0] || null);
-      }
-    } else {
-      // If autoUpload is false, just update selected files state
-      // Callbacks will be called manually when upload button is clicked
-      if (multiple && onFilesSelect) {
-        onFilesSelect(updatedFiles);
-      } else if (!multiple && onFileSelect) {
-        onFileSelect(updatedFiles[0] || null);
-      }
+    // Keep parent state in sync whenever files change. (autoUpload is reserved for future
+    // "upload immediately" behavior; selection always flows to the parent callbacks.)
+    if (onFilesSelect) {
+      onFilesSelect(updatedFiles);
+    } else if (onFileSelect) {
+      onFileSelect(updatedFiles[0] ?? null);
     }
   };
 
@@ -122,11 +111,11 @@ export function FileUpload({
   const removeFile = (index: number) => {
     const newFiles = selectedFiles.filter((_, i) => i !== index);
     setSelectedFiles(newFiles);
-    
-    if (multiple && onFilesSelect) {
+
+    if (onFilesSelect) {
       onFilesSelect(newFiles);
-    } else if (!multiple && onFileSelect) {
-      onFileSelect(newFiles[0] || null);
+    } else if (onFileSelect) {
+      onFileSelect(newFiles[0] ?? null);
     }
   };
 
