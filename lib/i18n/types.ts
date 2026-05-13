@@ -250,6 +250,8 @@ export interface Translations {
       currency: string;
       allCurrencies: string;
       status: string;
+      directionLabel: string;
+      directionAll: string;
       amountRange: string;
       min: string;
       max: string;

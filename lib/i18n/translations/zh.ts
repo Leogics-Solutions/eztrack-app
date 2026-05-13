@@ -82,6 +82,8 @@ export const zh: Translations = {
       currency: '货币',
       allCurrencies: '所有货币',
       status: '状态',
+      directionLabel: '账单类型',
+      directionAll: '全部',
       amountRange: '金额范围',
       min: '最小',
       max: '最大',

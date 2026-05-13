@@ -24,6 +24,7 @@ import {
   deleteLink,
   type Invoice as ApiInvoice,
   type InvoiceStatus,
+  type DocumentDirection,
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
@@ -87,6 +88,8 @@ interface Pagination {
   total: number;
   iter_pages: () => (number | null)[];
 }
+
+type DocumentsDirectionTab = 'all' | 'sales' | 'purchase';
 
 const DocumentsListing = () => {
   const router = useRouter();
@@ -156,6 +159,7 @@ const DocumentsListing = () => {
     vendor_id: '',
     currency: '',
     status: [] as string[],
+    direction_tab: 'all' as DocumentsDirectionTab,
     min_amount: '',
     max_amount: '',
     missing_do: false,
@@ -264,6 +268,10 @@ const DocumentsListing = () => {
     setError(null);
 
     try {
+      let direction: DocumentDirection[] | undefined;
+      if (filters.direction_tab === 'sales') direction = ['AR'];
+      else if (filters.direction_tab === 'purchase') direction = ['AP'];
+
       const response = await listInvoices({
         page: filters.page,
         page_size: filters.per_page,
@@ -272,6 +280,7 @@ const DocumentsListing = () => {
           filters.status && filters.status.length > 0
             ? (filters.status.map((s) => s.toUpperCase()) as InvoiceStatus[])
             : undefined,
+        direction,
         vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
         currency: filters.currency || undefined,
         min_amount: filters.min_amount ? Number(filters.min_amount) : undefined,
@@ -410,6 +419,7 @@ const DocumentsListing = () => {
       vendor_id: '',
       currency: '',
       status: [],
+      direction_tab: 'all',
       min_amount: '',
       max_amount: '',
       missing_do: false,
@@ -793,7 +803,7 @@ const DocumentsListing = () => {
     if (invoice.requires_wht_review) chips.push('WHT');
     if (invoice.requires_k1_review) chips.push('K1');
     if (invoice.requires_sst_review) chips.push('SST');
-    if (invoice.requires_einvoice_review) chips.push('e-Invoice');
+    // e-Invoice chip hidden for now (restore when e-invoice column returns)
     return chips;
   };
 
@@ -1503,6 +1513,35 @@ const DocumentsListing = () => {
         )}
       </div>
 
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-sm font-medium text-[var(--foreground)]">{t.documents.filters.directionLabel}</span>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { tab: 'all' as const, label: t.documents.filters.directionAll },
+              { tab: 'sales' as const, label: t.nav.sales },
+              { tab: 'purchase' as const, label: t.nav.purchases },
+            ] as const
+          ).map(({ tab, label }) => {
+            const isActive = filters.direction_tab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => handleFilterChange('direction_tab', tab)}
+                className="rounded px-3 py-2 text-sm font-medium transition-colors"
+                style={{
+                  background: isActive ? 'var(--primary)' : 'var(--muted)',
+                  color: isActive ? 'var(--primary-foreground)' : 'var(--foreground)',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main Table Card */}
       <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
         {/* Header */}
@@ -1691,7 +1730,6 @@ const DocumentsListing = () => {
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Compliance</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
@@ -1898,52 +1936,51 @@ const DocumentsListing = () => {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex min-w-[150px] flex-col gap-1">
-                      <span
-                        className={`inline-flex w-fit items-center px-2 py-1 text-xs rounded-md font-semibold ${getComplianceBadgeClass(invoice.compliance_status)}`}
-                        title={
-                          invoice.compliance_check_id
-                            ? `Compliance check #${invoice.compliance_check_id}`
-                            : invoice.finance_record_id
-                            ? `Finance record #${invoice.finance_record_id}`
-                            : 'No compliance check found'
-                        }
-                      >
-                        {formatComplianceStatus(invoice.compliance_status)}
-                      </span>
-                      {invoice.compliance_readiness_score !== null && invoice.compliance_readiness_score !== undefined && (
-                        <span className="text-xs text-[var(--muted-foreground)]">
-                          Score {Math.round(invoice.compliance_readiness_score)}%
-                          {invoice.compliance_findings_count !== null && invoice.compliance_findings_count !== undefined
-                            ? ` / ${invoice.compliance_findings_count} finding${invoice.compliance_findings_count === 1 ? '' : 's'}`
-                            : ''}
-                        </span>
-                      )}
-                      {getComplianceReviewChips(invoice).length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {getComplianceReviewChips(invoice).map((chip) => (
-                            <span
-                              key={chip}
-                              className="inline-flex items-center rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--foreground)]"
-                              title={`${chip} review required`}
-                            >
-                              {chip}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {invoice.compliance_action_items && invoice.compliance_action_items.length > 0 && (
+                    <div className="flex min-w-[200px] flex-col gap-2">
+                      <div className="flex min-w-[150px] flex-col gap-1">
                         <span
-                          className="text-xs text-[var(--warning-dark)]"
-                          title={invoice.compliance_action_items.join('\n')}
+                          className={`inline-flex w-fit items-center px-2 py-1 text-xs rounded-md font-semibold ${getComplianceBadgeClass(invoice.compliance_status)}`}
+                          title={
+                            invoice.compliance_check_id
+                              ? `Compliance check #${invoice.compliance_check_id}`
+                              : invoice.finance_record_id
+                              ? `Finance record #${invoice.finance_record_id}`
+                              : 'No compliance check found'
+                          }
                         >
-                          {invoice.compliance_action_items.length} action item{invoice.compliance_action_items.length === 1 ? '' : 's'}
+                          {formatComplianceStatus(invoice.compliance_status)}
                         </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
+                        {invoice.compliance_readiness_score !== null && invoice.compliance_readiness_score !== undefined && (
+                          <span className="text-xs text-[var(--muted-foreground)]">
+                            Score {Math.round(invoice.compliance_readiness_score)}%
+                            {invoice.compliance_findings_count !== null && invoice.compliance_findings_count !== undefined
+                              ? ` / ${invoice.compliance_findings_count} finding${invoice.compliance_findings_count === 1 ? '' : 's'}`
+                              : ''}
+                          </span>
+                        )}
+                        {getComplianceReviewChips(invoice).length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {getComplianceReviewChips(invoice).map((chip) => (
+                              <span
+                                key={chip}
+                                className="inline-flex items-center rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--foreground)]"
+                                title={`${chip} review required`}
+                              >
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {invoice.compliance_action_items && invoice.compliance_action_items.length > 0 && (
+                          <span
+                            className="text-xs text-[var(--warning-dark)]"
+                            title={invoice.compliance_action_items.join('\n')}
+                          >
+                            {invoice.compliance_action_items.length} action item{invoice.compliance_action_items.length === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
                       {(() => {
                         // Check for status check indicators first
                         const hasStatusChecks = invoice.missing_do || invoice.missing_custom_form || invoice.is_bank_reconciled === false;
@@ -2052,6 +2089,7 @@ const DocumentsListing = () => {
                           </span>
                         );
                       })()}
+                      </div>
                     </div>
                   </td>
                   {!needsHorizontalScroll && (

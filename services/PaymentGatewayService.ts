@@ -270,6 +270,99 @@ export interface AutoReconcileBankResponse {
   };
 }
 
+export interface PaymentGatewayLedgerCrossCheckResult {
+  transaction_id: number;
+  provider_transaction_id: string;
+  reference_number?: string | null;
+  settlement_id?: string | null;
+  transaction_date?: string | null;
+  customer_name?: string | null;
+  description?: string | null;
+  amount: number | string;
+  status: 'matched' | 'warning' | 'missing' | string;
+  match_method?: string | null;
+  matched_identifier?: string | null;
+  ledger_entry_id?: number | null;
+  ledger_entry_date?: string | null;
+  ledger_reference_no?: string | null;
+  ledger_contact?: string | null;
+  ledger_description?: string | null;
+  ledger_amount?: number | string | null;
+  notes?: string | null;
+}
+
+export interface PaymentGatewayLedgerCrossCheckResponse {
+  payment_gateway_batch_id: number;
+  bank_ledger_batch_id: number;
+  provider: PaymentGatewayProvider;
+  transaction_count: number;
+  ledger_entry_count: number;
+  matched_count: number;
+  warning_count: number;
+  missing_count: number;
+  results: PaymentGatewayLedgerCrossCheckResult[];
+}
+
+export interface LedgerCrossCheckParams {
+  bank_ledger_batch_id: number;
+  bank_statement_ids?: number[];
+  date_tolerance_days?: number;
+  amount_tolerance_pct?: number;
+}
+
+export interface PaymentGatewayEndToEndReconciliationRunRequest {
+  bank_ledger_batch_id: number;
+  bank_statement_ids?: number[];
+  date_tolerance_days?: number;
+  amount_tolerance_pct?: number;
+}
+
+export interface PaymentGatewayEndToEndReconciliationRow {
+  transaction_id: number;
+  provider_transaction_id: string;
+  transaction_date?: string | null;
+  transaction_amount: number | string;
+  customer_name?: string | null;
+  transaction_description?: string | null;
+  settlement_id?: string | null;
+  transaction_settlement_status: string;
+  settlement_row_id?: number | null;
+  settlement_date?: string | null;
+  settlement_gross_amount?: number | string | null;
+  settlement_net_amount?: number | string | null;
+  bank_status: string;
+  bank_transaction_id?: number | null;
+  bank_transaction_date?: string | null;
+  bank_amount?: number | string | null;
+  bank_description?: string | null;
+  ledger_status: string;
+  ledger_entry_id?: number | null;
+  ledger_entry_date?: string | null;
+  ledger_reference_no?: string | null;
+  ledger_contact?: string | null;
+  ledger_description?: string | null;
+  ledger_amount?: number | string | null;
+  ledger_match_method?: string | null;
+  issue_flags: string[];
+  notes?: string | null;
+}
+
+export interface PaymentGatewayEndToEndReconciliationResponse {
+  run_id?: number | null;
+  payment_gateway_batch_id: number;
+  bank_ledger_batch_id: number;
+  provider: PaymentGatewayProvider;
+  bank_statement_ids?: number[] | null;
+  created_at?: string | null;
+  transaction_count: number;
+  complete_count: number;
+  missing_payout_count: number;
+  missing_bank_count: number;
+  missing_ledger_count: number;
+  warning_count: number;
+  results: PaymentGatewayEndToEndReconciliationRow[];
+}
+
 export interface DeleteAllBankReconciliationLinksResponse {
   deleted_count: number;
 }
@@ -278,7 +371,11 @@ function appendParams<T extends object>(params?: T) {
   const queryParams = new URLSearchParams();
   Object.entries(params || {}).forEach(([key, value]) => {
     if (value !== undefined && value !== '') {
-      queryParams.append(key, String(value));
+      if (Array.isArray(value)) {
+        value.forEach((item) => queryParams.append(key, String(item)));
+      } else {
+        queryParams.append(key, String(value));
+      }
     }
   });
   return queryParams.toString();
@@ -536,4 +633,74 @@ export async function autoReconcileBank(
   }
 
   return response.json();
+}
+
+export async function crossCheckPaymentGatewayLedger(
+  batchId: number,
+  params: LedgerCrossCheckParams
+): Promise<PaymentGatewayLedgerCrossCheckResponse> {
+  const query = appendParams(params);
+  const response = await fetch(
+    `${BASE_URL}/payment-gateways/reconciliations/${batchId}/ledger-cross-check?${query}`,
+    { method: 'GET', headers: getScopedHeaders() }
+  );
+
+  if (!response.ok) {
+    return parseJsonError(response, 'Failed to cross-check gateway transactions against ledger');
+  }
+
+  return response.json();
+}
+
+export async function getPaymentGatewayEndToEndReconciliation(
+  batchId: number,
+  params: LedgerCrossCheckParams
+): Promise<PaymentGatewayEndToEndReconciliationResponse> {
+  const query = appendParams(params);
+  const response = await fetch(
+    `${BASE_URL}/payment-gateways/reconciliations/${batchId}/end-to-end-reconciliation?${query}`,
+    { method: 'GET', headers: getScopedHeaders() }
+  );
+
+  if (!response.ok) {
+    return parseJsonError(response, 'Failed to load end-to-end payment gateway reconciliation');
+  }
+
+  return response.json();
+}
+
+export async function runPaymentGatewayEndToEndReconciliation(
+  batchId: number,
+  payload: PaymentGatewayEndToEndReconciliationRunRequest
+): Promise<PaymentGatewayEndToEndReconciliationResponse> {
+  const response = await fetch(
+    `${BASE_URL}/payment-gateways/reconciliations/${batchId}/end-to-end-reconciliation/run`,
+    {
+      method: 'POST',
+      headers: getScopedHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    return parseJsonError(response, 'Failed to run end-to-end payment gateway reconciliation');
+  }
+
+  return response.json();
+}
+
+export async function getLatestPaymentGatewayEndToEndReconciliation(
+  batchId: number
+): Promise<PaymentGatewayEndToEndReconciliationResponse | null> {
+  const response = await fetch(
+    `${BASE_URL}/payment-gateways/reconciliations/${batchId}/end-to-end-reconciliation/latest`,
+    { method: 'GET', headers: getScopedHeaders() }
+  );
+
+  if (!response.ok) {
+    return parseJsonError(response, 'Failed to load latest end-to-end payment gateway reconciliation');
+  }
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }

@@ -503,6 +503,10 @@ export {
   listPaymentGatewayBankReconciliationLinks,
   deletePaymentGatewayBankReconciliationLink,
   autoReconcileBank,
+  crossCheckPaymentGatewayLedger,
+  getPaymentGatewayEndToEndReconciliation,
+  runPaymentGatewayEndToEndReconciliation,
+  getLatestPaymentGatewayEndToEndReconciliation,
   deleteAllPaymentGatewayBankReconciliationLinks,
 } from './PaymentGatewayService';
 
@@ -533,6 +537,12 @@ export type {
   DeletePaymentGatewayBankReconciliationLinkResponse,
   AutoReconcileBankRequest,
   AutoReconcileBankResponse,
+  PaymentGatewayLedgerCrossCheckResult,
+  PaymentGatewayLedgerCrossCheckResponse,
+  LedgerCrossCheckParams,
+  PaymentGatewayEndToEndReconciliationRunRequest,
+  PaymentGatewayEndToEndReconciliationRow,
+  PaymentGatewayEndToEndReconciliationResponse,
   DeleteAllBankReconciliationLinksResponse,
 } from './PaymentGatewayService';
 

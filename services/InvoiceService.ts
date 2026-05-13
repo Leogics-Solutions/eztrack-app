@@ -177,6 +177,8 @@ export interface ListInvoicesParams {
   page_size?: number;
   search?: string;
   status?: InvoiceStatus[];
+  /** Repeatable on the wire as `direction=AP&direction=AR` (SQL IN). Omit for no direction filter. */
+  direction?: DocumentDirection[];
   vendor_id?: number;
   vendor_name?: string;
   currency?: string;
@@ -913,6 +915,9 @@ export async function listInvoices(
   }
   if (params?.status && params.status.length > 0) {
     params.status.forEach((s) => queryParams.append('status', s));
+  }
+  if (params?.direction && params.direction.length > 0) {
+    params.direction.forEach((d) => queryParams.append('direction', d));
   }
   if (params?.vendor_id !== undefined) {
     queryParams.append('vendor_id', params.vendor_id.toString());

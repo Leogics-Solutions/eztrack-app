@@ -11,7 +11,7 @@ import {
   type PaymentGatewayBatch,
   type PaymentGatewayProvider,
 } from "@/services";
-import { Eye, Landmark, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Eye, Landmark, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 
@@ -84,7 +84,7 @@ export default function PaymentGatewayReconciliations() {
       const response = await listPaymentGatewayReconciliations({
         page: currentPage,
         page_size: pageSize,
-        provider: providerFilter === 'all' ? undefined : providerFilter,
+        provider: providerFilter,
       });
       setBatches(response.data || []);
       const totalItems = response.meta?.total_items || response.data?.length || 0;
@@ -158,7 +158,7 @@ export default function PaymentGatewayReconciliations() {
               Platform & Merchant Reconciliation
             </h1>
             <p style={{ color: 'var(--muted-foreground)' }}>
-              Upload Payex, Foodpanda, or Grab transaction and settlement files, then reconcile payouts to bank statement transactions.
+              Upload platform or merchant transaction and settlement files, then reconcile payouts to bank statement transactions.
             </p>
           </div>
           <button
@@ -344,26 +344,27 @@ export default function PaymentGatewayReconciliations() {
 
               <div className="mb-4">
                 <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Provider</label>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  {providerOptions.map((option) => {
-                    const isSelected = selectedUploadProvider === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setSelectedUploadProvider(option.value)}
-                        className="rounded-lg border p-3 text-left transition-colors"
-                        style={{
-                          background: isSelected ? 'var(--secondary)' : 'var(--background)',
-                          borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
-                          color: isSelected ? 'var(--secondary-foreground)' : 'var(--foreground)',
-                        }}
-                      >
-                        <div className="font-medium">{option.label}</div>
-                        <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>{option.description}</div>
-                      </button>
-                    );
-                  })}
+                <div className="relative">
+                  <select
+                    value={selectedUploadProvider}
+                    onChange={(event) => setSelectedUploadProvider(event.target.value as PaymentGatewayProvider)}
+                    className="w-full appearance-none rounded-lg border px-3 py-2 pr-10 text-sm outline-none"
+                    style={{
+                      background: 'var(--background)',
+                      borderColor: 'var(--border)',
+                      color: 'var(--foreground)',
+                    }}
+                  >
+                    {providerOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                    style={{ color: 'var(--muted-foreground)' }}
+                  />
                 </div>
               </div>
 

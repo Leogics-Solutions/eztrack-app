@@ -82,6 +82,8 @@ export const en: Translations = {
       currency: 'Currency',
       allCurrencies: 'All Currencies',
       status: 'Status',
+      directionLabel: 'Billing type',
+      directionAll: 'All',
       amountRange: 'Amount Range',
       min: 'Min',
       max: 'Max',

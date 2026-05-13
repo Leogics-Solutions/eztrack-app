@@ -1,25 +1,33 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { FileUpload } from "@/components/FileUpload";
 import { useOrganization } from "@/lib/OrganizationContext";
 import { useToast } from "@/lib/toast";
 import {
   autoReconcileBank,
+  batchUploadBankStatements,
   deleteAllPaymentGatewayBankReconciliationLinks,
+  getLatestPaymentGatewayEndToEndReconciliation,
   getPaymentGatewayReconciliation,
+  listBankLedgerReconciliations,
   listBankStatements,
   listPaymentGatewayBankReconciliationLinks,
   listPaymentGatewaySettlementRows,
   listPaymentGatewayTransactions,
+  runPaymentGatewayEndToEndReconciliation,
+  uploadBankLedger,
   type AutoReconcileBankResponse,
+  type BankLedgerBatch,
   type BankStatement,
   type PaymentGatewayBankReconciliationLink,
   type PaymentGatewayBatch,
+  type PaymentGatewayEndToEndReconciliationResponse,
   type PaymentGatewayFile,
   type PaymentGatewaySettlementRow,
   type PaymentGatewayTransactionRow,
 } from "@/services";
-import { ArrowLeft, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 
@@ -53,6 +61,19 @@ interface SettlementGroup {
 
 type MatchStatusFilter = 'matched' | 'warning' | 'unmatched';
 type GatewayStatusFilter = 'Sales' | 'Failed' | 'all';
+type EndToEndColumnKey =
+  | 'issues'
+  | 'gatewayTransaction'
+  | 'gatewayDate'
+  | 'gatewayAmount'
+  | 'customer'
+  | 'payout'
+  | 'payoutAmount'
+  | 'bank'
+  | 'bankAmount'
+  | 'ledger'
+  | 'ledgerAmount'
+  | 'notes';
 type MasterColumnKey =
   | 'matchStatus'
   | 'bankStatus'
@@ -227,9 +248,9 @@ function bankTransactionDescription(link?: PaymentGatewayBankLinkLike) {
 
 function StatusBadge({ status }: { status?: string }) {
   const color =
-    status === 'ready' || status === 'matched' ? 'var(--success)' :
+    status === 'ready' || status === 'matched' || status === 'complete' ? 'var(--success)' :
     status === 'warning' ? 'var(--warning)' :
-    status === 'failed' || status === 'unmatched' ? 'var(--error)' :
+    status === 'failed' || status === 'unmatched' || status === 'missing' ? 'var(--error)' :
     'var(--muted-foreground)';
   return (
     <span className="inline-flex rounded px-2 py-1 text-xs font-medium capitalize" style={{ background: color, color: 'white' }}>
@@ -247,6 +268,12 @@ function SummaryItem({ label, value }: { label: string; value: string | number }
   );
 }
 
+function ledgerBatchLabel(batch: BankLedgerBatch) {
+  const name = batch.filename || batch.file_name || `Ledger batch #${batch.id}`;
+  const account = batch.account_number ? ` | ${batch.account_number}` : '';
+  return `#${batch.id} ${name}${account}`;
+}
+
 export default function PaymentGatewayReconciliationDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -258,12 +285,23 @@ export default function PaymentGatewayReconciliationDetail() {
   const [transactions, setTransactions] = useState<PaymentGatewayTransactionRow[]>([]);
   const [settlementRows, setSettlementRows] = useState<PaymentGatewaySettlementRow[]>([]);
   const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
+  const [bankLedgerBatches, setBankLedgerBatches] = useState<BankLedgerBatch[]>([]);
+  const [selectedBankLedgerBatchId, setSelectedBankLedgerBatchId] = useState<number | null>(null);
+  const [selectedEndToEndBankStatementId, setSelectedEndToEndBankStatementId] = useState<'all' | number>('all');
   const [selectedBankStatementIds, setSelectedBankStatementIds] = useState<Set<number>>(new Set());
   const [bankLinks, setBankLinks] = useState<PaymentGatewayBankReconciliationLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRowsLoading, setIsRowsLoading] = useState(false);
   const [isReconcilingBank, setIsReconcilingBank] = useState(false);
+  const [isCrossCheckingLedger, setIsCrossCheckingLedger] = useState(false);
+  const [isLoadingLatestEndToEnd, setIsLoadingLatestEndToEnd] = useState(false);
   const [isClearingBankLinks, setIsClearingBankLinks] = useState(false);
+  const [showBankStatementUploadModal, setShowBankStatementUploadModal] = useState(false);
+  const [showBankLedgerUploadModal, setShowBankLedgerUploadModal] = useState(false);
+  const [selectedBankStatementFiles, setSelectedBankStatementFiles] = useState<File[]>([]);
+  const [selectedBankLedgerFiles, setSelectedBankLedgerFiles] = useState<File[]>([]);
+  const [isUploadingBankStatements, setIsUploadingBankStatements] = useState(false);
+  const [isUploadingBankLedger, setIsUploadingBankLedger] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<GatewayStatusFilter>('all');
   const [selectedSettlementId, setSelectedSettlementId] = useState('all');
@@ -272,8 +310,31 @@ export default function PaymentGatewayReconciliationDetail() {
   const [search, setSearch] = useState('');
   const [dateToleranceDays, setDateToleranceDays] = useState(5);
   const [amountTolerancePct, setAmountTolerancePct] = useState(5);
+  const [ledgerDateToleranceDays, setLedgerDateToleranceDays] = useState(3);
+  const [ledgerAmountTolerancePct, setLedgerAmountTolerancePct] = useState(0);
   const [useLlm, setUseLlm] = useState(true);
   const [autoBankResult, setAutoBankResult] = useState<AutoReconcileBankResponse['data'] | null>(null);
+  const [endToEndResult, setEndToEndResult] = useState<PaymentGatewayEndToEndReconciliationResponse | null>(null);
+  const [endToEndIssueFilter, setEndToEndIssueFilter] = useState('all');
+  const [endToEndPayoutStatusFilter, setEndToEndPayoutStatusFilter] = useState('all');
+  const [endToEndBankStatusFilter, setEndToEndBankStatusFilter] = useState('all');
+  const [endToEndLedgerStatusFilter, setEndToEndLedgerStatusFilter] = useState('all');
+  const [endToEndSearch, setEndToEndSearch] = useState('');
+  const [selectedEndToEndSettlementId, setSelectedEndToEndSettlementId] = useState('all');
+  const [endToEndVisibleColumns, setEndToEndVisibleColumns] = useState<Record<EndToEndColumnKey, boolean>>({
+    issues: true,
+    gatewayTransaction: true,
+    gatewayDate: true,
+    gatewayAmount: true,
+    customer: true,
+    payout: true,
+    payoutAmount: true,
+    bank: true,
+    bankAmount: true,
+    ledger: true,
+    ledgerAmount: true,
+    notes: true,
+  });
   const [visibleColumns, setVisibleColumns] = useState<Record<MasterColumnKey, boolean>>({
     matchStatus: true,
     bankStatus: true,
@@ -295,6 +356,8 @@ export default function PaymentGatewayReconciliationDetail() {
     if (batchId) {
       loadPageData();
       loadBankStatements();
+      loadBankLedgerBatches();
+      loadLatestEndToEndReconciliation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId, selectedOrganizationId]);
@@ -464,6 +527,17 @@ export default function PaymentGatewayReconciliationDetail() {
     }
   }
 
+  async function loadBankLedgerBatches() {
+    try {
+      const response = await listBankLedgerReconciliations({ page: 1, page_size: 100 });
+      const batches = response.data || [];
+      setBankLedgerBatches(batches);
+      setSelectedBankLedgerBatchId((prev) => prev || batches[0]?.id || null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load bank ledger batches', { type: 'error' });
+    }
+  }
+
   async function loadBankLinks() {
     if (!batchId) return;
     try {
@@ -471,6 +545,112 @@ export default function PaymentGatewayReconciliationDetail() {
       setBankLinks(response.data || []);
     } catch {
       setBankLinks([]);
+    }
+  }
+
+  async function loadLatestEndToEndReconciliation() {
+    if (!batchId) return;
+
+    setIsLoadingLatestEndToEnd(true);
+    try {
+      const response = await getLatestPaymentGatewayEndToEndReconciliation(batchId);
+      setEndToEndResult(response);
+      if (response) {
+        setSelectedBankLedgerBatchId(response.bank_ledger_batch_id);
+        if (response.bank_statement_ids) {
+          setSelectedEndToEndBankStatementId(response.bank_statement_ids[0] ?? 'all');
+        } else {
+          setSelectedEndToEndBankStatementId('all');
+        }
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load latest end-to-end reconciliation report', { type: 'error' });
+    } finally {
+      setIsLoadingLatestEndToEnd(false);
+    }
+  }
+
+  async function handleEndToEndReconciliation() {
+    if (!batchId) return;
+    if (!selectedBankLedgerBatchId) {
+      showToast('Select a bank ledger batch to cross-check against', { type: 'error' });
+      return;
+    }
+    if (selectedEndToEndBankStatementId !== 'all' && !selectedEndToEndBankStatementId) {
+      showToast('Select at least one bank statement for the end-to-end report', { type: 'error' });
+      return;
+    }
+
+    setIsCrossCheckingLedger(true);
+    setEndToEndResult(null);
+    try {
+      const response = await runPaymentGatewayEndToEndReconciliation(batchId, {
+        bank_ledger_batch_id: selectedBankLedgerBatchId,
+        bank_statement_ids: selectedEndToEndBankStatementId === 'all' ? undefined : [selectedEndToEndBankStatementId],
+        date_tolerance_days: ledgerDateToleranceDays,
+        amount_tolerance_pct: ledgerAmountTolerancePct,
+      });
+      setEndToEndResult(response);
+      showToast('End-to-end reconciliation report saved', { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to load end-to-end reconciliation report', { type: 'error' });
+    } finally {
+      setIsCrossCheckingLedger(false);
+    }
+  }
+
+  function closeBankStatementUploadModal() {
+    setShowBankStatementUploadModal(false);
+    setSelectedBankStatementFiles([]);
+  }
+
+  function closeBankLedgerUploadModal() {
+    setShowBankLedgerUploadModal(false);
+    setSelectedBankLedgerFiles([]);
+  }
+
+  async function handleUploadBankStatements() {
+    if (selectedBankStatementFiles.length === 0) {
+      showToast('Please select at least one bank statement file', { type: 'error' });
+      return;
+    }
+
+    setIsUploadingBankStatements(true);
+    try {
+      const response = await batchUploadBankStatements(selectedBankStatementFiles);
+      showToast(response.message || `Upload accepted for ${response.data.total_files} bank statement file(s)`, { type: 'success' });
+      closeBankStatementUploadModal();
+      await loadBankStatements();
+      setSelectedEndToEndBankStatementId('all');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to upload bank statements', { type: 'error' });
+    } finally {
+      setIsUploadingBankStatements(false);
+    }
+  }
+
+  async function handleUploadBankLedger() {
+    const file = selectedBankLedgerFiles[0];
+    if (!file) {
+      showToast('Please select a bank ledger export', { type: 'error' });
+      return;
+    }
+
+    setIsUploadingBankLedger(true);
+    try {
+      const response = await uploadBankLedger(file);
+      const uploadedBatchId = response.data.batch?.id || response.data.batch_id;
+      showToast(response.message || 'Bank ledger uploaded successfully', { type: 'success' });
+      closeBankLedgerUploadModal();
+      await loadBankLedgerBatches();
+      if (uploadedBatchId) {
+        setSelectedBankLedgerBatchId(uploadedBatchId);
+        setEndToEndResult(null);
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to upload bank ledger', { type: 'error' });
+    } finally {
+      setIsUploadingBankLedger(false);
     }
   }
 
@@ -531,6 +711,8 @@ export default function PaymentGatewayReconciliationDetail() {
     await loadPageData();
     await loadRows();
     await loadBankLinks();
+    await loadBankLedgerBatches();
+    await loadLatestEndToEndReconciliation();
   }
 
   if (isLoading) {
@@ -567,6 +749,62 @@ export default function PaymentGatewayReconciliationDetail() {
     filteredMasterRows[0]?.settlement ||
     settlementScopedRows[0]?.transaction ||
     settlementScopedRows[0]?.settlement
+  );
+  const selectedLedgerBatch = bankLedgerBatches.find((ledgerBatch) => ledgerBatch.id === selectedBankLedgerBatchId);
+  const endToEndRows = [...(endToEndResult?.results || [])].sort((left, right) => {
+    const leftRank = left.issue_flags.length === 0 ? 2 : left.issue_flags.includes('missing_ledger') ? 0 : 1;
+    const rightRank = right.issue_flags.length === 0 ? 2 : right.issue_flags.includes('missing_ledger') ? 0 : 1;
+    return leftRank - rightRank;
+  });
+  const endToEndIssueOptions = Array.from(new Set(endToEndRows.flatMap((row) => row.issue_flags))).sort();
+  const endToEndPayoutStatusOptions = Array.from(new Set(endToEndRows.map((row) => row.transaction_settlement_status).filter(Boolean))).sort();
+  const endToEndBankStatusOptions = Array.from(new Set(endToEndRows.map((row) => row.bank_status).filter(Boolean))).sort();
+  const endToEndLedgerStatusOptions = Array.from(new Set(endToEndRows.map((row) => row.ledger_status).filter(Boolean))).sort();
+  const endToEndSettlementOptions = Array.from(new Set(endToEndRows.map((row) => row.settlement_id).filter((value): value is string => !!value))).sort();
+  const filteredEndToEndRows = endToEndRows.filter((row) => {
+    if (selectedEndToEndSettlementId !== 'all' && row.settlement_id !== selectedEndToEndSettlementId) return false;
+    if (endToEndIssueFilter === 'complete' && row.issue_flags.length > 0) return false;
+    if (endToEndIssueFilter === 'has_issues' && row.issue_flags.length === 0) return false;
+    if (!['all', 'complete', 'has_issues'].includes(endToEndIssueFilter) && !row.issue_flags.includes(endToEndIssueFilter)) return false;
+    if (endToEndPayoutStatusFilter !== 'all' && row.transaction_settlement_status !== endToEndPayoutStatusFilter) return false;
+    if (endToEndBankStatusFilter !== 'all' && row.bank_status !== endToEndBankStatusFilter) return false;
+    if (endToEndLedgerStatusFilter !== 'all' && row.ledger_status !== endToEndLedgerStatusFilter) return false;
+
+    const needle = endToEndSearch.trim().toLowerCase();
+    if (!needle) return true;
+
+    return [
+      row.provider_transaction_id,
+      row.customer_name,
+      row.transaction_description,
+      row.settlement_id,
+      row.bank_description,
+      row.ledger_reference_no,
+      row.ledger_contact,
+      row.ledger_description,
+      row.notes,
+      row.issue_flags.join(' '),
+      String(row.transaction_id),
+      row.bank_transaction_id ? String(row.bank_transaction_id) : '',
+      row.ledger_entry_id ? String(row.ledger_entry_id) : '',
+    ].some((value) => (value || '').toLowerCase().includes(needle));
+  });
+  const hasEndToEndFilters =
+    selectedEndToEndSettlementId !== 'all' ||
+    endToEndIssueFilter !== 'all' ||
+    endToEndPayoutStatusFilter !== 'all' ||
+    endToEndBankStatusFilter !== 'all' ||
+    endToEndLedgerStatusFilter !== 'all' ||
+    endToEndSearch.trim() !== '';
+  const endToEndTally = filteredEndToEndRows.reduce(
+    (totals, row) => {
+      totals.gatewayAmount += Number(row.transaction_amount) || 0;
+      totals.payoutAmount += Number(row.settlement_net_amount) || 0;
+      totals.bankAmount += Number(row.bank_amount) || 0;
+      totals.ledgerAmount += Number(row.ledger_amount) || 0;
+      return totals;
+    },
+    { gatewayAmount: 0, payoutAmount: 0, bankAmount: 0, ledgerAmount: 0 }
   );
 
   return (
@@ -634,6 +872,468 @@ export default function PaymentGatewayReconciliationDetail() {
         )}
 
         <div className="rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+          <div className="border-b p-4" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>End-To-End Reconciliation</h2>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                  Review each successful gateway transaction across payout, bank statement, and ledger posting.
+                </p>
+              </div>
+              {selectedLedgerBatch && (
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                  Selected: {ledgerBatchLabel(selectedLedgerBatch)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4 p-4">
+            {bankLedgerBatches.length === 0 ? (
+              <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-4">
+                  <div className="font-medium" style={{ color: 'var(--foreground)' }}>Prepare four-way reconciliation</div>
+                  <div className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    Upload or select the bank statement and ledger needed to reconcile gateway transactions, payout, bank, and ledger in one run.
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBankStatementUploadModal(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg border px-4 py-3 font-medium"
+                    style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Bank Statement
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBankLedgerUploadModal(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-medium"
+                    style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Bank Ledger
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <div className="md:col-span-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Bank Ledger Batch</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowBankLedgerUploadModal(true)}
+                        className="flex items-center gap-1 text-sm font-medium"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload ledger
+                      </button>
+                    </div>
+                    <select
+                      value={selectedBankLedgerBatchId ?? ''}
+                      onChange={(event) => {
+                        setSelectedBankLedgerBatchId(Number(event.target.value));
+                        setEndToEndResult(null);
+                      }}
+                      className="w-full rounded-lg border px-3 py-2"
+                      style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                    >
+                      {bankLedgerBatches.map((ledgerBatch) => (
+                        <option key={ledgerBatch.id} value={ledgerBatch.id}>
+                          {ledgerBatchLabel(ledgerBatch)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Date Tolerance (days)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={ledgerDateToleranceDays}
+                      onChange={(event) => setLedgerDateToleranceDays(Number(event.target.value))}
+                      className="w-full rounded-lg border px-3 py-2"
+                      style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Amount Tolerance (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={ledgerAmountTolerancePct}
+                      onChange={(event) => setLedgerAmountTolerancePct(Number(event.target.value))}
+                      className="w-full rounded-lg border px-3 py-2"
+                      style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Bank Statement For Bank Match</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowBankStatementUploadModal(true)}
+                      className="flex items-center gap-1 text-sm font-medium"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      <Upload className="h-4 w-4" />
+                      Upload statement
+                    </button>
+                  </div>
+                  {bankStatements.length === 0 ? (
+                    <div className="flex flex-col gap-3 rounded-lg border p-4 text-sm md:flex-row md:items-center md:justify-between" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                      <div>Upload bank statements first, then return here to run the full end-to-end report.</div>
+                      <button
+                        type="button"
+                        onClick={() => setShowBankStatementUploadModal(true)}
+                        className="flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-medium"
+                        style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Bank Statement
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedEndToEndBankStatementId}
+                      onChange={(event) => setSelectedEndToEndBankStatementId(event.target.value === 'all' ? 'all' : Number(event.target.value))}
+                      className="w-full rounded-lg border px-3 py-2"
+                      style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                    >
+                      <option value="all">All bank statements</option>
+                      {bankStatements.map((statement) => (
+                        <option key={statement.id} value={statement.id}>
+                          #{statement.id} {statement.bank_name || 'Bank'}{statement.account_number ? ` | ${statement.account_number}` : ''} | {formatDate(statement.statement_date_from)} - {formatDate(statement.statement_date_to)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleEndToEndReconciliation}
+                    disabled={isCrossCheckingLedger || !selectedBankLedgerBatchId || bankStatements.length === 0}
+                    className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {isCrossCheckingLedger ? 'Loading...' : 'Run End-To-End Report'}
+                  </button>
+                  {isLoadingLatestEndToEnd && (
+                    <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Loading latest saved report...</span>
+                  )}
+                  {endToEndResult && (
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      {endToEndResult.run_id && (
+                        <span className="rounded px-2 py-1" style={{ background: 'var(--muted)', color: 'var(--foreground)' }}>
+                          Saved run #{endToEndResult.run_id}{endToEndResult.created_at ? ` | ${formatDate(endToEndResult.created_at)}` : ''}
+                        </span>
+                      )}
+                      <span className="rounded px-2 py-1" style={{ background: 'var(--success)', color: 'white' }}>
+                        {endToEndResult.complete_count} complete
+                      </span>
+                      <span className="rounded px-2 py-1" style={{ background: 'var(--warning)', color: 'white' }}>
+                        {endToEndResult.warning_count} warning
+                      </span>
+                      <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
+                        {endToEndResult.missing_ledger_count} missing ledger
+                      </span>
+                      {endToEndResult.missing_payout_count > 0 && (
+                        <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
+                          {endToEndResult.missing_payout_count} missing payout
+                        </span>
+                      )}
+                      {endToEndResult.missing_bank_count > 0 && (
+                        <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
+                          {endToEndResult.missing_bank_count} missing bank
+                        </span>
+                      )}
+                      <span style={{ color: 'var(--muted-foreground)' }}>
+                        {endToEndResult.transaction_count} successful gateway transactions checked
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {endToEndResult && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Displayed Rows</div>
+                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{filteredEndToEndRows.length}</div>
+                      </div>
+                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Gateway Total</div>
+                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.gatewayAmount)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Payout Total</div>
+                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.payoutAmount)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Bank Total</div>
+                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.bankAmount)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Ledger Total</div>
+                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.ledgerAmount)}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Settlement</label>
+                        <select
+                          value={selectedEndToEndSettlementId}
+                          onChange={(event) => setSelectedEndToEndSettlementId(event.target.value)}
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          <option value="all">All settlements</option>
+                          {endToEndSettlementOptions.map((settlementId) => (
+                            <option key={settlementId} value={settlementId}>{settlementId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Issue</label>
+                        <select
+                          value={endToEndIssueFilter}
+                          onChange={(event) => setEndToEndIssueFilter(event.target.value)}
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          <option value="all">All issues</option>
+                          <option value="has_issues">Any issue</option>
+                          <option value="complete">Complete only</option>
+                          {endToEndIssueOptions.map((flag) => (
+                            <option key={flag} value={flag}>{flag.replaceAll('_', ' ')}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Payout</label>
+                        <select
+                          value={endToEndPayoutStatusFilter}
+                          onChange={(event) => setEndToEndPayoutStatusFilter(event.target.value)}
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          <option value="all">All payout statuses</option>
+                          {endToEndPayoutStatusOptions.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Bank</label>
+                        <select
+                          value={endToEndBankStatusFilter}
+                          onChange={(event) => setEndToEndBankStatusFilter(event.target.value)}
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          <option value="all">All bank statuses</option>
+                          {endToEndBankStatusOptions.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Ledger</label>
+                        <select
+                          value={endToEndLedgerStatusFilter}
+                          onChange={(event) => setEndToEndLedgerStatusFilter(event.target.value)}
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          <option value="all">All ledger statuses</option>
+                          {endToEndLedgerStatusOptions.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Search</label>
+                        <input
+                          value={endToEndSearch}
+                          onChange={(event) => setEndToEndSearch(event.target.value)}
+                          placeholder="Transaction, customer, bank, ledger"
+                          className="w-full rounded-lg border px-3 py-2"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <details className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                      <summary className="cursor-pointer text-sm font-medium" style={{ color: 'var(--foreground)' }}>Columns</summary>
+                      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+                        {[
+                          ['issues', 'Issues'],
+                          ['gatewayTransaction', 'Gateway Transaction'],
+                          ['gatewayDate', 'Gateway Date'],
+                          ['gatewayAmount', 'Gateway Amount'],
+                          ['customer', 'Customer'],
+                          ['payout', 'Payout'],
+                          ['payoutAmount', 'Payout Amount'],
+                          ['bank', 'Bank'],
+                          ['bankAmount', 'Bank Amount'],
+                          ['ledger', 'Ledger'],
+                          ['ledgerAmount', 'Ledger Amount'],
+                          ['notes', 'Notes'],
+                        ].map(([key, label]) => (
+                          <label key={key} className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                            <input
+                              type="checkbox"
+                              checked={endToEndVisibleColumns[key as EndToEndColumnKey]}
+                              onChange={(event) => setEndToEndVisibleColumns((prev) => ({ ...prev, [key]: event.target.checked }))}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                        Showing {filteredEndToEndRows.length} of {endToEndRows.length} report rows
+                      </div>
+                      {hasEndToEndFilters && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedEndToEndSettlementId('all');
+                            setEndToEndIssueFilter('all');
+                            setEndToEndPayoutStatusFilter('all');
+                            setEndToEndBankStatusFilter('all');
+                            setEndToEndLedgerStatusFilter('all');
+                            setEndToEndSearch('');
+                          }}
+                          className="rounded-lg border px-3 py-2 text-sm font-medium"
+                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        >
+                          Reset filters
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-[420px] overflow-auto rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+                      {filteredEndToEndRows.length === 0 ? (
+                        <div className="p-8 text-center" style={{ color: 'var(--muted-foreground)' }}>No rows match the selected filters.</div>
+                      ) : (
+                        <table className="w-full">
+                          <thead className="sticky top-0" style={{ background: 'var(--card)' }}>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              {endToEndVisibleColumns.issues && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Issues</th>}
+                              {endToEndVisibleColumns.gatewayTransaction && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Gateway Transaction</th>}
+                              {endToEndVisibleColumns.gatewayDate && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Gateway Date</th>}
+                              {endToEndVisibleColumns.gatewayAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Gateway Amount</th>}
+                              {endToEndVisibleColumns.customer && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Customer</th>}
+                              {endToEndVisibleColumns.payout && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Payout</th>}
+                              {endToEndVisibleColumns.payoutAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Payout Amount</th>}
+                              {endToEndVisibleColumns.bank && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Bank Statement</th>}
+                              {endToEndVisibleColumns.bankAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Bank Amount</th>}
+                              {endToEndVisibleColumns.ledger && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Ledger</th>}
+                              {endToEndVisibleColumns.ledgerAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Ledger Amount</th>}
+                              {endToEndVisibleColumns.notes && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Notes</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredEndToEndRows.map((row) => (
+                              <tr
+                                key={row.transaction_id}
+                                style={{
+                                  borderBottom: '1px solid var(--border)',
+                                  background:
+                                    row.issue_flags.includes('missing_ledger') ? 'rgba(220, 38, 38, 0.06)' :
+                                    row.issue_flags.length > 0 ? 'rgba(245, 158, 11, 0.10)' :
+                                    'rgba(22, 163, 74, 0.08)',
+                                }}
+                              >
+                                {endToEndVisibleColumns.issues && <td className="px-4 py-3">
+                                  {row.issue_flags.length === 0 ? (
+                                    <StatusBadge status="complete" />
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                      {row.issue_flags.map((flag) => (
+                                        <span
+                                          key={flag}
+                                          className="rounded px-2 py-1 text-xs font-medium"
+                                          style={{
+                                            background: flag.startsWith('missing') ? 'var(--error)' : 'var(--warning)',
+                                            color: 'white',
+                                          }}
+                                        >
+                                          {flag.replaceAll('_', ' ')}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>}
+                                {endToEndVisibleColumns.gatewayTransaction && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
+                                  <div className="font-medium">{row.provider_transaction_id || `#${row.transaction_id}`}</div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{row.transaction_description || '-'}</div>
+                                </td>}
+                                {endToEndVisibleColumns.gatewayDate && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>{formatDate(row.transaction_date || undefined)}</td>}
+                                {endToEndVisibleColumns.gatewayAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.transaction_amount)}</td>}
+                                {endToEndVisibleColumns.customer && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>{row.customer_name || '-'}</td>}
+                                {endToEndVisibleColumns.payout && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
+                                  <StatusBadge status={row.transaction_settlement_status} />
+                                  <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {row.settlement_row_id ? `Row #${row.settlement_row_id}` : 'No payout row'}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {row.settlement_id || '-'}{row.settlement_date ? ` | ${formatDate(row.settlement_date)}` : ''}
+                                  </div>
+                                </td>}
+                                {endToEndVisibleColumns.payoutAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.settlement_net_amount ?? undefined)}</td>}
+                                {endToEndVisibleColumns.bank && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
+                                  <StatusBadge status={row.bank_status} />
+                                  <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {row.bank_transaction_id ? `Txn #${row.bank_transaction_id}` : 'No bank transaction'}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {formatDate(row.bank_transaction_date || undefined)}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{row.bank_description || '-'}</div>
+                                </td>}
+                                {endToEndVisibleColumns.bankAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.bank_amount ?? undefined)}</td>}
+                                {endToEndVisibleColumns.ledger && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
+                                  <StatusBadge status={row.ledger_status} />
+                                  <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {row.ledger_entry_id ? `Entry #${row.ledger_entry_id}` : 'No ledger entry'}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                    {row.ledger_reference_no || '-'}{row.ledger_entry_date ? ` | ${formatDate(row.ledger_entry_date)}` : ''}
+                                  </div>
+                                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{row.ledger_contact || row.ledger_description || '-'}</div>
+                                </td>}
+                                {endToEndVisibleColumns.ledgerAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.ledger_amount ?? undefined)}</td>}
+                                {endToEndVisibleColumns.notes && <td className="max-w-xs px-4 py-3 text-sm" style={{ color: 'var(--foreground)' }}>{row.notes || row.ledger_match_method || '-'}</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="hidden rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
           <div className="border-b p-4" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
@@ -765,7 +1465,7 @@ export default function PaymentGatewayReconciliationDetail() {
           </div>
         </div>
 
-        <div className="rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+        <div className="hidden rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
           <div className="border-b p-4" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
@@ -1024,6 +1724,95 @@ export default function PaymentGatewayReconciliationDetail() {
           )}
         </div>
       </div>
+
+      {showBankStatementUploadModal && (
+        <>
+          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={closeBankStatementUploadModal} />
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4" onClick={closeBankStatementUploadModal}>
+            <div
+              className="my-auto w-full max-w-2xl rounded-lg border bg-[var(--card)] p-6"
+              style={{ borderColor: 'var(--border)', maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Upload Bank Statements</h2>
+                <button onClick={closeBankStatementUploadModal} className="rounded p-2 hover:bg-[var(--muted)]" style={{ color: 'var(--foreground)' }}>
+                  x
+                </button>
+              </div>
+              <p className="mb-4 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                Upload bank statement files to make them available for payout-to-bank matching in the end-to-end report.
+              </p>
+
+              <FileUpload
+                onFilesSelect={setSelectedBankStatementFiles}
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg"
+                required
+                label="Select Bank Statement Files"
+                helpText="PDF, PNG, JPG, or JPEG files."
+                autoUpload={false}
+              />
+
+              <button
+                onClick={handleUploadBankStatements}
+                disabled={selectedBankStatementFiles.length === 0 || isUploadingBankStatements}
+                className="w-full rounded-lg px-4 py-2 font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  background: selectedBankStatementFiles.length > 0 && !isUploadingBankStatements ? 'var(--primary)' : 'var(--muted)',
+                  color: selectedBankStatementFiles.length > 0 && !isUploadingBankStatements ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {isUploadingBankStatements ? 'Uploading...' : `Upload ${selectedBankStatementFiles.length || ''} Bank Statement File${selectedBankStatementFiles.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showBankLedgerUploadModal && (
+        <>
+          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={closeBankLedgerUploadModal} />
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4" onClick={closeBankLedgerUploadModal}>
+            <div
+              className="my-auto w-full max-w-2xl rounded-lg border bg-[var(--card)] p-6"
+              style={{ borderColor: 'var(--border)', maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Upload Bank Ledger</h2>
+                <button onClick={closeBankLedgerUploadModal} className="rounded p-2 hover:bg-[var(--muted)]" style={{ color: 'var(--foreground)' }}>
+                  x
+                </button>
+              </div>
+              <p className="mb-4 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                Upload an accounting bank ledger export to make it available for transaction-to-ledger checking.
+              </p>
+
+              <FileUpload
+                onFilesSelect={setSelectedBankLedgerFiles}
+                accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg"
+                required
+                label="Select Bank Ledger Export"
+                helpText="Excel, CSV, PDF, PNG, JPG, or JPEG files."
+                autoUpload={false}
+              />
+
+              <button
+                onClick={handleUploadBankLedger}
+                disabled={selectedBankLedgerFiles.length === 0 || isUploadingBankLedger}
+                className="w-full rounded-lg px-4 py-2 font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  background: selectedBankLedgerFiles.length > 0 && !isUploadingBankLedger ? 'var(--primary)' : 'var(--muted)',
+                  color: selectedBankLedgerFiles.length > 0 && !isUploadingBankLedger ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {isUploadingBankLedger ? 'Uploading...' : 'Upload Bank Ledger'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </AppLayout>
   );
 }
