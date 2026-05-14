@@ -139,8 +139,8 @@ export default function PaymentGatewayReconciliations() {
       showToast(response.message || `${providerLabel(selectedUploadProvider)} files imported and reconciled successfully`, { type: 'success' });
       closeUploadModal();
       await loadBatches();
-      if (response.data?.batch?.id) {
-        router.push(`/payment-gateways/${response.data.batch.id}`);
+      if (response.data.length === 1 && response.data[0]?.batch?.id) {
+        router.push(`/payment-gateways/${response.data[0].batch.id}`);
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to upload reconciliation files', { type: 'error' });

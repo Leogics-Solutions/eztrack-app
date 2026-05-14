@@ -146,13 +146,15 @@ export interface ListPaymentGatewayBatchesResponse {
   };
 }
 
+export interface UploadPaymentGatewayReconciliationBatchData {
+  batch: PaymentGatewayBatch;
+  files: PaymentGatewayFile[];
+}
+
 export interface UploadPaymentGatewayReconciliationResponse {
   success: boolean;
   message?: string;
-  data: {
-    batch: PaymentGatewayBatch;
-    files: PaymentGatewayFile[];
-  };
+  data: UploadPaymentGatewayReconciliationBatchData[];
 }
 
 export interface GetPaymentGatewayReconciliationResponse {
@@ -304,14 +306,14 @@ export interface PaymentGatewayLedgerCrossCheckResponse {
 }
 
 export interface LedgerCrossCheckParams {
-  bank_ledger_batch_id: number;
+  bank_ledger_batch_id?: number;
   bank_statement_ids?: number[];
   date_tolerance_days?: number;
   amount_tolerance_pct?: number;
 }
 
 export interface PaymentGatewayEndToEndReconciliationRunRequest {
-  bank_ledger_batch_id: number;
+  bank_ledger_batch_id?: number;
   bank_statement_ids?: number[];
   date_tolerance_days?: number;
   amount_tolerance_pct?: number;
@@ -350,7 +352,7 @@ export interface PaymentGatewayEndToEndReconciliationRow {
 export interface PaymentGatewayEndToEndReconciliationResponse {
   run_id?: number | null;
   payment_gateway_batch_id: number;
-  bank_ledger_batch_id: number;
+  bank_ledger_batch_id: number | null;
   provider: PaymentGatewayProvider;
   bank_statement_ids?: number[] | null;
   created_at?: string | null;
@@ -446,7 +448,10 @@ export async function uploadPaymentGatewayReconciliation(
     return parseJsonError(response, 'Failed to upload reconciliation files');
   }
 
-  return response.json();
+  const json = await response.json();
+  const raw = json.data;
+  json.data = Array.isArray(raw) ? raw : [raw];
+  return json;
 }
 
 export async function listPaymentGatewayReconciliations(

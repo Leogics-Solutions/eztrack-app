@@ -287,6 +287,7 @@ export default function PaymentGatewayReconciliationDetail() {
   const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
   const [bankLedgerBatches, setBankLedgerBatches] = useState<BankLedgerBatch[]>([]);
   const [selectedBankLedgerBatchId, setSelectedBankLedgerBatchId] = useState<number | null>(null);
+  const [includeLedger, setIncludeLedger] = useState(true);
   const [selectedEndToEndBankStatementId, setSelectedEndToEndBankStatementId] = useState<'all' | number>('all');
   const [selectedBankStatementIds, setSelectedBankStatementIds] = useState<Set<number>>(new Set());
   const [bankLinks, setBankLinks] = useState<PaymentGatewayBankReconciliationLink[]>([]);
@@ -556,6 +557,7 @@ export default function PaymentGatewayReconciliationDetail() {
       const response = await getLatestPaymentGatewayEndToEndReconciliation(batchId);
       setEndToEndResult(response);
       if (response) {
+        setIncludeLedger(response.bank_ledger_batch_id !== null);
         setSelectedBankLedgerBatchId(response.bank_ledger_batch_id);
         if (response.bank_statement_ids) {
           setSelectedEndToEndBankStatementId(response.bank_statement_ids[0] ?? 'all');
@@ -572,7 +574,7 @@ export default function PaymentGatewayReconciliationDetail() {
 
   async function handleEndToEndReconciliation() {
     if (!batchId) return;
-    if (!selectedBankLedgerBatchId) {
+    if (includeLedger && !selectedBankLedgerBatchId) {
       showToast('Select a bank ledger batch to cross-check against', { type: 'error' });
       return;
     }
@@ -585,7 +587,7 @@ export default function PaymentGatewayReconciliationDetail() {
     setEndToEndResult(null);
     try {
       const response = await runPaymentGatewayEndToEndReconciliation(batchId, {
-        bank_ledger_batch_id: selectedBankLedgerBatchId,
+        ...(includeLedger && selectedBankLedgerBatchId ? { bank_ledger_batch_id: selectedBankLedgerBatchId } : {}),
         bank_statement_ids: selectedEndToEndBankStatementId === 'all' ? undefined : [selectedEndToEndBankStatementId],
         date_tolerance_days: ledgerDateToleranceDays,
         amount_tolerance_pct: ledgerAmountTolerancePct,
@@ -877,24 +879,37 @@ export default function PaymentGatewayReconciliationDetail() {
               <div>
                 <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>End-To-End Reconciliation</h2>
                 <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Review each successful gateway transaction across payout, bank statement, and ledger posting.
+                  Review each successful gateway transaction across payout, bank statement{includeLedger ? ', and ledger posting' : ''}.
                 </p>
               </div>
-              {selectedLedgerBatch && (
-                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Selected: {ledgerBatchLabel(selectedLedgerBatch)}
-                </div>
-              )}
+              <div className="flex items-center gap-4">
+                {selectedLedgerBatch && includeLedger && (
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    Selected: {ledgerBatchLabel(selectedLedgerBatch)}
+                  </div>
+                )}
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeLedger}
+                    onChange={(event) => {
+                      setIncludeLedger(event.target.checked);
+                      setEndToEndResult(null);
+                    }}
+                  />
+                  Include ledger check (3-way)
+                </label>
+              </div>
             </div>
           </div>
 
           <div className="space-y-4 p-4">
-            {bankLedgerBatches.length === 0 ? (
+            {bankLedgerBatches.length === 0 && includeLedger ? (
               <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)' }}>
                 <div className="mb-4">
                   <div className="font-medium" style={{ color: 'var(--foreground)' }}>Prepare four-way reconciliation</div>
                   <div className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Upload or select the bank statement and ledger needed to reconcile gateway transactions, payout, bank, and ledger in one run.
+                    Upload or select the bank statement and ledger needed to reconcile gateway transactions, payout, bank, and ledger in one run. Or uncheck &ldquo;Include ledger check&rdquo; above to run a 2-way report without a ledger.
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -920,36 +935,38 @@ export default function PaymentGatewayReconciliationDetail() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="md:col-span-2">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Bank Ledger Batch</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowBankLedgerUploadModal(true)}
-                        className="flex items-center gap-1 text-sm font-medium"
-                        style={{ color: 'var(--primary)' }}
+                <div className={`grid grid-cols-1 gap-4 ${includeLedger ? 'md:grid-cols-4' : 'md:grid-cols-2'}`}>
+                  {includeLedger && (
+                    <div className="md:col-span-2">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Bank Ledger Batch</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBankLedgerUploadModal(true)}
+                          className="flex items-center gap-1 text-sm font-medium"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          <Upload className="h-4 w-4" />
+                          Upload ledger
+                        </button>
+                      </div>
+                      <select
+                        value={selectedBankLedgerBatchId ?? ''}
+                        onChange={(event) => {
+                          setSelectedBankLedgerBatchId(Number(event.target.value));
+                          setEndToEndResult(null);
+                        }}
+                        className="w-full rounded-lg border px-3 py-2"
+                        style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                       >
-                        <Upload className="h-4 w-4" />
-                        Upload ledger
-                      </button>
+                        {bankLedgerBatches.map((ledgerBatch) => (
+                          <option key={ledgerBatch.id} value={ledgerBatch.id}>
+                            {ledgerBatchLabel(ledgerBatch)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <select
-                      value={selectedBankLedgerBatchId ?? ''}
-                      onChange={(event) => {
-                        setSelectedBankLedgerBatchId(Number(event.target.value));
-                        setEndToEndResult(null);
-                      }}
-                      className="w-full rounded-lg border px-3 py-2"
-                      style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                    >
-                      {bankLedgerBatches.map((ledgerBatch) => (
-                        <option key={ledgerBatch.id} value={ledgerBatch.id}>
-                          {ledgerBatchLabel(ledgerBatch)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  )}
                   <div>
                     <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Date Tolerance (days)</label>
                     <input
@@ -1022,7 +1039,7 @@ export default function PaymentGatewayReconciliationDetail() {
                   <button
                     type="button"
                     onClick={handleEndToEndReconciliation}
-                    disabled={isCrossCheckingLedger || !selectedBankLedgerBatchId || bankStatements.length === 0}
+                    disabled={isCrossCheckingLedger || (includeLedger && !selectedBankLedgerBatchId) || bankStatements.length === 0}
                     className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
                   >
@@ -1045,9 +1062,11 @@ export default function PaymentGatewayReconciliationDetail() {
                       <span className="rounded px-2 py-1" style={{ background: 'var(--warning)', color: 'white' }}>
                         {endToEndResult.warning_count} warning
                       </span>
-                      <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
-                        {endToEndResult.missing_ledger_count} missing ledger
-                      </span>
+                      {endToEndResult.bank_ledger_batch_id !== null && (
+                        <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
+                          {endToEndResult.missing_ledger_count} missing ledger
+                        </span>
+                      )}
                       {endToEndResult.missing_payout_count > 0 && (
                         <span className="rounded px-2 py-1" style={{ background: 'var(--error)', color: 'white' }}>
                           {endToEndResult.missing_payout_count} missing payout
@@ -1084,10 +1103,12 @@ export default function PaymentGatewayReconciliationDetail() {
                         <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Bank Total</div>
                         <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.bankAmount)}</div>
                       </div>
-                      <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
-                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Ledger Total</div>
-                        <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.ledgerAmount)}</div>
-                      </div>
+                      {endToEndResult.bank_ledger_batch_id !== null && (
+                        <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)', background: 'var(--background)' }}>
+                          <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Ledger Total</div>
+                          <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{formatCurrency(endToEndTally.ledgerAmount)}</div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
@@ -1149,20 +1170,22 @@ export default function PaymentGatewayReconciliationDetail() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Ledger</label>
-                        <select
-                          value={endToEndLedgerStatusFilter}
-                          onChange={(event) => setEndToEndLedgerStatusFilter(event.target.value)}
-                          className="w-full rounded-lg border px-3 py-2"
-                          style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                        >
-                          <option value="all">All ledger statuses</option>
-                          {endToEndLedgerStatusOptions.map((status) => (
-                            <option key={status} value={status}>{status}</option>
-                          ))}
-                        </select>
-                      </div>
+                      {endToEndResult?.bank_ledger_batch_id !== null && (
+                        <div>
+                          <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Ledger</label>
+                          <select
+                            value={endToEndLedgerStatusFilter}
+                            onChange={(event) => setEndToEndLedgerStatusFilter(event.target.value)}
+                            className="w-full rounded-lg border px-3 py-2"
+                            style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                          >
+                            <option value="all">All ledger statuses</option>
+                            {endToEndLedgerStatusOptions.map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div>
                         <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--foreground)' }}>Search</label>
                         <input
@@ -1191,16 +1214,25 @@ export default function PaymentGatewayReconciliationDetail() {
                           ['ledger', 'Ledger'],
                           ['ledgerAmount', 'Ledger Amount'],
                           ['notes', 'Notes'],
-                        ].map(([key, label]) => (
-                          <label key={key} className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
-                            <input
-                              type="checkbox"
-                              checked={endToEndVisibleColumns[key as EndToEndColumnKey]}
-                              onChange={(event) => setEndToEndVisibleColumns((prev) => ({ ...prev, [key]: event.target.checked }))}
-                            />
-                            {label}
-                          </label>
-                        ))}
+                        ].map(([key, label]) => {
+                          const isLedgerCol = key === 'ledger' || key === 'ledgerAmount';
+                          const disabled = isLedgerCol && endToEndResult?.bank_ledger_batch_id === null;
+                          return (
+                            <label
+                              key={key}
+                              className="flex items-center gap-2 text-sm"
+                              style={{ color: disabled ? 'var(--muted-foreground)' : 'var(--foreground)', opacity: disabled ? 0.5 : 1 }}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={disabled}
+                                checked={!disabled && endToEndVisibleColumns[key as EndToEndColumnKey]}
+                                onChange={(event) => setEndToEndVisibleColumns((prev) => ({ ...prev, [key]: event.target.checked }))}
+                              />
+                              {label}
+                            </label>
+                          );
+                        })}
                       </div>
                     </details>
 
@@ -1243,8 +1275,8 @@ export default function PaymentGatewayReconciliationDetail() {
                               {endToEndVisibleColumns.payoutAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Payout Amount</th>}
                               {endToEndVisibleColumns.bank && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Bank Statement</th>}
                               {endToEndVisibleColumns.bankAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Bank Amount</th>}
-                              {endToEndVisibleColumns.ledger && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Ledger</th>}
-                              {endToEndVisibleColumns.ledgerAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Ledger Amount</th>}
+                              {endToEndResult.bank_ledger_batch_id !== null && endToEndVisibleColumns.ledger && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Ledger</th>}
+                              {endToEndResult.bank_ledger_batch_id !== null && endToEndVisibleColumns.ledgerAmount && <th className="px-4 py-3 text-right" style={{ color: 'var(--muted-foreground)' }}>Ledger Amount</th>}
                               {endToEndVisibleColumns.notes && <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Notes</th>}
                             </tr>
                           </thead>
@@ -1308,7 +1340,7 @@ export default function PaymentGatewayReconciliationDetail() {
                                   <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{row.bank_description || '-'}</div>
                                 </td>}
                                 {endToEndVisibleColumns.bankAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.bank_amount ?? undefined)}</td>}
-                                {endToEndVisibleColumns.ledger && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
+                                {endToEndResult.bank_ledger_batch_id !== null && endToEndVisibleColumns.ledger && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
                                   <StatusBadge status={row.ledger_status} />
                                   <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
                                     {row.ledger_entry_id ? `Entry #${row.ledger_entry_id}` : 'No ledger entry'}
@@ -1318,7 +1350,7 @@ export default function PaymentGatewayReconciliationDetail() {
                                   </div>
                                   <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{row.ledger_contact || row.ledger_description || '-'}</div>
                                 </td>}
-                                {endToEndVisibleColumns.ledgerAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.ledger_amount ?? undefined)}</td>}
+                                {endToEndResult.bank_ledger_batch_id !== null && endToEndVisibleColumns.ledgerAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.ledger_amount ?? undefined)}</td>}
                                 {endToEndVisibleColumns.notes && <td className="max-w-xs px-4 py-3 text-sm" style={{ color: 'var(--foreground)' }}>{row.notes || row.ledger_match_method || '-'}</td>}
                               </tr>
                             ))}
