@@ -35,6 +35,7 @@ ChartJS.register(
 import {
   getDashboardSummary,
   type DashboardSummaryData,
+  type DashboardCashflowItem,
 } from "@/services";
 import { useOrganization } from "@/lib/OrganizationContext";
 
@@ -88,6 +89,12 @@ export default function Home() {
     outstanding: 0,
     invoices_pending: 0,
     avg_value: 0,
+    ap_total_value: 0,
+    ap_invoices_total: 0,
+    ap_missing_do: 0,
+    ar_total_value: 0,
+    ar_invoices_total: 0,
+    ar_missing_po: 0,
   };
 
   // Chart color palette
@@ -166,7 +173,8 @@ export default function Home() {
   // Chart Data
   const categoryData = dashboard?.charts.category_breakdown || [];
   const vendorTotals = dashboard?.charts.vendor_totals || [];
-  const monthlyTotals = dashboard?.charts.monthly_totals || [];
+  const customerTotals = dashboard?.charts.customer_totals || [];
+  const cashflowData: DashboardCashflowItem[] = dashboard?.charts.monthly_cashflow || [];
   const statusDistribution = dashboard?.charts.status_distribution || [];
   const recentLogs = dashboard?.recent_activity || [];
   const vendorOptions = dashboard?.vendor_filter_options || [];
@@ -193,22 +201,38 @@ export default function Home() {
     }],
   };
 
-  const monthlyChartData = {
-    labels: monthlyTotals.map(item => item.month),
+  const customerChartData = {
+    labels: customerTotals.map(item => item.customer_name ?? 'Unknown Customer'),
     datasets: [{
-      label: t.dashboard.charts.invoiceTotal,
-      data: monthlyTotals.map(item => item.total),
-      borderColor: '#6aa6ff',
-      backgroundColor: 'rgba(106,166,255,0.1)',
-      fill: true,
-      tension: 0.4,
-      borderWidth: 3,
-      pointRadius: 5,
-      pointHoverRadius: 7,
-      pointBackgroundColor: '#6aa6ff',
-      pointBorderColor: '#fff',
-      pointBorderWidth: 2,
+      label: 'Revenue',
+      data: customerTotals.map(item => item.total),
+      backgroundColor: 'rgba(34,197,94,0.6)',
+      borderColor: '#22c55e',
+      borderWidth: 2,
+      borderRadius: 6,
     }],
+  };
+
+  const cashflowChartData = {
+    labels: cashflowData.map(item => item.month),
+    datasets: [
+      {
+        label: 'Expenses (AP)',
+        data: cashflowData.map(item => item.expenses),
+        backgroundColor: 'rgba(239,68,68,0.6)',
+        borderColor: '#ef4444',
+        borderWidth: 2,
+        borderRadius: 4,
+      },
+      {
+        label: 'Revenue (AR)',
+        data: cashflowData.map(item => item.revenue),
+        backgroundColor: 'rgba(34,197,94,0.6)',
+        borderColor: '#22c55e',
+        borderWidth: 2,
+        borderRadius: 4,
+      },
+    ],
   };
 
   const statusChartData = {
@@ -477,6 +501,65 @@ export default function Home() {
           </div>
         </div>
 
+        {/* AP / AR Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* AP Card */}
+          <div
+            className="rounded-lg p-6 border transition-all hover:shadow-lg"
+            style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">🛒</span>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
+                AP — Purchases
+              </h3>
+            </div>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>
+                  MYR {(kpis.ap_total_value ?? 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                  {kpis.ap_invoices_total ?? 0} invoice{(kpis.ap_invoices_total ?? 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+              {(kpis.ap_missing_do ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
+                  ⚠️ {kpis.ap_missing_do} missing DO
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* AR Card */}
+          <div
+            className="rounded-lg p-6 border transition-all hover:shadow-lg"
+            style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">💵</span>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
+                AR — Sales
+              </h3>
+            </div>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>
+                  MYR {(kpis.ar_total_value ?? 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                  {kpis.ar_invoices_total ?? 0} invoice{(kpis.ar_invoices_total ?? 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+              {(kpis.ar_missing_po ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400">
+                  ⚠️ {kpis.ar_missing_po} missing PO
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Expense Breakdown Chart */}
@@ -520,7 +603,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Monthly Trend Chart */}
+          {/* Top Customers Chart */}
           <div
             className="rounded-lg p-6 border lg:col-span-1"
             style={{
@@ -529,24 +612,19 @@ export default function Home() {
             }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-              📈 {t.dashboard.charts.monthlyTrend}
+              🏆 Top Customers
             </h3>
             <div className="h-80">
-              <Line data={monthlyChartData} options={{
-                ...chartOptions,
-                plugins: {
-                  legend: {
-                    position: 'right' as const,
-                    labels: {
-                      padding: 12,
-                      font: { size: 12 },
-                      color: 'var(--foreground)',
-                      usePointStyle: true,
-                      boxWidth: 12,
-                    },
+              <Bar
+                data={customerChartData}
+                options={{
+                  ...chartOptions,
+                  indexAxis: 'y' as const,
+                  plugins: {
+                    legend: { display: false },
                   },
-                },
-              }} />
+                }}
+              />
             </div>
           </div>
 

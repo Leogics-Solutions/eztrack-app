@@ -20,6 +20,12 @@ export interface DashboardKpis {
   outstanding: number;
   invoices_pending: number;
   avg_value: number;
+  ap_total_value: number;
+  ap_invoices_total: number;
+  ap_missing_do: number;
+  ar_total_value: number;
+  ar_invoices_total: number;
+  ar_missing_po: number;
 }
 
 export interface DashboardCategoryBreakdownItem {
@@ -43,10 +49,26 @@ export interface DashboardStatusDistributionItem {
   count: number;
 }
 
+export interface DashboardCustomerTotalItem {
+  customer_name: string | null;
+  total: number;
+}
+
+export interface DashboardCashflowItem {
+  month: string;
+  expenses: number;
+  revenue: number;
+  net: number;
+}
+
 export interface DashboardCharts {
   category_breakdown: DashboardCategoryBreakdownItem[];
   vendor_totals: DashboardVendorTotalItem[];
   monthly_totals: DashboardMonthlyTotalItem[];
+  monthly_ap_totals: DashboardMonthlyTotalItem[];
+  monthly_ar_totals: DashboardMonthlyTotalItem[];
+  customer_totals: DashboardCustomerTotalItem[];
+  monthly_cashflow: DashboardCashflowItem[];
   status_distribution: DashboardStatusDistributionItem[];
 }
 

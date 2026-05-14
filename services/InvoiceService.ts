@@ -45,6 +45,34 @@ export interface LinkedDocument {
   preview_url?: string | null;
 }
 
+export type PaymentProofStatus = 'proved' | 'partial' | 'mismatch' | 'needs_review' | 'no_proof';
+
+export interface PaymentProofMatchedLine {
+  line_id: number;
+  line_number?: number | null;
+  line_amount: number;
+  line_description?: string | null;
+  line_date?: string | null;
+  line_terms?: string[];
+  transaction?: {
+    document_id?: number | null;
+    amount?: number | null;
+    date?: string | null;
+    reference?: string | null;
+    description?: string | null;
+  } | null;
+  match_confidence?: number | null;
+  match_reasons?: string[];
+  candidate_count?: number | null;
+}
+
+export interface PaymentProofDetails {
+  status?: PaymentProofStatus | string;
+  match_level?: string | null;
+  confidence?: number | null;
+  matched_lines?: PaymentProofMatchedLine[];
+}
+
 export interface Invoice {
   id: number;
   invoice_no: string;
@@ -60,6 +88,9 @@ export interface Invoice {
   currency: string;
   status?: string;
   created_at?: string;
+  original_filename?: string | null;
+  tags?: string | null;
+  preview_url?: string | null;
   pages_processed?: number;
   processing_time_seconds?: number;
   // URLs for each uploaded page (when provided by multi-page endpoints)
@@ -79,6 +110,10 @@ export interface Invoice {
   handwriting_clarity?: 'clear' | 'unclear' | 'mixed' | null;
   // Linked supporting documents
   linked_documents?: LinkedDocument[] | null;
+  // Claim compilation payment-proof reconciliation fields
+  payment_proof_status?: PaymentProofStatus | string | null;
+  payment_proof_checked_at?: string | null;
+  payment_proof_details?: PaymentProofDetails | null;
   // MYR conversion fields (when invoice currency is not MYR)
   total_in_myr?: number | null;
   exchange_rate?: number | null;
@@ -192,6 +227,7 @@ export interface ListInvoicesParams {
   year?: number;
   // Status filters
   missing_do?: boolean;
+  missing_po?: boolean;
   missing_custom_form?: boolean;
   not_bank_reconciled?: boolean;
 }
@@ -954,6 +990,9 @@ export async function listInvoices(
   }
   if (params?.missing_do !== undefined) {
     queryParams.append('missing_do', params.missing_do.toString());
+  }
+  if (params?.missing_po !== undefined) {
+    queryParams.append('missing_po', params.missing_po.toString());
   }
   if (params?.missing_custom_form !== undefined) {
     queryParams.append('missing_custom_form', params.missing_custom_form.toString());

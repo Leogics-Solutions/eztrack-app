@@ -112,6 +112,7 @@ interface Invoice extends ApiInvoice {
 
 interface LineItem {
   id: number;
+  line_number?: number;
   description?: string;
   // Backend field name
   quantity?: number;
@@ -136,6 +137,56 @@ interface Payment {
   method: string;
   reference?: string;
 }
+
+type PaymentProofMatch = NonNullable<NonNullable<ApiInvoice['payment_proof_details']>['matched_lines']>[number];
+
+const formatCurrencyAmount = (value?: number | null, currency = 'MYR') => {
+  const amount = value ?? 0;
+  return `${currency} ${amount.toLocaleString('en-MY', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return '-';
+  return value.split('T')[0];
+};
+
+const isClaimsCompilationInvoice = (invoice?: Invoice | null) => {
+  if (!invoice) return false;
+  const tags = invoice.tags?.toLowerCase() || '';
+  const remarks = invoice.remarks?.toLowerCase() || '';
+  const filename = invoice.original_filename?.toLowerCase() || '';
+  return (
+    tags.includes('claims_compilation') ||
+    tags.includes('staff_claim') ||
+    remarks.includes('claims_compilation') ||
+    filename.includes('staff claim batch')
+  );
+};
+
+const getPaymentProofStatusClasses = (status?: string | null) => {
+  switch (status) {
+    case 'proved':
+      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
+    case 'partial':
+      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200';
+    case 'mismatch':
+      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
+    case 'needs_review':
+      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200';
+    case 'no_proof':
+      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+  }
+};
+
+const formatPaymentProofStatus = (status?: string | null) => {
+  if (!status) return 'No proof';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+};
 
 const InvoiceDetail = () => {
   const router = useRouter();
@@ -541,6 +592,17 @@ const InvoiceDetail = () => {
       setLinkedDocuments(apiInvoice.linked_documents || []);
 
       // Load source file(s) for preview
+      if (apiInvoice.preview_url) {
+        const previewUrl = apiInvoice.preview_url.startsWith("http")
+          ? apiInvoice.preview_url
+          : `${API_BASE_URL}${apiInvoice.preview_url}`;
+        setPageFiles([]);
+        setSelectedPageIndex(0);
+        setFileUrl(previewUrl);
+        setFileContentType('application/pdf');
+        return;
+      }
+
       // Check if invoice has page_files (multi-page invoice)
       if (apiInvoice.page_files && apiInvoice.page_files.length > 0) {
         // Use page_files URLs directly (they're already server URLs)
@@ -853,6 +915,23 @@ const InvoiceDetail = () => {
     );
   }
 
+  const isClaimsCompilation = isClaimsCompilationInvoice(invoice);
+  const matchedByLineId = new Map(
+    invoice.payment_proof_details?.matched_lines?.map((match) => [match.line_id, match]) ?? []
+  );
+  const proofDocuments = linkedDocuments.filter((doc) => {
+    const type = doc.document_type?.toLowerCase() || '';
+    const ref = doc.reference_number?.toLowerCase() || '';
+    return (
+      type.includes('payment_proof') ||
+      type.includes('bank') ||
+      type.includes('credit') ||
+      ref.includes('payment proof') ||
+      ref.includes('bank statement') ||
+      ref.includes('credit card')
+    );
+  });
+
   return (
     <AppLayout pageName={`${t.documents.invoiceDetailPage.title} #${invoice.id}`}>
       {/* Invoice Header */}
@@ -869,6 +948,22 @@ const InvoiceDetail = () => {
         onEditToggle={() => setIsEditMode(!isEditMode)}
         isEditMode={isEditMode}
       />
+
+      {isClaimsCompilation && (
+        <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[var(--primary)]/10 text-[var(--primary)]">
+              Staff Claim Compilation
+            </span>
+            <span className="text-sm text-[var(--muted-foreground)]">
+              {invoice.original_filename || 'Compiled claim invoice'}
+            </span>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(invoice.payment_proof_status)}`}>
+              {formatPaymentProofStatus(invoice.payment_proof_status)}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Payment Recorder */}
       <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
@@ -967,7 +1062,9 @@ const InvoiceDetail = () => {
         {/* Document Preview - Left Column */}
         <div>
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 sticky top-24 max-h-[calc(100vh-7rem)] overflow-auto">
-            <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.documentPreview}</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              {isClaimsCompilation ? 'Compiled Claim PDF' : t.documents.invoiceDetailPage.documentPreview}
+            </h3>
 
             {/* Multi-page files display */}
             {pageFiles.length > 0 ? (
@@ -1086,6 +1183,14 @@ const InvoiceDetail = () => {
                 // Optionally refresh the validation results
                 // You could re-run the validation here if needed
               }}
+            />
+          )}
+
+          {isClaimsCompilation && (
+            <PaymentProofPanel
+              invoice={invoice}
+              lineItems={lineItems}
+              proofDocuments={proofDocuments}
             />
           )}
 
@@ -1259,6 +1364,8 @@ const InvoiceDetail = () => {
             onAutoClassify={handleAutoClassify}
             isClassifying={isClassifying}
             currency={invoice.currency || 'MYR'}
+            isClaimsCompilation={isClaimsCompilation}
+            matchedByLineId={matchedByLineId}
             t={t}
           />
         </div>
@@ -2103,6 +2210,117 @@ function InvoiceInformationCard({
   );
 }
 
+function PaymentProofPanel({
+  invoice,
+  lineItems,
+  proofDocuments,
+}: {
+  invoice: Invoice;
+  lineItems: LineItem[];
+  proofDocuments: LinkedDocument[];
+}) {
+  const matchedLines = invoice.payment_proof_details?.matched_lines ?? [];
+  const matchedLineIds = new Set(matchedLines.map((match) => match.line_id));
+  const unmatchedCount = Math.max(lineItems.filter((line) => !matchedLineIds.has(line.id)).length, 0);
+  const confidence = invoice.payment_proof_details?.confidence;
+
+  return (
+    <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Payment Proof</h3>
+          {invoice.payment_proof_checked_at && (
+            <div className="text-xs text-[var(--muted-foreground)] mt-1">
+              Checked {formatDateOnly(invoice.payment_proof_checked_at)}
+            </div>
+          )}
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(invoice.payment_proof_status)}`}>
+          {formatPaymentProofStatus(invoice.payment_proof_status)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="p-3 rounded-md bg-[var(--muted)]/50">
+          <div className="text-lg font-semibold text-[var(--foreground)]">{matchedLines.length}</div>
+          <div className="text-xs text-[var(--muted-foreground)]">Matched</div>
+        </div>
+        <div className="p-3 rounded-md bg-[var(--muted)]/50">
+          <div className="text-lg font-semibold text-[var(--foreground)]">{unmatchedCount}</div>
+          <div className="text-xs text-[var(--muted-foreground)]">Unmatched</div>
+        </div>
+        <div className="p-3 rounded-md bg-[var(--muted)]/50">
+          <div className="text-lg font-semibold text-[var(--foreground)]">
+            {confidence !== null && confidence !== undefined ? `${Math.round(confidence * 100)}%` : '-'}
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)]">Confidence</div>
+        </div>
+      </div>
+
+      {proofDocuments.length > 0 ? (
+        <div className="space-y-2">
+          {proofDocuments.map((doc) => (
+            <div key={doc.id} className="flex items-center justify-between gap-3 p-3 border border-[var(--border)] rounded-md">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{doc.reference_number}</div>
+                <div className="text-xs text-[var(--muted-foreground)]">{doc.document_type}</div>
+              </div>
+              <a
+                href={doc.preview_url || `/supporting-documents/${doc.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--muted)] whitespace-nowrap"
+              >
+                Open
+              </a>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-[var(--muted-foreground)]">
+          No linked payment proof document found.
+        </div>
+      )}
+
+      {matchedLines.length > 0 && (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full border-collapse min-w-[560px]">
+            <thead>
+              <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50">
+                <th className="px-3 py-2 text-left text-xs font-semibold">Receipt Line</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold">Amount</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold">Matched Transaction</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold">Match</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {matchedLines.map((match) => (
+                <tr key={`${match.line_id}-${match.transaction?.reference || match.transaction?.document_id || 'match'}`}>
+                  <td className="px-3 py-2 text-sm align-top">{match.line_description || `Line ${match.line_number || match.line_id}`}</td>
+                  <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
+                    {formatCurrencyAmount(match.line_amount, invoice.currency || 'MYR')}
+                  </td>
+                  <td className="px-3 py-2 text-sm align-top">
+                    <div>{match.transaction?.description || '-'}</div>
+                    <div className="text-xs text-[var(--muted-foreground)]">
+                      {[formatDateOnly(match.transaction?.date), match.transaction?.reference].filter(Boolean).join(' | ')}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-sm text-right align-top whitespace-nowrap">
+                    {match.match_confidence !== null && match.match_confidence !== undefined
+                      ? `${Math.round(match.match_confidence * 100)}%`
+                      : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VendorDetailsCard({ invoice, isEditMode, t, onSave }: any) {
   const [formData, setFormData] = useState(invoice);
 
@@ -2452,6 +2670,36 @@ function RemarksCard({ invoice, isEditMode, t, onSave }: any) {
   );
 }
 
+function PaymentProofLineMatch({ match, currency }: { match?: PaymentProofMatch; currency: string }) {
+  if (!match) {
+    return <span className="text-[var(--muted-foreground)]">Unmatched</span>;
+  }
+
+  const confidence =
+    match.match_confidence !== null && match.match_confidence !== undefined
+      ? `${Math.round(match.match_confidence * 100)}%`
+      : '-';
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200">
+          {confidence}
+        </span>
+        <span className="text-xs text-[var(--muted-foreground)]">
+          {formatCurrencyAmount(match.transaction?.amount ?? match.line_amount, currency)}
+        </span>
+      </div>
+      <div className="text-sm text-[var(--foreground)] break-words">
+        {match.transaction?.description || match.transaction?.reference || '-'}
+      </div>
+      <div className="text-xs text-[var(--muted-foreground)]">
+        {[formatDateOnly(match.transaction?.date), match.transaction?.reference].filter(Boolean).join(' | ')}
+      </div>
+    </div>
+  );
+}
+
 function LineItemsCard({
   invoiceId,
   lineItems,
@@ -2461,6 +2709,8 @@ function LineItemsCard({
   onAutoClassify,
   isClassifying,
   currency,
+  isClaimsCompilation = false,
+  matchedByLineId,
   t,
 }: any) {
   const [newItem, setNewItem] = useState<{
@@ -2743,6 +2993,7 @@ function LineItemsCard({
     acc[account.account_type].push(account);
     return acc;
   }, {} as Record<string, ChartOfAccount[]>);
+  const actionColSpan = isClaimsCompilation ? 9 : 8;
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
@@ -2777,6 +3028,11 @@ function LineItemsCard({
               <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
                 {t.documents.invoiceDetailPage.account}
               </th>
+              {isClaimsCompilation && (
+                <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[220px]">
+                  Payment Proof
+                </th>
+              )}
               <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
                 Actions
               </th>
@@ -2785,7 +3041,7 @@ function LineItemsCard({
           <tbody className="divide-y divide-[var(--border)]">
             {lineItems.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                <td colSpan={actionColSpan} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
                   {t.documents.invoiceDetailPage.noLineItems}
                 </td>
               </tr>
@@ -2853,6 +3109,11 @@ function LineItemsCard({
                         <span className="text-[var(--muted-foreground)]">-</span>
                       )}
                     </td>
+                    {isClaimsCompilation && (
+                      <td className="px-4 py-3 text-sm align-top">
+                        <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
                       <button
                         onClick={handleUpdate}
@@ -2903,6 +3164,11 @@ function LineItemsCard({
                         <span className="text-[var(--muted-foreground)]">-</span>
                       )}
                     </td>
+                    {isClaimsCompilation && (
+                      <td className="px-4 py-3 text-sm align-top">
+                        <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
                       <button
                         onClick={() => startEditing(item)}
@@ -3001,6 +3267,11 @@ function LineItemsCard({
               <td className="px-4 py-3 text-sm align-top">
                 <span className="text-[var(--muted-foreground)]">-</span>
               </td>
+              {isClaimsCompilation && (
+                <td className="px-4 py-3 text-sm align-top">
+                  <span className="text-[var(--muted-foreground)]">-</span>
+                </td>
+              )}
               <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
                 <button
                   onClick={handleCreate}

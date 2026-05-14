@@ -205,6 +205,8 @@ export type {
   DashboardStatusDistributionItem,
   DashboardActivityItem,
   DashboardVendorFilterOption,
+  DashboardCustomerTotalItem,
+  DashboardCashflowItem,
 } from './DashboardService';
 
 // Chart of Accounts Service

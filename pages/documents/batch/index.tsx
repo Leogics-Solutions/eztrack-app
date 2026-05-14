@@ -172,11 +172,12 @@ const BatchUpload = () => {
       let jobs: any[] = [];
       let failures: any[] = [];
       let totalFiles = selectedFiles.length;
+      const isClaimsCompilation = documentType === 'claims_compilation';
 
       if (uploadMode === 'multipart') {
-        // For multipart mode, use sequential uploads to avoid 413 errors
+        // For multipart mode, use batch upload first. Claims compilation must stay
+        // as one batch because the backend creates one compiled invoice record.
         try {
-          // Try batch upload first
           uploadResponse = await batchUploadInvoicesMultipart(selectedFiles, {
             auto_classify: autoClassify,
             remark: batchRemark || undefined,
@@ -192,6 +193,10 @@ const BatchUpload = () => {
             throw new Error('Upload failed');
           }
         } catch (error: any) {
+          if (isClaimsCompilation) {
+            throw error;
+          }
+
           // If we get a 413 error or any error, fall back to sequential uploads
           const is413Error = error.status === 413 || 
                            error.message?.includes('413') || 
@@ -340,20 +345,32 @@ const BatchUpload = () => {
         setJobProgresses(updatedProgresses);
 
         // Update progress percentage
-        const total = totalFiles;
+        const total = isClaimsCompilation ? Math.max(jobs.length + localFailures.length, 1) : totalFiles;
         const completed = successCount + failedCount;
         const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
         setProgress(progressPercent);
 
         // Update progress text
         if (runningCount > 0) {
-          setProgressText(`${t.documents.batchUploadPage.processing} ${Math.min(completed + 1, total)} of ${total} files`);
-          setProgressDetails(`Processing ${runningCount} file(s)...`);
+          setProgressText(
+            isClaimsCompilation
+              ? 'Processing staff claim batch'
+              : `${t.documents.batchUploadPage.processing} ${Math.min(completed + 1, total)} of ${total} files`
+          );
+          setProgressDetails(
+            isClaimsCompilation
+              ? `Compiling ${totalFiles} uploaded file(s) into one claim invoice...`
+              : `Processing ${runningCount} file(s)...`
+          );
         } else if (allCompleted) {
           setProgress(100);
           setProgressStatus('completed');
           setProgressText(t.documents.batchUploadPage.uploadCompleted);
-          setProgressDetails(`Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+          setProgressDetails(
+            isClaimsCompilation
+              ? `Created ${successCount} compiled claim invoice${failedCount > 0 ? `, ${failedCount} failed` : ''}`
+              : `Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`
+          );
           
           // Build result summary
           const failedFiles: ResultSummary['failed_files'] = updatedProgresses

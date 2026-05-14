@@ -59,6 +59,7 @@ interface Invoice extends ApiInvoice {
   duplicate_count?: number | null;
   // Status tracking fields
   missing_do?: boolean;
+  missing_po?: boolean;
   missing_custom_form?: boolean;
   is_bank_reconciled?: boolean;
   finance_record_id?: number | null;
@@ -163,6 +164,7 @@ const DocumentsListing = () => {
     min_amount: '',
     max_amount: '',
     missing_do: false,
+    missing_po: false,
     missing_custom_form: false,
     not_bank_reconciled: false,
     page: 1,
@@ -289,6 +291,7 @@ const DocumentsListing = () => {
         start_date: filters.start_date || undefined,
         end_date: filters.end_date || undefined,
         missing_do: filters.missing_do || undefined,
+        missing_po: filters.missing_po || undefined,
         missing_custom_form: filters.missing_custom_form || undefined,
         not_bank_reconciled: filters.not_bank_reconciled || undefined,
       });
@@ -423,6 +426,7 @@ const DocumentsListing = () => {
       min_amount: '',
       max_amount: '',
       missing_do: false,
+      missing_po: false,
       missing_custom_form: false,
       not_bank_reconciled: false,
       page: 1,
@@ -803,7 +807,7 @@ const DocumentsListing = () => {
     if (invoice.requires_wht_review) chips.push('WHT');
     if (invoice.requires_k1_review) chips.push('K1');
     if (invoice.requires_sst_review) chips.push('SST');
-    // e-Invoice chip hidden for now (restore when e-invoice column returns)
+    if (invoice.requires_einvoice_review) chips.push('e-Invoice');
     return chips;
   };
 
@@ -1446,6 +1450,15 @@ const DocumentsListing = () => {
                         <label className="flex items-center space-x-2">
                           <input
                             type="checkbox"
+                            checked={filters.missing_po}
+                            onChange={(e) => handleFilterChange('missing_po', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">Missing PO</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
                             checked={filters.missing_custom_form}
                             onChange={(e) => handleFilterChange('missing_custom_form', e.target.checked)}
                             className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
@@ -1983,7 +1996,7 @@ const DocumentsListing = () => {
                       <div className="flex flex-col gap-1">
                       {(() => {
                         // Check for status check indicators first
-                        const hasStatusChecks = invoice.missing_do || invoice.missing_custom_form || invoice.is_bank_reconciled === false;
+                        const hasStatusChecks = invoice.missing_do || invoice.missing_po || invoice.missing_custom_form || invoice.is_bank_reconciled === false;
                         
                         // Show status check indicators
                         const statusChecks = [];
@@ -1995,6 +2008,17 @@ const DocumentsListing = () => {
                               title="Missing DO number"
                             >
                               ⚠️ Missing DO
+                            </span>
+                          );
+                        }
+                        if (invoice.missing_po) {
+                          statusChecks.push(
+                            <span
+                              key="missing_po"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"
+                              title="Missing PO number"
+                            >
+                              ⚠️ Missing PO
                             </span>
                           );
                         }
