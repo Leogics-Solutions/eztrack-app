@@ -166,6 +166,19 @@ const isClaimsCompilationInvoice = (invoice?: Invoice | null) => {
   );
 };
 
+const hasPaymentProofInfo = (invoice?: Invoice | null) => {
+  if (!invoice) return false;
+  const details = invoice.payment_proof_details;
+  return Boolean(
+    invoice.payment_proof_status ||
+    invoice.payment_proof_checked_at ||
+    details?.status ||
+    details?.match_level ||
+    details?.matched_lines?.length ||
+    details?.proof_document_ids?.length
+  );
+};
+
 const getPaymentProofStatusClasses = (status?: string | null) => {
   switch (status) {
     case 'proved':
@@ -187,6 +200,9 @@ const formatPaymentProofStatus = (status?: string | null) => {
   if (!status) return 'No proof';
   return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 };
+
+const getEffectivePaymentProofStatus = (invoice: Invoice) =>
+  invoice.payment_proof_status || invoice.payment_proof_details?.status || null;
 
 const InvoiceDetail = () => {
   const router = useRouter();
@@ -916,13 +932,18 @@ const InvoiceDetail = () => {
   }
 
   const isClaimsCompilation = isClaimsCompilationInvoice(invoice);
+  const showPaymentProof = hasPaymentProofInfo(invoice);
+  const paymentProofStatus = getEffectivePaymentProofStatus(invoice);
   const matchedByLineId = new Map(
-    invoice.payment_proof_details?.matched_lines?.map((match) => [match.line_id, match]) ?? []
+    invoice.payment_proof_details?.matched_lines?.map((match) => [Number(match.line_id), match]) ?? []
   );
+  const proofDocumentIds = new Set(invoice.payment_proof_details?.proof_document_ids ?? []);
   const proofDocuments = linkedDocuments.filter((doc) => {
     const type = doc.document_type?.toLowerCase() || '';
     const ref = doc.reference_number?.toLowerCase() || '';
     return (
+      proofDocumentIds.has(doc.id) ||
+      type === 'bank_proof' ||
       type.includes('payment_proof') ||
       type.includes('bank') ||
       type.includes('credit') ||
@@ -949,17 +970,17 @@ const InvoiceDetail = () => {
         isEditMode={isEditMode}
       />
 
-      {isClaimsCompilation && (
+      {(isClaimsCompilation || showPaymentProof) && (
         <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-4 mb-6">
           <div className="flex flex-wrap items-center gap-3">
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[var(--primary)]/10 text-[var(--primary)]">
-              Staff Claim Compilation
+              {isClaimsCompilation ? 'Staff Claim Compilation' : 'Payment Proof Reconciliation'}
             </span>
             <span className="text-sm text-[var(--muted-foreground)]">
-              {invoice.original_filename || 'Compiled claim invoice'}
+              {invoice.original_filename || invoice.invoice_no || `Invoice #${invoice.id}`}
             </span>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(invoice.payment_proof_status)}`}>
-              {formatPaymentProofStatus(invoice.payment_proof_status)}
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(paymentProofStatus)}`}>
+              {formatPaymentProofStatus(paymentProofStatus)}
             </span>
           </div>
         </div>
@@ -1186,7 +1207,7 @@ const InvoiceDetail = () => {
             />
           )}
 
-          {isClaimsCompilation && (
+          {showPaymentProof && (
             <PaymentProofPanel
               invoice={invoice}
               lineItems={lineItems}
@@ -1364,7 +1385,7 @@ const InvoiceDetail = () => {
             onAutoClassify={handleAutoClassify}
             isClassifying={isClassifying}
             currency={invoice.currency || 'MYR'}
-            isClaimsCompilation={isClaimsCompilation}
+            showPaymentProof={showPaymentProof}
             matchedByLineId={matchedByLineId}
             t={t}
           />
@@ -1529,7 +1550,7 @@ const InvoiceDetail = () => {
                       className="font-medium text-sm hover:underline cursor-pointer"
                       style={{ color: 'var(--primary)' }}
                     >
-                      {doc.reference_number}
+                      {doc.reference_number || `Document #${doc.id}`}
                     </a>
                     <div className="flex items-center gap-3 mt-1">
                       <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
@@ -2220,9 +2241,10 @@ function PaymentProofPanel({
   proofDocuments: LinkedDocument[];
 }) {
   const matchedLines = invoice.payment_proof_details?.matched_lines ?? [];
-  const matchedLineIds = new Set(matchedLines.map((match) => match.line_id));
+  const matchedLineIds = new Set(matchedLines.map((match) => Number(match.line_id)));
   const unmatchedCount = Math.max(lineItems.filter((line) => !matchedLineIds.has(line.id)).length, 0);
   const confidence = invoice.payment_proof_details?.confidence;
+  const status = getEffectivePaymentProofStatus(invoice);
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
@@ -2235,8 +2257,8 @@ function PaymentProofPanel({
             </div>
           )}
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(invoice.payment_proof_status)}`}>
-          {formatPaymentProofStatus(invoice.payment_proof_status)}
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentProofStatusClasses(status)}`}>
+          {formatPaymentProofStatus(status)}
         </span>
       </div>
 
@@ -2262,7 +2284,7 @@ function PaymentProofPanel({
           {proofDocuments.map((doc) => (
             <div key={doc.id} className="flex items-center justify-between gap-3 p-3 border border-[var(--border)] rounded-md">
               <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{doc.reference_number}</div>
+                <div className="text-sm font-medium truncate">{doc.reference_number || `Document #${doc.id}`}</div>
                 <div className="text-xs text-[var(--muted-foreground)]">{doc.document_type}</div>
               </div>
               <a
@@ -2709,7 +2731,7 @@ function LineItemsCard({
   onAutoClassify,
   isClassifying,
   currency,
-  isClaimsCompilation = false,
+  showPaymentProof = false,
   matchedByLineId,
   t,
 }: any) {
@@ -2993,7 +3015,7 @@ function LineItemsCard({
     acc[account.account_type].push(account);
     return acc;
   }, {} as Record<string, ChartOfAccount[]>);
-  const actionColSpan = isClaimsCompilation ? 9 : 8;
+  const actionColSpan = showPaymentProof ? 9 : 8;
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
@@ -3028,7 +3050,7 @@ function LineItemsCard({
               <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
                 {t.documents.invoiceDetailPage.account}
               </th>
-              {isClaimsCompilation && (
+              {showPaymentProof && (
                 <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[220px]">
                   Payment Proof
                 </th>
@@ -3109,7 +3131,7 @@ function LineItemsCard({
                         <span className="text-[var(--muted-foreground)]">-</span>
                       )}
                     </td>
-                    {isClaimsCompilation && (
+                    {showPaymentProof && (
                       <td className="px-4 py-3 text-sm align-top">
                         <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
                       </td>
@@ -3164,7 +3186,7 @@ function LineItemsCard({
                         <span className="text-[var(--muted-foreground)]">-</span>
                       )}
                     </td>
-                    {isClaimsCompilation && (
+                    {showPaymentProof && (
                       <td className="px-4 py-3 text-sm align-top">
                         <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
                       </td>
@@ -3267,7 +3289,7 @@ function LineItemsCard({
               <td className="px-4 py-3 text-sm align-top">
                 <span className="text-[var(--muted-foreground)]">-</span>
               </td>
-              {isClaimsCompilation && (
+              {showPaymentProof && (
                 <td className="px-4 py-3 text-sm align-top">
                   <span className="text-[var(--muted-foreground)]">-</span>
                 </td>

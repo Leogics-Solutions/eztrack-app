@@ -45,9 +45,10 @@ const BatchUpload = () => {
   const [useOcr, setUseOcr] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
-  const [documentType, setDocumentType] = useState<DocumentType>('invoice');
-  const [documentCategory, setDocumentCategory] = useState<string>('invoice');
+  const [documentType, setDocumentType] = useState<DocumentType>('combined_docs');
+  const [documentCategory, setDocumentCategory] = useState<string>('combined_docs');
   const [documentSubCategory, setDocumentSubCategory] = useState<string>('');
+  const [compileBatch, setCompileBatch] = useState(false);
   const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
@@ -88,6 +89,7 @@ const BatchUpload = () => {
   const handleCategoryChange = (category: string) => {
     setDocumentCategory(category);
     setDocumentSubCategory('');
+    if (category !== 'claims_compilation') setCompileBatch(false);
     
     // Map category to document type
     if (category === 'petty_cash') {
@@ -183,6 +185,7 @@ const BatchUpload = () => {
             remark: batchRemark || undefined,
             document_type: documentType,
             document_sub_type: documentSubCategory || undefined,
+            compile_batch: documentType === 'claims_compilation' ? compileBatch : undefined,
           });
           
           if (uploadResponse.success && uploadResponse.data) {
@@ -224,6 +227,7 @@ const BatchUpload = () => {
                   remark: batchRemark || undefined,
                   document_type: documentType,
                   document_sub_type: documentSubCategory || undefined,
+                  compile_batch: documentType === 'claims_compilation' ? compileBatch : undefined,
                 });
                 
                 if (singleFileResponse.success && singleFileResponse.data) {
@@ -482,10 +486,9 @@ const BatchUpload = () => {
                   onChange={(e) => handleCategoryChange(e.target.value)}
                   className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
                 >
-                  <option value="invoice">Invoice</option>
+                  <option value="combined_docs">Invoices / Supporting Docs / Mixed Docs</option>
                   <option value="petty_cash">Petty Cash</option>
                   <option value="claims_compilation">Claims Compilation</option>
-                  <option value="combined_docs">Combined Documents</option>
                   <option value="handwritten_invoice">Handwritten Invoice (Beta)</option>
                 </select>
               </div>
@@ -510,8 +513,26 @@ const BatchUpload = () => {
                 </div>
               )}
             </div>
+            {documentCategory === 'claims_compilation' && (
+              <div className="mt-3">
+                <label className="flex items-start space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={compileBatch}
+                    onChange={(e) => setCompileBatch(e.target.checked)}
+                    className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] mt-0.5"
+                  />
+                  <div>
+                    <span className="text-sm font-medium">Compile into one batch</span>
+                    <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                      When enabled, all uploaded files are compiled into a single combined invoice. When disabled, each file is processed as its own individual claim.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
             <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              {documentType === 'combined_docs' 
+              {documentType === 'combined_docs'
                 ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
                 : documentType === 'petty_cash' && documentSubCategory === 'summary'
                 ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'

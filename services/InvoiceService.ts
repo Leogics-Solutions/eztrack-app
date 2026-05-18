@@ -40,7 +40,7 @@ export interface BankReconciliation {
 
 export interface LinkedDocument {
   id: number;
-  reference_number: string;
+  reference_number?: string | null;
   document_type: string;
   preview_url?: string | null;
 }
@@ -71,6 +71,8 @@ export interface PaymentProofDetails {
   match_level?: string | null;
   confidence?: number | null;
   matched_lines?: PaymentProofMatchedLine[];
+  proof_document_ids?: number[];
+  transactions?: Array<Record<string, unknown>>;
 }
 
 export interface Invoice {
@@ -1355,6 +1357,7 @@ export async function uploadInvoiceMultipart(
     remark?: string;
     document_type?: DocumentType;
     document_sub_type?: string;
+    compile_batch?: boolean;
   }
 ): Promise<BatchUploadResponse> {
   const formData = new FormData();
@@ -1372,6 +1375,9 @@ export async function uploadInvoiceMultipart(
   }
   if (options?.document_sub_type) {
     queryParams.append('document_sub_type', options.document_sub_type);
+  }
+  if (options?.compile_batch !== undefined) {
+    queryParams.append('compile_batch', String(options.compile_batch));
   }
 
   const url = `${BASE_URL}/invoices/upload-multipart${
@@ -1408,6 +1414,7 @@ export async function batchUploadInvoicesMultipart(
     remark?: string;
     document_type?: DocumentType;
     document_sub_type?: string;
+    compile_batch?: boolean;
   }
 ): Promise<BatchUploadResponse> {
   const formData = new FormData();
@@ -1427,6 +1434,9 @@ export async function batchUploadInvoicesMultipart(
   }
   if (options?.document_sub_type) {
     queryParams.append('document_sub_type', options.document_sub_type);
+  }
+  if (options?.compile_batch !== undefined) {
+    queryParams.append('compile_batch', String(options.compile_batch));
   }
 
   const url = `${BASE_URL}/invoices/batch-upload-multipart${
