@@ -227,7 +227,6 @@ const BatchUpload = () => {
                   remark: batchRemark || undefined,
                   document_type: documentType,
                   document_sub_type: documentSubCategory || undefined,
-                  compile_batch: documentType === 'claims_compilation' ? compileBatch : undefined,
                 });
                 
                 if (singleFileResponse.success && singleFileResponse.data) {
