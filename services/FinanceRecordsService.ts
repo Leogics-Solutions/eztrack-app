@@ -157,6 +157,10 @@ export interface ComplianceCheckResponse {
   data: ComplianceCheck | null;
 }
 
+export interface ManualCompliancePassRequest {
+  notes?: string;
+}
+
 interface FinanceRecordsListPayload {
   success?: boolean;
   message?: string;
@@ -338,6 +342,24 @@ export async function runMalaysiaComplianceCheck(recordId: number): Promise<Comp
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to run compliance check');
+  }
+
+  return response.json();
+}
+
+export async function markFinanceRecordCompliancePass(
+  recordId: number,
+  data: ManualCompliancePassRequest = {}
+): Promise<ComplianceCheckResponse> {
+  const response = await fetch(`${BASE_URL}/finance-records/${recordId}/compliance-checks/mark-pass`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to approve compliance manually');
   }
 
   return response.json();

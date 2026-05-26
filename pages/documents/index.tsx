@@ -15,6 +15,7 @@ import {
   getSettings,
   pushInvoicesToBusinessCentral,
   updateInvoice,
+  markInvoiceCompliancePass,
   matchInvoicesAcrossStatements,
   createLink,
   createLinksBulk,
@@ -117,6 +118,7 @@ const DocumentsListing = () => {
   const [savingRemarkId, setSavingRemarkId] = useState<number | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [markingComplianceInvoiceId, setMarkingComplianceInvoiceId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [exportTemplate, setExportTemplate] = useState<'default' | 'xero_bill' | 'xero_sales' | 'autocount'>('default');
@@ -809,6 +811,43 @@ const DocumentsListing = () => {
     if (invoice.requires_sst_review) chips.push('SST');
     if (invoice.requires_einvoice_review) chips.push('e-Invoice');
     return chips;
+  };
+
+  const handleManualCompliancePass = async (invoice: Invoice) => {
+    const notes = window.prompt('Manual compliance approval notes', 'Reviewed manually');
+    if (notes === null) return;
+
+    setMarkingComplianceInvoiceId(invoice.id);
+
+    try {
+      const response = await markInvoiceCompliancePass(invoice.id, { notes: notes.trim() || undefined });
+      const check = response.data;
+
+      setInvoices((currentInvoices) =>
+        currentInvoices.map((currentInvoice) =>
+          currentInvoice.id === invoice.id
+            ? {
+                ...currentInvoice,
+                compliance_check_id: check?.id ?? currentInvoice.compliance_check_id,
+                compliance_status: 'pass',
+                compliance_readiness_score: check?.readiness_score ?? 100,
+                compliance_findings_count: Array.isArray(check?.findings) ? check.findings.length : 0,
+                requires_wht_review: false,
+                requires_k1_review: false,
+                requires_sst_review: false,
+                requires_einvoice_review: false,
+                compliance_action_items: [],
+              }
+            : currentInvoice
+        )
+      );
+
+      showToast(response.message || 'Compliance approved manually', { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to approve compliance manually', { type: 'error' });
+    } finally {
+      setMarkingComplianceInvoiceId(null);
+    }
   };
 
   const getConfidenceColor = (confidence?: string | null) => {
@@ -1991,6 +2030,18 @@ const DocumentsListing = () => {
                           >
                             {invoice.compliance_action_items.length} action item{invoice.compliance_action_items.length === 1 ? '' : 's'}
                           </span>
+                        )}
+                        {invoice.compliance_status !== 'pass' && (
+                          <button
+                            type="button"
+                            onClick={() => handleManualCompliancePass(invoice)}
+                            disabled={markingComplianceInvoiceId === invoice.id}
+                            className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-[var(--hover-bg)]"
+                            title="Mark compliance as passed after manual review"
+                          >
+                            <Check className="h-3 w-3" />
+                            {markingComplianceInvoiceId === invoice.id ? 'Approving...' : 'Approve manually'}
+                          </button>
                         )}
                       </div>
                       <div className="flex flex-col gap-1">

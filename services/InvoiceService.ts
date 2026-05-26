@@ -387,6 +387,21 @@ export interface UpdateInvoiceResponse {
   message: string;
 }
 
+export interface ManualCompliancePassRequest {
+  notes?: string;
+}
+
+export interface ManualCompliancePassResponse {
+  success: boolean;
+  data: {
+    id?: number;
+    status?: 'pass' | 'warning' | 'fail' | 'needs_review';
+    readiness_score?: number | null;
+    findings?: unknown[];
+  } | null;
+  message?: string;
+}
+
 // Payments
 export interface InvoicePayment {
   id: number;
@@ -1105,6 +1120,28 @@ export async function verifyInvoice(invoiceId: number): Promise<VerifyInvoiceRes
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to verify invoice');
+  }
+
+  return response.json();
+}
+
+/**
+ * Mark invoice compliance as passed after manual review
+ * POST /invoices/{invoice_id}/compliance-checks/mark-pass
+ */
+export async function markInvoiceCompliancePass(
+  invoiceId: number,
+  data: ManualCompliancePassRequest = {}
+): Promise<ManualCompliancePassResponse> {
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/compliance-checks/mark-pass`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to approve compliance manually');
   }
 
   return response.json();

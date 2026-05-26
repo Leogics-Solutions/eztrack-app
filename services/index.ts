@@ -57,6 +57,7 @@ export {
   deleteLineItem,
   validateInvoice,
   verifyInvoice,
+  markInvoiceCompliancePass,
   addPayment,
   batchUploadInvoices,
   batchUploadInvoicesMultipart,
@@ -92,6 +93,8 @@ export type {
   VerifyInvoiceVerification,
   VerifyInvoiceData,
   VerifyInvoiceResponse,
+  ManualCompliancePassRequest,
+  ManualCompliancePassResponse,
   AddLineItemRequest,
   AddLineItemResponse,
   UpdateLineItemRequest,
@@ -263,6 +266,7 @@ export {
   updateCounterparty,
   runMalaysiaComplianceCheck,
   getLatestComplianceCheck,
+  markFinanceRecordCompliancePass,
 } from './FinanceRecordsService';
 
 export type {
@@ -285,6 +289,7 @@ export type {
   CounterpartiesResponse,
   EntityTaxProfileResponse,
   ComplianceCheckResponse,
+  ManualCompliancePassRequest as FinanceRecordManualCompliancePassRequest,
 } from './FinanceRecordsService';
 
 export type {
