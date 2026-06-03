@@ -363,6 +363,14 @@ export interface PaymentGatewayEndToEndReconciliationResponse {
   results: PaymentGatewayEndToEndReconciliationRow[];
 }
 
+export type PaymentGatewayEndToEndExportFormat = 'csv' | 'xlsx';
+
+export interface PaymentGatewayEndToEndReconciliationExportResponse {
+  blob: Blob;
+  contentType: string | null;
+  filename: string | null;
+}
+
 export interface DeleteAllBankReconciliationLinksResponse {
   deleted_count: number;
 }
@@ -667,6 +675,36 @@ export async function getPaymentGatewayEndToEndReconciliation(
   }
 
   return response.json();
+}
+
+export async function exportPaymentGatewayEndToEndReconciliation(
+  batchId: number,
+  params: LedgerCrossCheckParams,
+  format: PaymentGatewayEndToEndExportFormat = 'csv'
+): Promise<PaymentGatewayEndToEndReconciliationExportResponse> {
+  const query = appendParams({ ...params, format });
+  const response = await fetch(
+    `${BASE_URL}/payment-gateways/reconciliations/${batchId}/end-to-end-reconciliation/export?${query}`,
+    { method: 'GET', headers: getScopedHeaders() }
+  );
+
+  if (!response.ok) {
+    return parseJsonError(response, 'Failed to export end-to-end payment gateway reconciliation');
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type');
+  const disposition = response.headers.get('Content-Disposition');
+  let filename: string | null = null;
+
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  return { blob, contentType, filename };
 }
 
 export async function runPaymentGatewayEndToEndReconciliation(

@@ -8,6 +8,7 @@ import {
   autoReconcileBank,
   batchUploadBankStatements,
   deleteAllPaymentGatewayBankReconciliationLinks,
+  exportPaymentGatewayEndToEndReconciliation,
   getLatestPaymentGatewayEndToEndReconciliation,
   getPaymentGatewayReconciliation,
   listBankLedgerReconciliations,
@@ -22,12 +23,13 @@ import {
   type BankStatement,
   type PaymentGatewayBankReconciliationLink,
   type PaymentGatewayBatch,
+  type PaymentGatewayEndToEndExportFormat,
   type PaymentGatewayEndToEndReconciliationResponse,
   type PaymentGatewayFile,
   type PaymentGatewaySettlementRow,
   type PaymentGatewayTransactionRow,
 } from "@/services";
-import { ArrowLeft, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 
@@ -294,6 +296,7 @@ export default function PaymentGatewayReconciliationDetail() {
   const [isRowsLoading, setIsRowsLoading] = useState(false);
   const [isReconcilingBank, setIsReconcilingBank] = useState(false);
   const [isCrossCheckingLedger, setIsCrossCheckingLedger] = useState(false);
+  const [exportingEndToEndFormat, setExportingEndToEndFormat] = useState<PaymentGatewayEndToEndExportFormat | null>(null);
   const [isLoadingLatestEndToEnd, setIsLoadingLatestEndToEnd] = useState(false);
   const [isClearingBankLinks, setIsClearingBankLinks] = useState(false);
   const [showBankStatementUploadModal, setShowBankStatementUploadModal] = useState(false);
@@ -368,6 +371,14 @@ export default function PaymentGatewayReconciliationDetail() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId, detail, selectedOrganizationId, statusFilter]);
+
+  useEffect(() => {
+    setSelectedBankLedgerBatchId((prev) => {
+      if (bankLedgerBatches.length === 0) return null;
+      if (prev && bankLedgerBatches.some((ledgerBatch) => ledgerBatch.id === prev)) return prev;
+      return bankLedgerBatches[0]?.id || null;
+    });
+  }, [bankLedgerBatches, selectedBankLedgerBatchId]);
 
   const masterRows = useMemo(() => {
     const settlementByTransactionId = new Map<string, PaymentGatewaySettlementRow>();
@@ -532,7 +543,11 @@ export default function PaymentGatewayReconciliationDetail() {
       const response = await listBankLedgerReconciliations({ page: 1, page_size: 100 });
       const batches = response.data || [];
       setBankLedgerBatches(batches);
-      setSelectedBankLedgerBatchId((prev) => prev || batches[0]?.id || null);
+      setSelectedBankLedgerBatchId((prev) => {
+        if (batches.length === 0) return null;
+        if (prev && batches.some((ledgerBatch) => ledgerBatch.id === prev)) return prev;
+        return batches[0]?.id || null;
+      });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load bank ledger batches', { type: 'error' });
     }
@@ -570,10 +585,32 @@ export default function PaymentGatewayReconciliationDetail() {
     }
   }
 
+  function getEndToEndReportParams() {
+    const validBankLedgerBatchId = getValidSelectedBankLedgerBatchId();
+    if (!validBankLedgerBatchId) {
+      throw new Error('Select a valid bank ledger batch');
+    }
+
+    return {
+      bank_ledger_batch_id: validBankLedgerBatchId,
+      bank_statement_ids: selectedEndToEndBankStatementId === 'all' ? undefined : [selectedEndToEndBankStatementId],
+      date_tolerance_days: ledgerDateToleranceDays,
+      amount_tolerance_pct: ledgerAmountTolerancePct,
+    };
+  }
+
+  function getValidSelectedBankLedgerBatchId() {
+    if (!selectedBankLedgerBatchId) return null;
+    return bankLedgerBatches.some((ledgerBatch) => ledgerBatch.id === selectedBankLedgerBatchId)
+      ? selectedBankLedgerBatchId
+      : null;
+  }
+
   async function handleEndToEndReconciliation() {
     if (!batchId) return;
-    if (!selectedBankLedgerBatchId) {
-      showToast('Select a bank ledger batch to cross-check against', { type: 'error' });
+    const validBankLedgerBatchId = getValidSelectedBankLedgerBatchId();
+    if (!validBankLedgerBatchId) {
+      showToast('Select a valid bank ledger batch to cross-check against', { type: 'error' });
       return;
     }
     if (selectedEndToEndBankStatementId !== 'all' && !selectedEndToEndBankStatementId) {
@@ -584,18 +621,51 @@ export default function PaymentGatewayReconciliationDetail() {
     setIsCrossCheckingLedger(true);
     setEndToEndResult(null);
     try {
-      const response = await runPaymentGatewayEndToEndReconciliation(batchId, {
-        bank_ledger_batch_id: selectedBankLedgerBatchId,
-        bank_statement_ids: selectedEndToEndBankStatementId === 'all' ? undefined : [selectedEndToEndBankStatementId],
-        date_tolerance_days: ledgerDateToleranceDays,
-        amount_tolerance_pct: ledgerAmountTolerancePct,
-      });
+      const response = await runPaymentGatewayEndToEndReconciliation(batchId, getEndToEndReportParams());
       setEndToEndResult(response);
       showToast('End-to-end reconciliation report saved', { type: 'success' });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load end-to-end reconciliation report', { type: 'error' });
     } finally {
       setIsCrossCheckingLedger(false);
+    }
+  }
+
+  async function handleExportEndToEndReconciliation(format: PaymentGatewayEndToEndExportFormat) {
+    if (!batchId) return;
+    const validBankLedgerBatchId = getValidSelectedBankLedgerBatchId();
+    if (!validBankLedgerBatchId) {
+      showToast('Select a valid bank ledger batch to export the end-to-end report', { type: 'error' });
+      return;
+    }
+    if (bankStatements.length === 0) {
+      showToast('Upload at least one bank statement before exporting the end-to-end report', { type: 'error' });
+      return;
+    }
+
+    setExportingEndToEndFormat(format);
+    try {
+      const { blob, filename } = await exportPaymentGatewayEndToEndReconciliation(batchId, getEndToEndReportParams(), format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .slice(0, 15);
+      link.download = filename || `payment_gateway_end_to_end_batch_${batchId}_${timestamp}.${format}`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`End-to-end reconciliation report exported to ${format === 'csv' ? 'CSV' : 'Excel'}`, { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to export end-to-end reconciliation report', { type: 'error' });
+    } finally {
+      setExportingEndToEndFormat(null);
     }
   }
 
@@ -1022,12 +1092,22 @@ export default function PaymentGatewayReconciliationDetail() {
                   <button
                     type="button"
                     onClick={handleEndToEndReconciliation}
-                    disabled={isCrossCheckingLedger || !selectedBankLedgerBatchId || bankStatements.length === 0}
+                    disabled={isCrossCheckingLedger || !selectedLedgerBatch || bankStatements.length === 0}
                     className="flex items-center gap-2 rounded-lg px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
                   >
                     <Sparkles className="h-4 w-4" />
                     {isCrossCheckingLedger ? 'Loading...' : 'Run End-To-End Report'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportEndToEndReconciliation('xlsx')}
+                    disabled={exportingEndToEndFormat !== null || isCrossCheckingLedger || !selectedLedgerBatch || bankStatements.length === 0}
+                    className="flex items-center gap-2 rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                  >
+                    <Download className="h-4 w-4" />
+                    {exportingEndToEndFormat === 'xlsx' ? 'Exporting Excel...' : 'Export Excel'}
                   </button>
                   {isLoadingLatestEndToEnd && (
                     <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Loading latest saved report...</span>
