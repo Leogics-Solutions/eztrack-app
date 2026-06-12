@@ -24,8 +24,10 @@ export interface Translations {
   // Navigation
   nav: {
     dashboard: string;
-    jobs: string;
     documents: string;
+    accounting: string;
+    operations: string;
+    jobs: string;
     supportingDocuments: string;
     settlementDocuments: string;
     bankStatements: string;
