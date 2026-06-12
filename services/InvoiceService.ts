@@ -163,6 +163,10 @@ export interface Invoice {
       currency?: string;
     };
   }>;
+  // Project assignment
+  project_id?: number | null;
+  project_name?: string | null;
+  project_code?: string | null;
 }
 
 export interface UploadInvoiceResponse {
@@ -176,6 +180,9 @@ export interface UploadIntentRequest {
   filename: string;
   content_type: string;
   size_bytes?: number;
+  document_type?: DocumentType;
+  direction?: DocumentDirection;
+  project_id?: number | null;
 }
 
 export interface UploadIntentResponse {
@@ -232,6 +239,7 @@ export interface ListInvoicesParams {
   missing_po?: boolean;
   missing_custom_form?: boolean;
   not_bank_reconciled?: boolean;
+  project_id?: number;
 }
 
 export interface ListInvoicesData {
@@ -379,6 +387,7 @@ export interface UpdateInvoiceRequest {
   tags?: string;
   currency?: string;
   exchange_rate?: number;
+  project_id?: number | null;
 }
 
 export interface UpdateInvoiceResponse {
@@ -516,6 +525,8 @@ export interface BatchUploadIntentFileMeta {
   filename: string;
   content_type: string;
   size_bytes: number;
+  direction?: DocumentDirection;
+  project_id?: number | null;
 }
 
 export interface BatchUploadIntentItem {
@@ -813,6 +824,8 @@ export async function uploadInvoice(
     auto_classify?: boolean;
     document_type?: DocumentType;
     document_sub_type?: string;
+    direction?: DocumentDirection;
+    project_id?: number;
   }
 ): Promise<UploadInvoiceResponse> {
   const formData = new FormData();
@@ -826,6 +839,12 @@ export async function uploadInvoice(
   }
   if (options?.document_sub_type) {
     queryParams.append('document_sub_type', options.document_sub_type);
+  }
+  if (options?.direction) {
+    queryParams.append('direction', options.direction);
+  }
+  if (options?.project_id !== undefined) {
+    queryParams.append('project_id', String(options.project_id));
   }
 
   const url = `${BASE_URL}/invoices/upload${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -850,12 +869,20 @@ export async function uploadInvoice(
  * POST /invoices/upload-intent
  */
 export async function createInvoiceUploadIntent(
-  file: File
+  file: File,
+  options?: {
+    document_type?: DocumentType;
+    direction?: DocumentDirection;
+    project_id?: number;
+  }
 ): Promise<UploadIntentResponse> {
   const body: UploadIntentRequest = {
     filename: file.name,
     content_type: file.type || 'application/octet-stream',
     size_bytes: file.size,
+    document_type: options?.document_type,
+    direction: options?.direction,
+    project_id: options?.project_id,
   };
 
   const response = await fetch(`${BASE_URL}/invoices/upload-intent`, {
@@ -935,10 +962,15 @@ export async function confirmInvoiceUpload(
  */
 export async function uploadInvoiceViaS3(
   file: File,
-  options?: { auto_classify?: boolean }
+  options?: {
+    auto_classify?: boolean;
+    document_type?: DocumentType;
+    direction?: DocumentDirection;
+    project_id?: number;
+  }
 ): Promise<ConfirmUploadResponse> {
   // Step 1: Create upload intent
-  const intentResponse = await createInvoiceUploadIntent(file);
+  const intentResponse = await createInvoiceUploadIntent(file, options);
   const { document_id, upload_url, required_headers } = intentResponse.data;
 
   // Step 2: Upload to S3
@@ -1016,6 +1048,9 @@ export async function listInvoices(
   }
   if (params?.not_bank_reconciled !== undefined) {
     queryParams.append('not_bank_reconciled', params.not_bank_reconciled.toString());
+  }
+  if (params?.project_id !== undefined) {
+    queryParams.append('project_id', params.project_id.toString());
   }
 
   const url = `${BASE_URL}/invoices${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1318,6 +1353,8 @@ export async function batchUploadInvoices(
     remark?: string;
     document_type?: DocumentType;
     document_sub_type?: string;
+    direction?: DocumentDirection;
+    project_id?: number;
   }
 ): Promise<BatchUploadResponse> {
   // Step 1: Get presigned URLs for all files
@@ -1325,6 +1362,8 @@ export async function batchUploadInvoices(
     filename: f.name,
     content_type: f.type || 'application/octet-stream',
     size_bytes: f.size,
+    direction: options?.direction,
+    project_id: options?.project_id,
   }));
 
   const queryParams = new URLSearchParams();
@@ -1336,6 +1375,9 @@ export async function batchUploadInvoices(
   }
   if (options?.document_type) {
     queryParams.append('document_type', options.document_type);
+  }
+  if (options?.document_sub_type) {
+    queryParams.append('document_sub_type', options.document_sub_type);
   }
 
   const intentUrl = `${BASE_URL}/invoices/batch-upload${queryParams.toString() ? `?${queryParams.toString()}` : ''
@@ -1395,6 +1437,8 @@ export async function uploadInvoiceMultipart(
     document_type?: DocumentType;
     document_sub_type?: string;
     compile_batch?: boolean;
+    direction?: DocumentDirection;
+    project_id?: number;
   }
 ): Promise<BatchUploadResponse> {
   const formData = new FormData();
@@ -1415,6 +1459,12 @@ export async function uploadInvoiceMultipart(
   }
   if (options?.compile_batch !== undefined) {
     queryParams.append('compile_batch', String(options.compile_batch));
+  }
+  if (options?.direction) {
+    queryParams.append('direction', options.direction);
+  }
+  if (options?.project_id !== undefined) {
+    queryParams.append('project_id', String(options.project_id));
   }
 
   const url = `${BASE_URL}/invoices/upload-multipart${
@@ -1452,6 +1502,8 @@ export async function batchUploadInvoicesMultipart(
     document_type?: DocumentType;
     document_sub_type?: string;
     compile_batch?: boolean;
+    direction?: DocumentDirection;
+    project_id?: number;
   }
 ): Promise<BatchUploadResponse> {
   const formData = new FormData();
@@ -1474,6 +1526,12 @@ export async function batchUploadInvoicesMultipart(
   }
   if (options?.compile_batch !== undefined) {
     queryParams.append('compile_batch', String(options.compile_batch));
+  }
+  if (options?.direction) {
+    queryParams.append('direction', options.direction);
+  }
+  if (options?.project_id !== undefined) {
+    queryParams.append('project_id', String(options.project_id));
   }
 
   const url = `${BASE_URL}/invoices/batch-upload-multipart${

@@ -43,6 +43,7 @@ interface Filters {
   date_from: string;
   date_to: string;
   vendor_id: string;
+  project_id: string;
   status: string[];
 }
 
@@ -53,6 +54,7 @@ export default function Home() {
     date_from: '',
     date_to: '',
     vendor_id: '',
+    project_id: '',
     status: ['draft', 'validated', 'posted'],
   });
 
@@ -70,6 +72,7 @@ export default function Home() {
           date_from: filters.date_from || undefined,
           date_to: filters.date_to || undefined,
           vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
+          project_id: filters.project_id ? Number(filters.project_id) : undefined,
           status: filters.status,
         });
         setDashboard(response.data);
@@ -166,6 +169,7 @@ export default function Home() {
       date_from: '',
       date_to: '',
       vendor_id: '',
+      project_id: '',
       status: ['draft', 'validated', 'posted'],
     });
   };
@@ -178,6 +182,7 @@ export default function Home() {
   const statusDistribution = dashboard?.charts.status_distribution || [];
   const recentLogs = dashboard?.recent_activity || [];
   const vendorOptions = dashboard?.vendor_filter_options || [];
+  const projectOptions = dashboard?.project_filter_options || [];
 
   const categoryChartData = {
     labels: categoryData.map(item => item.category),
@@ -298,7 +303,7 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
             {/* Date From */}
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
@@ -353,6 +358,30 @@ export default function Home() {
                 <option value="">{t.dashboard.filters.allVendors}</option>
                 {vendorOptions.map(vendor => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Project Filter */}
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+                Project
+              </label>
+              <select
+                value={filters.project_id}
+                onChange={(e) => handleFilterChange('project_id', e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  background: 'var(--background)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                }}
+              >
+                <option value="">All Projects</option>
+                {projectOptions.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code ? `${project.code} - ${project.name}` : project.name}
+                  </option>
                 ))}
               </select>
             </div>

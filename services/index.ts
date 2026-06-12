@@ -208,9 +208,39 @@ export type {
   DashboardStatusDistributionItem,
   DashboardActivityItem,
   DashboardVendorFilterOption,
+  DashboardProjectFilterOption,
   DashboardCustomerTotalItem,
   DashboardCashflowItem,
+  DashboardProjectProfitabilityItem,
 } from './DashboardService';
+
+// Project Service
+export {
+  listProjects,
+  getProject,
+  createProject,
+  updateProject,
+  deleteProject,
+  getProjectReport,
+  exportProjectReportExcel,
+  normalizeProjects,
+  projectDisplayName,
+} from './ProjectService';
+
+export type {
+  Project,
+  ListProjectsParams,
+  ListProjectsData,
+  ListProjectsResponse,
+  CreateProjectRequest,
+  UpdateProjectRequest,
+  ProjectResponse,
+  DeleteProjectResponse,
+  ProjectReportParams,
+  ProjectReportRow,
+  ProjectReportResponse,
+  ProjectReportExcelResponse,
+} from './ProjectService';
 
 // Chart of Accounts Service
 export {

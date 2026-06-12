@@ -6,7 +6,15 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
 import { InvoiceScanner } from "@/components/InvoiceScanner";
-import { uploadInvoice, DocumentType } from "@/services";
+import { ProjectSelect } from "@/components/ProjectSelect";
+import {
+  uploadInvoice,
+  listProjects,
+  normalizeProjects,
+  type DocumentType,
+  type Project,
+} from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
 interface Vendor {
@@ -17,6 +25,7 @@ interface Vendor {
 const NewInvoice = () => {
   const router = useRouter();
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -26,6 +35,9 @@ const NewInvoice = () => {
   const [documentType, setDocumentType] = useState<DocumentType>('auto');
   const [documentCategory, setDocumentCategory] = useState<string>('auto');
   const [documentSubCategory, setDocumentSubCategory] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [remark, setRemark] = useState('');
   const [scannerSession, setScannerSession] = useState<any>(null);
@@ -51,6 +63,10 @@ const NewInvoice = () => {
     loadVendors();
   }, []);
 
+  useEffect(() => {
+    loadProjects();
+  }, [selectedOrganizationId]);
+
   const loadVendors = async () => {
     // TODO: Replace with actual API call
     setVendors([
@@ -58,6 +74,17 @@ const NewInvoice = () => {
       { id: 2, name: 'Another Vendor Co' },
       { id: 3, name: 'Tech Solutions Inc' },
     ]);
+  };
+
+  const loadProjects = async () => {
+    try {
+      setProjectsError(null);
+      const response = await listProjects({ page: 1, page_size: 100, active_only: true });
+      setProjects(normalizeProjects(response));
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : 'Failed to load projects');
+      setProjects([]);
+    }
   };
 
   // Check if AI mode is enabled
@@ -202,6 +229,7 @@ const NewInvoice = () => {
         auto_classify: autoClassify,
         document_type: documentType,
         document_sub_type: documentSubCategory || undefined,
+        project_id: selectedProjectId ? Number(selectedProjectId) : undefined,
       });
 
       if (timerRef.current) {
@@ -271,11 +299,11 @@ const NewInvoice = () => {
             </div>
           </div>
 
-          {/* Document Type */}
+          {/* Document Type and Project */}
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">Document Type</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <div>
+                <label className="block text-sm font-medium mb-2">Document Type</label>
                 <select
                   value={documentCategory}
                   onChange={(e) => handleCategoryChange(e.target.value)}
@@ -286,9 +314,34 @@ const NewInvoice = () => {
                   <option value="petty_cash">Petty Cash</option>
                   <option value="claims_compilation">Claims Compilation</option>
                 </select>
+                <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+                  {documentType === 'petty_cash' && documentSubCategory === 'summary'
+                    ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'petty_cash'
+                    ? 'Petty cash documents skip summary validation.'
+                    : documentType === 'claims_compilation' && documentSubCategory === 'director'
+                    ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'claims_compilation' && documentSubCategory === 'staff'
+                    ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'claims_compilation'
+                    ? 'Claims compilation processes scanned multi-receipt PDFs.'
+                    : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
+                  }
+                </small>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Project</label>
+                <ProjectSelect
+                  value={selectedProjectId}
+                  projects={projects}
+                  onChange={setSelectedProjectId}
+                  onProjectCreated={(project) => setProjects((current) => [...current, project])}
+                  helperText={projectsError || 'Assigns the uploaded invoice to a project.'}
+                />
               </div>
               {(documentCategory === 'petty_cash' || documentCategory === 'claims_compilation') && (
                 <div>
+                  <label className="block text-sm font-medium mb-2">Sub-category</label>
                   <select
                     value={documentSubCategory}
                     onChange={(e) => handleSubCategoryChange(e.target.value)}
@@ -308,20 +361,6 @@ const NewInvoice = () => {
                 </div>
               )}
             </div>
-            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              {documentType === 'petty_cash' && documentSubCategory === 'summary'
-                ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'petty_cash'
-                ? 'Petty cash documents skip summary validation.'
-                : documentType === 'claims_compilation' && documentSubCategory === 'director'
-                ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'claims_compilation' && documentSubCategory === 'staff'
-                ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'claims_compilation'
-                ? 'Claims compilation processes scanned multi-receipt PDFs.'
-                : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
-              }
-            </small>
           </div>
 
           {/* Auto-classify checkbox */}

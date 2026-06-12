@@ -5,7 +5,18 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
-import { batchUploadInvoices, batchUploadInvoicesMultipart, uploadInvoiceMultipart, getBatchJobStatus, DocumentType } from "@/services";
+import { ProjectSelect } from "@/components/ProjectSelect";
+import {
+  batchUploadInvoices,
+  batchUploadInvoicesMultipart,
+  uploadInvoiceMultipart,
+  getBatchJobStatus,
+  listProjects,
+  normalizeProjects,
+  type DocumentType,
+  type Project,
+} from "@/services";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 interface JobProgress {
   jobId: string;
@@ -42,9 +53,13 @@ interface ResultSummary {
 const BatchUpload = () => {
   const router = useRouter();
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
   const [useOcr, setUseOcr] = useState(true);
   const [autoClassify, setAutoClassify] = useState(true);
   const [batchRemark, setBatchRemark] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>('combined_docs');
   const [documentCategory, setDocumentCategory] = useState<string>('combined_docs');
   const [documentSubCategory, setDocumentSubCategory] = useState<string>('');
@@ -80,6 +95,20 @@ const BatchUpload = () => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setProjectsError(null);
+        const response = await listProjects({ page: 1, page_size: 100, active_only: true });
+        setProjects(normalizeProjects(response));
+      } catch (error) {
+        setProjectsError(error instanceof Error ? error.message : 'Failed to load projects');
+      }
+    };
+
+    loadProjects();
+  }, [selectedOrganizationId]);
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles(files);
@@ -175,6 +204,7 @@ const BatchUpload = () => {
       let failures: any[] = [];
       let totalFiles = selectedFiles.length;
       const isClaimsCompilation = documentType === 'claims_compilation';
+      const projectId = selectedProjectId ? Number(selectedProjectId) : undefined;
 
       if (uploadMode === 'multipart') {
         // For multipart mode, use batch upload first. Claims compilation must stay
@@ -186,6 +216,7 @@ const BatchUpload = () => {
             document_type: documentType,
             document_sub_type: documentSubCategory || undefined,
             compile_batch: documentType === 'claims_compilation' ? compileBatch : undefined,
+            project_id: projectId,
           });
           
           if (uploadResponse.success && uploadResponse.data) {
@@ -227,6 +258,7 @@ const BatchUpload = () => {
                   remark: batchRemark || undefined,
                   document_type: documentType,
                   document_sub_type: documentSubCategory || undefined,
+                  project_id: projectId,
                 });
                 
                 if (singleFileResponse.success && singleFileResponse.data) {
@@ -266,6 +298,7 @@ const BatchUpload = () => {
           remark: batchRemark || undefined,
           document_type: documentType,
           document_sub_type: documentSubCategory || undefined,
+          project_id: projectId,
         });
         
         if (!uploadResponse.success || !uploadResponse.data) {
@@ -475,11 +508,11 @@ const BatchUpload = () => {
             </label>
           </div>
 
-          {/* Document Type */}
+          {/* Document Type and Project */}
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">Document Type</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <div>
+                <label className="block text-sm font-medium mb-2">Document Type</label>
                 <select
                   value={documentCategory}
                   onChange={(e) => handleCategoryChange(e.target.value)}
@@ -490,9 +523,38 @@ const BatchUpload = () => {
                   <option value="claims_compilation">Claims Compilation</option>
                   <option value="handwritten_invoice">Handwritten Invoice (Beta)</option>
                 </select>
+                <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
+                  {documentType === 'combined_docs'
+                    ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
+                    : documentType === 'petty_cash' && documentSubCategory === 'summary'
+                    ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'petty_cash'
+                    ? 'Petty cash documents skip summary validation.'
+                    : documentType === 'claims_compilation' && documentSubCategory === 'director'
+                    ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'claims_compilation' && documentSubCategory === 'staff'
+                    ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
+                    : documentType === 'claims_compilation'
+                    ? 'Claims compilation processes scanned multi-receipt PDFs.'
+                    : documentType === 'handwritten_invoice'
+                    ? 'Handwritten Invoice (Beta): Processes handwritten invoices using specialized OCR and arithmetic reconciliation workflows.'
+                    : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
+                  }
+                </small>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Project</label>
+                <ProjectSelect
+                  value={selectedProjectId}
+                  projects={projects}
+                  onChange={setSelectedProjectId}
+                  onProjectCreated={(project) => setProjects((current) => [...current, project])}
+                  helperText={projectsError || 'Assigns every uploaded invoice in this batch to the selected project.'}
+                />
               </div>
               {(documentCategory === 'petty_cash' || documentCategory === 'claims_compilation') && (
                 <div>
+                  <label className="block text-sm font-medium mb-2">Sub-category</label>
                   <select
                     value={documentSubCategory}
                     onChange={(e) => handleSubCategoryChange(e.target.value)}
@@ -530,24 +592,6 @@ const BatchUpload = () => {
                 </label>
               </div>
             )}
-            <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
-              {documentType === 'combined_docs'
-                ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
-                : documentType === 'petty_cash' && documentSubCategory === 'summary'
-                ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'petty_cash'
-                ? 'Petty cash documents skip summary validation.'
-                : documentType === 'claims_compilation' && documentSubCategory === 'director'
-                ? 'Director Claims: Processes director claims compilation documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'claims_compilation' && documentSubCategory === 'staff'
-                ? 'Staff Claims: Processes staff claims compilation documents. Sub-category will be saved to invoice remarks.'
-                : documentType === 'claims_compilation'
-                ? 'Claims compilation processes scanned multi-receipt PDFs.'
-                : documentType === 'handwritten_invoice'
-                ? 'Handwritten Invoice (Beta): Processes handwritten invoices using specialized OCR and arithmetic reconciliation workflows.'
-                : 'Select the document type. Petty cash documents skip summary validation. Claims compilation processes scanned multi-receipt PDFs.'
-              }
-            </small>
           </div>
 
           <FileUpload

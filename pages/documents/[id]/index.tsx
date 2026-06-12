@@ -3,6 +3,7 @@
 import { AppLayout } from "@/components/layout";
 import { InvoiceHeader } from "@/components/invoice/InvoiceHeader";
 import { PaymentValidationResult } from "@/components/invoice/PaymentValidationResult";
+import { ProjectSelect } from "@/components/ProjectSelect";
 import { useLanguage } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
@@ -23,6 +24,8 @@ import {
   listChartOfAccounts,
   deleteLink,
   getStatementLinks,
+  listProjects,
+  normalizeProjects,
   type Invoice as ApiInvoice,
   type UpdateInvoiceRequest,
   type AddLineItemRequest,
@@ -35,8 +38,10 @@ import {
   type MatchInvoicesAcrossStatementsResponse,
   type ChartOfAccount,
   type LinkedDocument,
+  type Project,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
+import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
 // Extend backend Invoice type with extra optional fields used by UI
@@ -209,12 +214,14 @@ const InvoiceDetail = () => {
   const { id } = router.query;
   const { t } = useLanguage();
   const { showToast } = useToast();
+  const { selectedOrganizationId } = useOrganization();
 
   // State
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,6 +252,20 @@ const InvoiceDetail = () => {
     }
     loadBusinessCentralConnection();
   }, [id]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [selectedOrganizationId]);
+
+  const loadProjects = async () => {
+    try {
+      const response = await listProjects({ page: 1, page_size: 100, active_only: true });
+      setProjects(normalizeProjects(response));
+    } catch (error) {
+      console.error('Failed to load projects', error);
+      setProjects([]);
+    }
+  };
 
   // Load reconciliation link ID when invoice has bank reconciliation
   useEffect(() => {
@@ -735,6 +756,9 @@ const InvoiceDetail = () => {
       if ((updatedData as any).remarks !== undefined) {
         payload.remarks = (updatedData as any).remarks;
       }
+      if (updatedData.project_id !== undefined) {
+        payload.project_id = updatedData.project_id;
+      }
       if (updatedData.exchange_rate !== undefined && updatedData.exchange_rate !== null) {
         payload.exchange_rate = updatedData.exchange_rate;
       }
@@ -1175,6 +1199,8 @@ const InvoiceDetail = () => {
           {/* Invoice Information */}
           <InvoiceInformationCard
             invoice={invoice}
+            projects={projects}
+            onProjectCreated={(project: Project) => setProjects((current) => [...current, project])}
             isEditMode={isEditMode}
             onSave={handleSaveInvoice}
             onStatusChange={handleStatusChange}
@@ -1763,6 +1789,8 @@ function VerificationModal({ result, onClose, t }: { result: VerifyInvoiceRespon
 
 function InvoiceInformationCard({
   invoice,
+  projects,
+  onProjectCreated,
   isEditMode,
   onSave,
   onStatusChange,
@@ -1949,6 +1977,28 @@ function InvoiceInformationCard({
         {/* Row 2: Status */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {renderValue('STATUS:', (invoice.status || 'draft').toUpperCase())}
+        </div>
+
+        {/* Row 2.25: Project */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {renderValue('PROJECT:', isEditMode ? (
+            <ProjectSelect
+              value={formData.project_id !== null && formData.project_id !== undefined ? String(formData.project_id) : ''}
+              projects={projects}
+              onChange={(nextProjectId) => {
+                setFormData({
+                  ...formData,
+                  project_id: nextProjectId ? Number(nextProjectId) : null,
+                });
+              }}
+              onProjectCreated={onProjectCreated}
+              selectClassName="w-full px-2 py-1 border border-[var(--border)] rounded bg-white dark:bg-[var(--input)]"
+            />
+          ) : (
+            invoice.project_name
+              ? `${invoice.project_code ? `${invoice.project_code} - ` : ''}${invoice.project_name}`
+              : '-'
+          ))}
         </div>
 
         {/* Row 2.5: Handwriting Information */}

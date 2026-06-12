@@ -31,6 +31,7 @@ export interface Translations {
     bankStatements: string;
     paymentGateways: string;
     supplierStatements: string;
+    projects: string;
     sales: string;
     purchases: string;
     arInvoices: string;

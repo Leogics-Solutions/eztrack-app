@@ -23,9 +23,13 @@ import {
   createSupplierStatementLinksBulk,
   getStatementLinks,
   deleteLink,
+  listProjects,
+  normalizeProjects,
+  projectDisplayName,
   type Invoice as ApiInvoice,
   type InvoiceStatus,
   type DocumentDirection,
+  type Project,
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
@@ -93,15 +97,27 @@ interface Pagination {
 
 type DocumentsDirectionTab = 'all' | 'sales' | 'purchase';
 
-const DocumentsListing = () => {
+interface DocumentsListingProps {
+  initialDirectionTab?: DocumentsDirectionTab;
+  lockDirection?: boolean;
+  pageTitle?: string;
+}
+
+export const DocumentsListing = ({
+  initialDirectionTab = 'all',
+  lockDirection = false,
+  pageTitle,
+}: DocumentsListingProps = {}) => {
   const router = useRouter();
   const { t } = useLanguage();
   const { showToast } = useToast();
   const { selectedOrganizationId } = useOrganization();
+  const resolvedPageTitle = pageTitle || t.documents.title;
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [remarks, setRemarks] = useState<Remark[]>([]);
   const [verifyMap, setVerifyMap] = useState<Record<number, VerifyStatus>>({});
   const [selectedInvoices, setSelectedInvoices] = useState<Set<number>>(new Set());
@@ -160,9 +176,10 @@ const DocumentsListing = () => {
     search: '',
     remark: '',
     vendor_id: '',
+    project_id: '',
     currency: '',
     status: [] as string[],
-    direction_tab: 'all' as DocumentsDirectionTab,
+    direction_tab: initialDirectionTab,
     min_amount: '',
     max_amount: '',
     missing_do: false,
@@ -177,6 +194,20 @@ const DocumentsListing = () => {
     loadData();
     loadBusinessCentralConnection();
   }, [filters, selectedOrganizationId]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [selectedOrganizationId]);
+
+  const loadProjects = async () => {
+    try {
+      const response = await listProjects({ page: 1, page_size: 100, active_only: true });
+      setProjects(normalizeProjects(response));
+    } catch (error) {
+      console.error('Failed to load projects', error);
+      setProjects([]);
+    }
+  };
 
   const loadBusinessCentralConnection = async () => {
     try {
@@ -286,6 +317,7 @@ const DocumentsListing = () => {
             : undefined,
         direction,
         vendor_id: filters.vendor_id ? Number(filters.vendor_id) : undefined,
+        project_id: filters.project_id ? Number(filters.project_id) : undefined,
         currency: filters.currency || undefined,
         min_amount: filters.min_amount ? Number(filters.min_amount) : undefined,
         max_amount: filters.max_amount ? Number(filters.max_amount) : undefined,
@@ -422,9 +454,10 @@ const DocumentsListing = () => {
       search: '',
       remark: '',
       vendor_id: '',
+      project_id: '',
       currency: '',
       status: [],
-      direction_tab: 'all',
+      direction_tab: initialDirectionTab,
       min_amount: '',
       max_amount: '',
       missing_do: false,
@@ -1170,7 +1203,7 @@ const DocumentsListing = () => {
   };
 
   return (
-    <AppLayout pageName={t.documents.title}>
+    <AppLayout pageName={resolvedPageTitle}>
       {isReconModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-3xl mx-4 rounded-lg shadow-lg bg-white dark:bg-[var(--card)] border border-[var(--border)]">
@@ -1434,6 +1467,23 @@ const DocumentsListing = () => {
                     </select>
                   </div>
 
+                  {/* Project */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Project</label>
+                    <select
+                      value={filters.project_id}
+                      onChange={(e) => handleFilterChange('project_id', e.target.value)}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:ring-2 focus:ring-[var(--primary)] outline-none"
+                    >
+                      <option value="">All Projects</option>
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {projectDisplayName(project)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Currency */}
                   <div>
                     <label className="block text-sm font-medium mb-2">{t.documents.filters.currency}</label>
@@ -1565,41 +1615,43 @@ const DocumentsListing = () => {
         )}
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-sm font-medium text-[var(--foreground)]">{t.documents.filters.directionLabel}</span>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { tab: 'all' as const, label: t.documents.filters.directionAll },
-              { tab: 'sales' as const, label: t.nav.sales },
-              { tab: 'purchase' as const, label: t.nav.purchases },
-            ] as const
-          ).map(({ tab, label }) => {
-            const isActive = filters.direction_tab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => handleFilterChange('direction_tab', tab)}
-                className="rounded px-3 py-2 text-sm font-medium transition-colors"
-                style={{
-                  background: isActive ? 'var(--primary)' : 'var(--muted)',
-                  color: isActive ? 'var(--primary-foreground)' : 'var(--foreground)',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+      {!lockDirection && (
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-[var(--foreground)]">{t.documents.filters.directionLabel}</span>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { tab: 'all' as const, label: t.documents.filters.directionAll },
+                { tab: 'sales' as const, label: t.nav.sales },
+                { tab: 'purchase' as const, label: t.nav.purchases },
+              ] as const
+            ).map(({ tab, label }) => {
+              const isActive = filters.direction_tab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => handleFilterChange('direction_tab', tab)}
+                  className="rounded px-3 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    background: isActive ? 'var(--primary)' : 'var(--muted)',
+                    color: isActive ? 'var(--primary-foreground)' : 'var(--foreground)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Table Card */}
       <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
         {/* Header */}
         <div className="p-6 border-b border-[var(--border)] flex flex-wrap justify-between items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold m-0">{t.documents.title}</h2>
+            <h2 className="text-2xl font-bold m-0">{resolvedPageTitle}</h2>
             {totalCount > 0 && (
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 {t.documents.table.showing} {invoices.length} {t.documents.table.of} {totalCount} {t.documents.table.invoices}
@@ -1772,6 +1824,7 @@ const DocumentsListing = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.vendor}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Project</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.documentDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.createdDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
@@ -1833,6 +1886,18 @@ const DocumentsListing = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">{invoice.invoice_no || '-'}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {invoice.project_name ? (
+                      <div className="min-w-[160px]">
+                        <div className="font-medium">{invoice.project_name}</div>
+                        {invoice.project_code && (
+                          <div className="text-xs text-[var(--muted-foreground)]">{invoice.project_code}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[var(--muted-foreground)]">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm">{invoice.invoice_date ? formatDate(invoice.invoice_date) : '-'}</td>
                   <td className="px-4 py-3 text-sm">{invoice.created_at ? formatDate(invoice.created_at) : '-'}</td>
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>

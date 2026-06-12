@@ -11,6 +11,7 @@ export interface DashboardFilters {
   date_from: string | null;
   date_to: string | null;
   vendor_id: number | null;
+  project_id?: number | null;
   status: string[];
 }
 
@@ -61,6 +62,15 @@ export interface DashboardCashflowItem {
   net: number;
 }
 
+export interface DashboardProjectProfitabilityItem {
+  project_id: number | null;
+  project_name: string;
+  project_code?: string | null;
+  sales_total: number;
+  cost_total: number;
+  net_total: number;
+}
+
 export interface DashboardCharts {
   category_breakdown: DashboardCategoryBreakdownItem[];
   vendor_totals: DashboardVendorTotalItem[];
@@ -69,6 +79,7 @@ export interface DashboardCharts {
   monthly_ar_totals: DashboardMonthlyTotalItem[];
   customer_totals: DashboardCustomerTotalItem[];
   monthly_cashflow: DashboardCashflowItem[];
+  project_profitability?: DashboardProjectProfitabilityItem[];
   status_distribution: DashboardStatusDistributionItem[];
 }
 
@@ -85,12 +96,19 @@ export interface DashboardVendorFilterOption {
   name: string;
 }
 
+export interface DashboardProjectFilterOption {
+  id: number;
+  name: string;
+  code?: string | null;
+}
+
 export interface DashboardSummaryData {
   filters: DashboardFilters;
   kpis: DashboardKpis;
   charts: DashboardCharts;
   recent_activity: DashboardActivityItem[];
   vendor_filter_options: DashboardVendorFilterOption[];
+  project_filter_options?: DashboardProjectFilterOption[];
 }
 
 export interface DashboardSummaryResponse {
@@ -104,6 +122,7 @@ export interface DashboardSummaryParams {
   date_from?: string;
   date_to?: string;
   vendor_id?: number;
+  project_id?: number;
   status?: string[];
 }
 
@@ -125,6 +144,9 @@ export async function getDashboardSummary(
   }
   if (params?.vendor_id != null) {
     queryParams.append('vendor_id', String(params.vendor_id));
+  }
+  if (params?.project_id != null) {
+    queryParams.append('project_id', String(params.project_id));
   }
   if (params?.status && params.status.length > 0) {
     queryParams.append('status', params.status.join(','));
