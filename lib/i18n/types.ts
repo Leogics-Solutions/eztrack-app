@@ -754,6 +754,22 @@ export interface Translations {
     integrations: {
       title: string;
       description: string;
+      inputSources: {
+        title: string;
+        description: string;
+      };
+      accountingOutput: {
+        title: string;
+        description: string;
+        adminOnlyNotice: string;
+      };
+      catalog: {
+        configure: string;
+        manage: string;
+        close: string;
+        disabledByAdmin: string;
+        adminRequired: string;
+      };
       businessCentral: {
         title: string;
         description: string;
@@ -823,6 +839,55 @@ export interface Translations {
         savingFolders: string;
         foldersSaved: string;
         foldersSaveFailed: string;
+      };
+      bukku: {
+        title: string;
+        description: string;
+        adminOnly: string;
+        companySubdomain: string;
+        companySubdomainPlaceholder: string;
+        accessToken: string;
+        accessTokenPlaceholder: string;
+        environment: string;
+        production: string;
+        staging: string;
+        dateFrom: string;
+        syncOptions: string;
+        syncAccounts: string;
+        syncContacts: string;
+        syncSalesInvoices: string;
+        syncPurchaseBills: string;
+        testConnection: string;
+        testingConnection: string;
+        saveAndSync: string;
+        saving: string;
+        syncNow: string;
+        syncing: string;
+        disconnect: string;
+        disconnecting: string;
+        disconnectConfirm: string;
+        connected: string;
+        notConnected: string;
+        lastSync: string;
+        mappingCounts: string;
+        readyToPush: string;
+        accounts: string;
+        contacts: string;
+        salesInvoices: string;
+        purchaseBills: string;
+        testSuccess: string;
+        testFailed: string;
+        setupSuccess: string;
+        setupFailed: string;
+        syncSuccess: string;
+        syncFailed: string;
+        disconnectSuccess: string;
+        disconnectFailed: string;
+        fillRequired: string;
+        loading: string;
+        loadingStatus: string;
+        updateCredentials: string;
+        tokenKeepBlank: string;
       };
     };
   };

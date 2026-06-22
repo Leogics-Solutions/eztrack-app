@@ -125,9 +125,14 @@ export function getScopedHeadersForFormData(): Record<string, string> {
   return headers;
 }
 
-
-
-
+/** Turn a relative API asset path into an absolute URL for preview/download links */
+export function resolveApiAssetUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const base = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_URL || 'http://localhost:8000';
+  return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+}
 
 
 

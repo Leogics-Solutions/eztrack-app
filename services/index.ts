@@ -340,6 +340,7 @@ export type {
 // Settings Service
 export {
   getSettings,
+  getEmptySettingsResponse,
   updateSettings,
   isBusinessCentralEnabled,
   getBusinessCentralConnectionCount,
@@ -369,6 +370,37 @@ export type {
   PushInvoicesResponse,
   PushInvoiceDetail,
 } from './SettingsService';
+
+// Bukku Service
+export {
+  listBukkuConnections,
+  getBukkuConnection,
+  getBukkuConnectionStatus,
+  testBukkuConnection,
+  setupBukku,
+  updateBukkuConnection,
+  disableBukku,
+  deleteBukkuConnection,
+  syncBukku,
+  getBukkuSyncLogs,
+} from './BukkuService';
+
+export type {
+  BukkuConnection,
+  BukkuIntegration,
+  BukkuMappingCounts,
+  BukkuConnectionStatus,
+  BukkuTestConnectionRequest,
+  BukkuTestConnectionResponse,
+  BukkuSetupRequest,
+  BukkuSetupResponse,
+  BukkuUpdateConnectionRequest,
+  BukkuSyncRequest,
+  BukkuSyncResponse,
+  BukkuDisableRequest,
+  BukkuDisableResponse,
+  BukkuSyncLogSummary,
+} from './BukkuService';
 
 // Purchase Order Service
 export {

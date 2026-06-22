@@ -4,6 +4,8 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
+import type { BukkuIntegration } from './BukkuService';
 
 // Types
 export interface BusinessCentralConnection {
@@ -51,6 +53,7 @@ export interface DriveIntegration {
 
 export interface IntegrationSettings {
   business_central: BusinessCentralIntegration;
+  bukku?: BukkuIntegration;
   gmail?: GmailIntegration;
   drive?: DriveIntegration;
   xero?: {
@@ -83,40 +86,51 @@ export interface UpdateSettingsRequest {
 
 export type UpdateSettingsResponse = SettingsResponse;
 
-/**
- * Get access token from localStorage
- */
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
+const EMPTY_INTEGRATIONS: IntegrationSettings = {
+  business_central: { enabled: false, connection_count: 0, connections: [] },
+  bukku: { enabled: false, connection_count: 0, connections: [] },
+  gmail: { enabled: false, connection_count: 0, connections: [] },
+  drive: { enabled: false, connection_count: 0, connections: [] },
+};
+
+/** Safe fallback when GET /settings is unavailable */
+export function getEmptySettingsResponse(user?: Partial<UserInfo>): SettingsResponse {
+  return {
+    integrations: EMPTY_INTEGRATIONS,
+    user: {
+      id: user?.id ?? 0,
+      email: user?.email ?? '',
+      full_name: user?.full_name ?? '',
+    },
+  };
 }
 
 /**
  * Get application settings
  * GET /settings
- * Returns integration status and connection information
+ * Returns integration status and connection information, or null on API failure.
  */
-export async function getSettings(): Promise<GetSettingsResponse> {
-  const token = getAccessToken();
+export async function getSettings(): Promise<GetSettingsResponse | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/settings`, {
+      method: 'GET',
+      headers: getScopedHeaders(),
+    });
 
-  if (!token) {
-    throw new Error('No access token found');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      console.warn(
+        'GET /settings failed:',
+        error.message || error.error || response.statusText
+      );
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn('GET /settings failed:', error);
+    return null;
   }
-
-  const response = await fetch(`${BASE_URL}/settings`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.message || error.error || 'Failed to get settings');
-  }
-
-  return response.json();
 }
 
 /**
@@ -124,18 +138,9 @@ export async function getSettings(): Promise<GetSettingsResponse> {
  * PUT /settings
  */
 export async function updateSettings(data: UpdateSettingsRequest): Promise<UpdateSettingsResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/settings`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -230,18 +235,9 @@ export interface DisableBusinessCentralResponse {
 export async function enableBusinessCentral(
   data: EnableBusinessCentralRequest
 ): Promise<EnableBusinessCentralResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/business-central/enable`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -261,18 +257,9 @@ export async function enableBusinessCentral(
 export async function disableBusinessCentral(
   data?: DisableBusinessCentralRequest
 ): Promise<DisableBusinessCentralResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/business-central/disable`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data || {}),
   });
 
@@ -314,18 +301,9 @@ export interface TestConnectionResponse {
 export async function testBusinessCentralConnection(
   data: TestConnectionRequest
 ): Promise<TestConnectionResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/business-central/test-connection`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -365,18 +343,9 @@ export interface PushInvoicesResponse {
 export async function pushInvoicesToBusinessCentral(
   data: PushInvoicesRequest
 ): Promise<PushInvoicesResponse> {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error('No access token found');
-  }
-
   const response = await fetch(`${BASE_URL}/business-central/push`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 

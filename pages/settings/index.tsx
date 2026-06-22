@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { IntegrationsSettingsSection } from "@/components/settings/IntegrationsSettingsSection";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
@@ -37,6 +38,7 @@ import {
 import { useOrganization } from "@/lib/OrganizationContext";
 import {
     getSettings,
+    getEmptySettingsResponse,
     updateSettings,
     enableBusinessCentral,
     disableBusinessCentral,
@@ -63,6 +65,17 @@ import {
     getDriveSettings,
     patchDriveSettings,
 } from "@/services/DriveService";
+import {
+    testBukkuConnection,
+    setupBukku,
+    updateBukkuConnection,
+    syncBukku,
+    disableBukku,
+    getBukkuConnectionStatus,
+    type BukkuConnection,
+    type BukkuConnectionStatus,
+    type BukkuTestConnectionResponse,
+} from "@/services/BukkuService";
 
 // Local view types
 interface SettingsUser {
@@ -156,6 +169,23 @@ const SettingsPage = () => {
     const [bcClientSecret, setBcClientSecret] = useState('');
     const [bcEnvironment, setBcEnvironment] = useState('');
     const [bcCompanyId, setBcCompanyId] = useState('');
+
+    // Bukku integration
+    const [bukkuSubdomain, setBukkuSubdomain] = useState('');
+    const [bukkuAccessToken, setBukkuAccessToken] = useState('');
+    const [bukkuEnvironment, setBukkuEnvironment] = useState<'production' | 'staging'>('production');
+    const [bukkuDateFrom, setBukkuDateFrom] = useState('');
+    const [bukkuSyncAccounts, setBukkuSyncAccounts] = useState(true);
+    const [bukkuSyncContacts, setBukkuSyncContacts] = useState(true);
+    const [bukkuSyncSales, setBukkuSyncSales] = useState(true);
+    const [bukkuSyncPurchase, setBukkuSyncPurchase] = useState(true);
+    const [bukkuTestResult, setBukkuTestResult] = useState<BukkuTestConnectionResponse | null>(null);
+    const [bukkuConnectionStatus, setBukkuConnectionStatus] = useState<BukkuConnectionStatus | null>(null);
+    const [isLoadingBukkuStatus, setIsLoadingBukkuStatus] = useState(false);
+    const [isTestingBukku, setIsTestingBukku] = useState(false);
+    const [isSavingBukku, setIsSavingBukku] = useState(false);
+    const [isSyncingBukku, setIsSyncingBukku] = useState(false);
+    const [isDisconnectingBukku, setIsDisconnectingBukku] = useState(false);
 
     // Modal states
     const [showIndustryModal, setShowIndustryModal] = useState(false);
@@ -760,26 +790,23 @@ const SettingsPage = () => {
         setIsLoadingSettings(true);
         try {
             const response = await getSettings();
-            if (response) {
-                setAppSettings(response);
-            }
+            setAppSettings(
+                response ??
+                    getEmptySettingsResponse({
+                        id: authUser ? Number(authUser.id) : 0,
+                        email: authUser?.email ?? '',
+                        full_name: authUser?.name || authUser?.full_name || authUser?.email || '',
+                    })
+            );
         } catch (error) {
             console.error("Failed to load settings", error);
-            // Set default settings if API fails
-            setAppSettings({
-                integrations: {
-                    business_central: {
-                        enabled: false,
-                        connection_count: 0,
-                        connections: [],
-                    },
-                },
-                user: {
-                    id: 0,
-                    email: '',
-                    full_name: '',
-                },
-            });
+            setAppSettings(
+                getEmptySettingsResponse({
+                    id: authUser ? Number(authUser.id) : 0,
+                    email: authUser?.email ?? '',
+                    full_name: authUser?.name || authUser?.full_name || authUser?.email || '',
+                })
+            );
         } finally {
             setIsLoadingSettings(false);
         }
@@ -804,6 +831,183 @@ const SettingsPage = () => {
     const driveConnections = driveIntegration?.connections ?? [];
     const driveConnectionCount = driveIntegration?.connection_count ?? 0;
     const driveConnected = driveConnectionCount > 0;
+
+    // Bukku: filter connections for the active organization
+    const bukkuConnections: BukkuConnection[] = appSettings?.integrations?.bukku?.connections ?? [];
+    const activeOrgBukkuConnection = useMemo(() => {
+        const orgId = activeOrgId ?? selectedOrganizationId;
+        if (!orgId) return null;
+        return (
+            bukkuConnections.find((c) => c.is_active && c.organization_id === orgId) ??
+            bukkuConnections.find((c) => c.is_active) ??
+            null
+        );
+    }, [bukkuConnections, activeOrgId, selectedOrganizationId]);
+    const bukkuConnected = !!activeOrgBukkuConnection;
+
+    const loadBukkuStatus = useCallback(async (connectionId: number) => {
+        setIsLoadingBukkuStatus(true);
+        try {
+            const status = await getBukkuConnectionStatus(connectionId);
+            setBukkuConnectionStatus(status);
+        } catch (err) {
+            console.error('Failed to load Bukku status', err);
+            setBukkuConnectionStatus(null);
+        } finally {
+            setIsLoadingBukkuStatus(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (activeOrgBukkuConnection) {
+            setBukkuSubdomain(activeOrgBukkuConnection.company_subdomain);
+            setBukkuEnvironment(
+                activeOrgBukkuConnection.environment === 'staging' ? 'staging' : 'production'
+            );
+            setBukkuAccessToken('');
+            void loadBukkuStatus(activeOrgBukkuConnection.id);
+        } else {
+            setBukkuConnectionStatus(null);
+        }
+    }, [activeOrgBukkuConnection, loadBukkuStatus]);
+
+    const handleTestBukkuConnection = async () => {
+        setIsTestingBukku(true);
+        setBukkuTestResult(null);
+        try {
+            const request =
+                activeOrgBukkuConnection && !bukkuAccessToken.trim()
+                    ? { connection_id: activeOrgBukkuConnection.id }
+                    : {
+                          company_subdomain: bukkuSubdomain.trim(),
+                          access_token: bukkuAccessToken.trim(),
+                          environment: bukkuEnvironment,
+                      };
+
+            if (!('connection_id' in request) && (!request.company_subdomain || !request.access_token)) {
+                showNotification(t.settings.integrations.bukku.fillRequired, 'error');
+                return;
+            }
+
+            const result = await testBukkuConnection(request);
+            setBukkuTestResult(result);
+            showNotification(
+                result.status === 'success'
+                    ? t.settings.integrations.bukku.testSuccess
+                    : `${t.settings.integrations.bukku.testFailed}: ${result.message}`,
+                result.status === 'success' ? 'success' : 'error'
+            );
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.bukku.testFailed;
+            setBukkuTestResult({ status: 'error', message });
+            showNotification(message, 'error');
+        } finally {
+            setIsTestingBukku(false);
+        }
+    };
+
+    const handleSaveBukku = async () => {
+        const orgId = activeOrgId ?? selectedOrganizationId;
+        if (!bukkuSubdomain.trim()) {
+            showNotification(t.settings.integrations.bukku.fillRequired, 'error');
+            return;
+        }
+
+        setIsSavingBukku(true);
+        try {
+            if (activeOrgBukkuConnection) {
+                const updatePayload: {
+                    company_subdomain: string;
+                    environment: string;
+                    organization_id: number | null;
+                    access_token?: string;
+                } = {
+                    company_subdomain: bukkuSubdomain.trim(),
+                    environment: bukkuEnvironment,
+                    organization_id: orgId,
+                };
+                if (bukkuAccessToken.trim()) {
+                    updatePayload.access_token = bukkuAccessToken.trim();
+                }
+                await updateBukkuConnection(activeOrgBukkuConnection.id, updatePayload);
+                await syncBukku({
+                    connection_id: activeOrgBukkuConnection.id,
+                    date_from: bukkuDateFrom.trim() || null,
+                    sync_accounts: bukkuSyncAccounts,
+                    sync_contacts: bukkuSyncContacts,
+                    sync_sales_invoices: bukkuSyncSales,
+                    sync_purchase_bills: bukkuSyncPurchase,
+                });
+            } else {
+                if (!bukkuAccessToken.trim()) {
+                    showNotification(t.settings.integrations.bukku.fillRequired, 'error');
+                    return;
+                }
+                await setupBukku({
+                    company_subdomain: bukkuSubdomain.trim(),
+                    access_token: bukkuAccessToken.trim(),
+                    environment: bukkuEnvironment,
+                    organization_id: orgId,
+                    date_from: bukkuDateFrom.trim() || null,
+                    sync_accounts: bukkuSyncAccounts,
+                    sync_contacts: bukkuSyncContacts,
+                    sync_sales_invoices: bukkuSyncSales,
+                    sync_purchase_bills: bukkuSyncPurchase,
+                });
+            }
+            showNotification(t.settings.integrations.bukku.setupSuccess, 'success');
+            setBukkuAccessToken('');
+            await loadSettings();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.bukku.setupFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSavingBukku(false);
+        }
+    };
+
+    const handleSyncBukku = async () => {
+        if (!activeOrgBukkuConnection) return;
+        setIsSyncingBukku(true);
+        try {
+            await syncBukku({
+                connection_id: activeOrgBukkuConnection.id,
+                date_from: bukkuDateFrom.trim() || null,
+                sync_accounts: bukkuSyncAccounts,
+                sync_contacts: bukkuSyncContacts,
+                sync_sales_invoices: bukkuSyncSales,
+                sync_purchase_bills: bukkuSyncPurchase,
+            });
+            showNotification(t.settings.integrations.bukku.syncSuccess, 'success');
+            await loadSettings();
+            await loadBukkuStatus(activeOrgBukkuConnection.id);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.bukku.syncFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsSyncingBukku(false);
+        }
+    };
+
+    const handleDisconnectBukku = async () => {
+        if (!activeOrgBukkuConnection) return;
+        if (!confirm(t.settings.integrations.bukku.disconnectConfirm)) return;
+        setIsDisconnectingBukku(true);
+        try {
+            await disableBukku({ connection_id: activeOrgBukkuConnection.id });
+            showNotification(t.settings.integrations.bukku.disconnectSuccess, 'success');
+            setBukkuSubdomain('');
+            setBukkuAccessToken('');
+            setBukkuTestResult(null);
+            setBukkuConnectionStatus(null);
+            await loadSettings();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t.settings.integrations.bukku.disconnectFailed;
+            showNotification(message, 'error');
+        } finally {
+            setIsDisconnectingBukku(false);
+        }
+    };
 
     // Business Central enable/disable handlers
     const openEnableBCModal = () => {
@@ -1970,291 +2174,75 @@ const SettingsPage = () => {
                         </div>
                     )}
 
-                    {/* Gmail integration – connect and sync inbox for document ingestion */}
-                    <div
-                        className="rounded-lg border lg:col-span-2"
-                        style={{
-                            background: 'var(--card)',
-                            borderColor: 'var(--border)',
+                    <IntegrationsSettingsSection
+                        labels={t.settings.integrations}
+                        isLoadingSettings={isLoadingSettings}
+                        isAdmin={orgRole === 'admin'}
+                        hasOrganization={hasOrganization}
+                        gmail={{
+                            enabled: gmailEnabled,
+                            connected: gmailConnected,
+                            connections: gmailConnections,
+                            keywordsInput: gmailKeywordsInput,
+                            isLoadingKeywords: isLoadingGmailKeywords,
+                            isSavingKeywords: isSavingGmailKeywords,
+                            isConnecting: isConnectingGmail,
+                            isSyncing: isSyncingGmail,
+                            disconnectingId: disconnectingConnectionId,
+                            onKeywordsChange: setGmailKeywordsInput,
+                            onSaveKeywords: handleSaveGmailKeywords,
+                            onConnect: handleConnectGmail,
+                            onSync: handleGmailSync,
+                            onDisconnect: handleDisconnectGmail,
                         }}
-                    >
-                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="text-3xl">📧</div>
-                                <div>
-                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        {t.settings.integrations.gmail.title}
-                                    </h3>
-                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        {t.settings.integrations.gmail.description}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            {isLoadingSettings ? (
-                                <div className="text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
-                                    {t.settings.integrations.businessCentral.loading}
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                                        <div className="space-y-1">
-                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                                {!gmailEnabled
-                                                    ? t.settings.integrations.gmail.notEnabledByAdmin
-                                                    : gmailConnected
-                                                      ? t.settings.integrations.gmail.connected
-                                                      : t.settings.integrations.gmail.notConnected}
-                                            </p>
-                                            {gmailConnected && gmailConnections.length > 0 && (
-                                                <ul className="text-sm mt-1 space-y-1" style={{ color: 'var(--foreground)' }}>
-                                                    {gmailConnections.filter((c) => c.is_active).map((conn) => (
-                                                        <li key={conn.id} className="flex items-center gap-2 flex-wrap">
-                                                            <span>
-                                                                {conn.email}
-                                                                {conn.last_sync_at && (
-                                                                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
-                                                                        ({t.settings.integrations.gmail.lastSync}: {new Date(conn.last_sync_at).toLocaleString()})
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDisconnectGmail(conn.id)}
-                                                                disabled={disconnectingConnectionId === conn.id}
-                                                                className="text-sm px-2 py-1 rounded border transition-colors disabled:opacity-50"
-                                                                style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
-                                                            >
-                                                                {disconnectingConnectionId === conn.id
-                                                                    ? t.settings.integrations.gmail.disconnecting
-                                                                    : t.settings.integrations.gmail.disconnect}
-                                                            </button>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {!gmailEnabled ? null : !gmailConnected ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={handleConnectGmail}
-                                                    disabled={isConnectingGmail}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50"
-                                                    style={{
-                                                        background: 'var(--primary)',
-                                                        color: 'var(--primary-foreground)',
-                                                    }}
-                                                >
-                                                    {isConnectingGmail
-                                                        ? t.settings.integrations.gmail.connecting
-                                                        : t.settings.integrations.gmail.connect}
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={handleGmailSync}
-                                                    disabled={isSyncingGmail}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                >
-                                                    {isSyncingGmail
-                                                        ? t.settings.integrations.gmail.syncing
-                                                        : t.settings.integrations.gmail.syncNow}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {gmailEnabled && (
-                                        <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
-                                                {t.settings.integrations.gmail.ingestKeywords}
-                                            </label>
-                                            <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
-                                                {t.settings.integrations.gmail.ingestKeywordsDescription}
-                                            </p>
-                                            <div className="flex gap-2 flex-wrap">
-                                                <input
-                                                    type="text"
-                                                    value={gmailKeywordsInput}
-                                                    onChange={(e) => setGmailKeywordsInput(e.target.value)}
-                                                    placeholder="invoice, receipt, statement"
-                                                    disabled={isLoadingGmailKeywords}
-                                                    className="flex-1 min-w-[200px] px-3 py-2 border rounded-md text-sm"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        background: 'var(--card)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveGmailKeywords}
-                                                    disabled={isSavingGmailKeywords || isLoadingGmailKeywords}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                >
-                                                    {isSavingGmailKeywords
-                                                        ? t.settings.integrations.gmail.savingKeywords
-                                                        : t.settings.integrations.gmail.saveKeywords}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Google Drive integration */}
-                    <div
-                        className="rounded-lg border lg:col-span-2"
-                        style={{
-                            background: 'var(--card)',
-                            borderColor: 'var(--border)',
+                        drive={{
+                            enabled: driveEnabled,
+                            connected: driveConnected,
+                            connections: driveConnections,
+                            folderIdsInput: driveFolderIdsInput,
+                            isLoadingFolders: isLoadingDriveFolders,
+                            isSavingFolders: isSavingDriveFolders,
+                            isConnecting: isConnectingDrive,
+                            isSyncing: isSyncingDrive,
+                            disconnectingId: disconnectingDriveConnectionId,
+                            onFolderIdsChange: setDriveFolderIdsInput,
+                            onSaveFolders: handleSaveDriveFolders,
+                            onConnect: handleConnectDrive,
+                            onSync: handleDriveSync,
+                            onDisconnect: handleDisconnectDrive,
                         }}
-                    >
-                        <div className="p-6 border-b" style={{ borderColor: 'var(--border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="text-3xl">📁</div>
-                                <div>
-                                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                                        {t.settings.integrations.drive.title}
-                                    </h3>
-                                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                        {t.settings.integrations.drive.description}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            {isLoadingSettings ? (
-                                <div className="text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
-                                    {t.settings.integrations.businessCentral.loading}
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                                        <div className="space-y-1">
-                                            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                                                {!driveEnabled
-                                                    ? t.settings.integrations.drive.notEnabledByAdmin
-                                                    : driveConnected
-                                                      ? t.settings.integrations.drive.connected
-                                                      : t.settings.integrations.drive.notConnected}
-                                            </p>
-                                            {driveConnected && driveConnections.length > 0 && (
-                                                <ul className="text-sm mt-1 space-y-1" style={{ color: 'var(--foreground)' }}>
-                                                    {driveConnections.filter((c) => c.is_active).map((conn) => (
-                                                        <li key={conn.id} className="flex items-center gap-2 flex-wrap">
-                                                            <span>
-                                                                {conn.email || `Connection ${conn.id}`}
-                                                                {conn.last_sync_at && (
-                                                                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
-                                                                        ({t.settings.integrations.drive.lastSync}: {new Date(conn.last_sync_at).toLocaleString()})
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDisconnectDrive(conn.id)}
-                                                                disabled={disconnectingDriveConnectionId === conn.id}
-                                                                className="text-sm px-2 py-1 rounded border transition-colors disabled:opacity-50"
-                                                                style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
-                                                            >
-                                                                {disconnectingDriveConnectionId === conn.id
-                                                                    ? t.settings.integrations.drive.disconnecting
-                                                                    : t.settings.integrations.drive.disconnect}
-                                                            </button>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {!driveEnabled ? null : !driveConnected ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={handleConnectDrive}
-                                                    disabled={isConnectingDrive}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50"
-                                                    style={{
-                                                        background: 'var(--primary)',
-                                                        color: 'var(--primary-foreground)',
-                                                    }}
-                                                >
-                                                    {isConnectingDrive
-                                                        ? t.settings.integrations.drive.connecting
-                                                        : t.settings.integrations.drive.connect}
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={handleDriveSync}
-                                                    disabled={isSyncingDrive}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                >
-                                                    {isSyncingDrive
-                                                        ? t.settings.integrations.drive.syncing
-                                                        : t.settings.integrations.drive.syncNow}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {driveEnabled && (
-                                        <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-                                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
-                                                {t.settings.integrations.drive.folderIds}
-                                            </label>
-                                            <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
-                                                {t.settings.integrations.drive.folderIdsDescription}
-                                            </p>
-                                            <div className="flex gap-2 flex-wrap">
-                                                <input
-                                                    type="text"
-                                                    value={driveFolderIdsInput}
-                                                    onChange={(e) => setDriveFolderIdsInput(e.target.value)}
-                                                    placeholder="1a2b3c4d5e6f, anotherFolderId"
-                                                    disabled={isLoadingDriveFolders}
-                                                    className="flex-1 min-w-[200px] px-3 py-2 border rounded-md text-sm"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        background: 'var(--card)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveDriveFolders}
-                                                    disabled={isSavingDriveFolders || isLoadingDriveFolders}
-                                                    className="px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 border"
-                                                    style={{
-                                                        borderColor: 'var(--border)',
-                                                        color: 'var(--foreground)',
-                                                    }}
-                                                >
-                                                    {isSavingDriveFolders
-                                                        ? t.settings.integrations.drive.savingFolders
-                                                        : t.settings.integrations.drive.saveFolders}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                        bukku={{
+                            connected: bukkuConnected,
+                            activeConnection: activeOrgBukkuConnection,
+                            connectionStatus: bukkuConnectionStatus,
+                            isLoadingStatus: isLoadingBukkuStatus,
+                            subdomain: bukkuSubdomain,
+                            accessToken: bukkuAccessToken,
+                            environment: bukkuEnvironment,
+                            dateFrom: bukkuDateFrom,
+                            syncAccounts: bukkuSyncAccounts,
+                            syncContacts: bukkuSyncContacts,
+                            syncSales: bukkuSyncSales,
+                            syncPurchase: bukkuSyncPurchase,
+                            testResult: bukkuTestResult,
+                            isTesting: isTestingBukku,
+                            isSaving: isSavingBukku,
+                            isSyncing: isSyncingBukku,
+                            isDisconnecting: isDisconnectingBukku,
+                            onSubdomainChange: setBukkuSubdomain,
+                            onAccessTokenChange: setBukkuAccessToken,
+                            onEnvironmentChange: setBukkuEnvironment,
+                            onDateFromChange: setBukkuDateFrom,
+                            onSyncAccountsChange: setBukkuSyncAccounts,
+                            onSyncContactsChange: setBukkuSyncContacts,
+                            onSyncSalesChange: setBukkuSyncSales,
+                            onSyncPurchaseChange: setBukkuSyncPurchase,
+                            onTest: handleTestBukkuConnection,
+                            onSave: handleSaveBukku,
+                            onSync: handleSyncBukku,
+                            onDisconnect: handleDisconnectBukku,
+                        }}
+                    />
 
                     {/* Integrations Card - hidden (Business Central UI disabled) */}
                     {false && (

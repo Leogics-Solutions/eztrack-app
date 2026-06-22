@@ -93,6 +93,9 @@ export interface Invoice {
   original_filename?: string | null;
   tags?: string | null;
   preview_url?: string | null;
+  /** Relative or absolute URL to the stored source file */
+  source_file?: string | null;
+  file_path?: string | null;
   pages_processed?: number;
   processing_time_seconds?: number;
   // URLs for each uploaded page (when provided by multi-page endpoints)
@@ -1072,38 +1075,52 @@ export async function listInvoices(
 /**
  * Download the original invoice file for preview/download
  * GET /invoices/{invoice_id}/file
+ * Returns null when the file does not exist (404) or cannot be loaded.
  */
-export async function downloadInvoiceFile(invoiceId: number): Promise<InvoiceFileDownload> {
-  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/file`, {
-    method: 'GET',
-    headers: getScopedHeadersForFormData(),
-  });
+export async function downloadInvoiceFile(
+  invoiceId: number
+): Promise<InvoiceFileDownload | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/file`, {
+      method: 'GET',
+      headers: getScopedHeadersForFormData(),
+    });
 
-  if (!response.ok) {
-    // Try to parse JSON error if available
-    let message = response.statusText;
-    try {
-      const err = await response.json();
-      message = err.message || err.error || message;
-    } catch {
-      // ignore JSON parse errors for non-JSON bodies
+    if (response.status === 404) {
+      console.warn(`Invoice file not found for invoice ${invoiceId}`);
+      return null;
     }
-    throw new Error(message || 'Failed to download invoice file');
-  }
 
-  const blob = await response.blob();
-  const contentType = response.headers.get('Content-Type');
-  const disposition = response.headers.get('Content-Disposition');
-  let filename: string | null = null;
-
-  if (disposition) {
-    const match = disposition.match(/filename="?([^"]+)"?/i);
-    if (match && match[1]) {
-      filename = match[1];
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const err = await response.json();
+        const detail = err.message || err.error || err.detail;
+        message = typeof detail === 'string' ? detail : message;
+      } catch {
+        // ignore JSON parse errors for non-JSON bodies
+      }
+      console.warn(`Failed to download invoice file ${invoiceId}:`, message);
+      return null;
     }
-  }
 
-  return { blob, contentType, filename };
+    const blob = await response.blob();
+    const contentType = response.headers.get('Content-Type');
+    const disposition = response.headers.get('Content-Disposition');
+    let filename: string | null = null;
+
+    if (disposition) {
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+
+    return { blob, contentType, filename };
+  } catch (error) {
+    console.warn(`Failed to download invoice file ${invoiceId}:`, error);
+    return null;
+  }
 }
 
 /**

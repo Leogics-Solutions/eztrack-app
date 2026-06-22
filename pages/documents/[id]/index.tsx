@@ -40,7 +40,7 @@ import {
   type LinkedDocument,
   type Project,
 } from "@/services";
-import { API_BASE_URL } from "@/services/config";
+import { resolveApiAssetUrl } from "@/services/apiHelpers";
 import { useOrganization } from "@/lib/OrganizationContext";
 
 // Types
@@ -248,9 +248,10 @@ const InvoiceDetail = () => {
   // Load invoice data
   useEffect(() => {
     if (id) {
-      loadInvoiceData();
+      void loadInvoiceData();
     }
     loadBusinessCentralConnection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -496,6 +497,21 @@ const InvoiceDetail = () => {
 
     setError(null);
 
+    const guessContentType = (url: string, filename?: string | null): string => {
+      const hint = `${url} ${filename ?? ''}`.toLowerCase();
+      if (hint.includes('.pdf')) return 'application/pdf';
+      if (/\.(png|jpe?g|gif|webp|bmp|tiff?)/.test(hint)) return 'image/*';
+      return 'application/octet-stream';
+    };
+
+    const applyDirectPreviewUrl = (rawUrl: string, filename?: string | null) => {
+      const previewUrl = resolveApiAssetUrl(rawUrl);
+      setPageFiles([]);
+      setSelectedPageIndex(0);
+      setFileUrl(previewUrl);
+      setFileContentType(guessContentType(previewUrl, filename));
+    };
+
     try {
       const invoiceId = Number(id);
       if (Number.isNaN(invoiceId)) {
@@ -630,50 +646,48 @@ const InvoiceDetail = () => {
 
       // Load source file(s) for preview
       if (apiInvoice.preview_url) {
-        const previewUrl = apiInvoice.preview_url.startsWith("http")
-          ? apiInvoice.preview_url
-          : `${API_BASE_URL}${apiInvoice.preview_url}`;
-        setPageFiles([]);
-        setSelectedPageIndex(0);
-        setFileUrl(previewUrl);
-        setFileContentType('application/pdf');
+        applyDirectPreviewUrl(apiInvoice.preview_url, apiInvoice.original_filename);
         return;
       }
 
       // Check if invoice has page_files (multi-page invoice)
       if (apiInvoice.page_files && apiInvoice.page_files.length > 0) {
-        // Use page_files URLs directly (they're already server URLs)
         const pageFileUrls = apiInvoice.page_files.map((filePath, index) => {
-          const url = filePath.startsWith("http")
-            ? filePath
-            : `${API_BASE_URL}${filePath}`;
+          const url = resolveApiAssetUrl(filePath);
           return { url, index: index + 1 };
         });
         setPageFiles(pageFileUrls);
         setSelectedPageIndex(0);
-        setFileUrl(null); // Clear single file URL
+        setFileUrl(null);
         setFileContentType(null);
+        return;
+      }
+
+      const directFilePath = apiInvoice.source_file || apiInvoice.file_path;
+      if (directFilePath) {
+        applyDirectPreviewUrl(directFilePath, apiInvoice.original_filename);
+        return;
+      }
+
+      // Fallback: download blob via API (may not exist for manual/OCR-less invoices)
+      const fileDownload = await downloadInvoiceFile(invoiceId);
+      if (fileDownload) {
+        setFileUrl((prevUrl) => {
+          if (prevUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(prevUrl);
+          }
+          return prevUrl;
+        });
+        const url = URL.createObjectURL(fileDownload.blob);
+        setFileUrl(url);
+        setFileContentType(
+          fileDownload.contentType || guessContentType('', apiInvoice.original_filename)
+        );
+        setPageFiles([]);
       } else {
-        // Fallback to single file download
-        try {
-          const { blob, contentType } = await downloadInvoiceFile(invoiceId);
-          // Revoke previous URL if any
-          setFileUrl((prevUrl) => {
-            if (prevUrl) {
-              URL.revokeObjectURL(prevUrl);
-            }
-            return prevUrl;
-          });
-          const url = URL.createObjectURL(blob);
-          setFileUrl(url);
-          setFileContentType(contentType);
-          setPageFiles([]); // Clear page files
-        } catch (fileErr) {
-          console.error('Failed to load invoice file:', fileErr);
-          setFileUrl(null);
-          setFileContentType(null);
-          setPageFiles([]);
-        }
+        setFileUrl(null);
+        setFileContentType(null);
+        setPageFiles([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invoice');
