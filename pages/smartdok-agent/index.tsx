@@ -1,14 +1,15 @@
 'use client';
 
-import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { AppLayout } from '@/components/layout';
+import { AgentChat } from '@/components/agent';
+import { useLanguage } from '@/lib/i18n';
 
 export default function SmartdokAgentPage() {
-  const router = useRouter();
+  const { t } = useLanguage();
 
-  useEffect(() => {
-    router.replace('/');
-  }, [router]);
-
-  return null;
+  return (
+    <AppLayout pageName={t.nav.smartdokAgent}>
+      <AgentChat />
+    </AppLayout>
+  );
 }

@@ -615,10 +615,37 @@ export type {
 } from './DocumentService';
 
 // Agent Service
-export { chatWithAgent } from './AgentService';
+export {
+  sendAgentMessage,
+  resolveAgentConfirmation,
+  prepareAgentAttachmentsFromFiles,
+  uploadAgentAttachment,
+  checkAgentHealth,
+  chatWithAgent,
+  createAgentSessionId,
+  buildConversationHistory,
+} from './AgentService';
+
+export {
+  AGENT_MAX_ATTACHMENTS,
+  AGENT_MAX_FILE_BYTES,
+  AGENT_ACCEPT_MIME,
+  mergePendingAgentFiles,
+  formatAgentFileSize,
+  isAcceptedAgentFile,
+} from './agentAttachments';
 
 export type {
-  AgentChatRequest,
+  AgentContext,
+  AgentAttachment,
   AgentChatData,
-  AgentChatResponse,
+  AgentMessageResponse,
+  AgentConfirmationResponse,
+  AgentPendingAction,
+  AgentButton,
+  AgentReplyBlock,
+  AgentReply,
+  AgentConversationTurn,
+  SendAgentMessageParams,
+  ResolveAgentConfirmationParams,
 } from './AgentService';

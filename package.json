@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/dev.cjs",
+    "build": "node ./node_modules/next/dist/bin/next build",
+    "start": "node scripts/start.cjs",
     "lint": "eslint"
   },
   "dependencies": {

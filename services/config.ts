@@ -7,6 +7,10 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_
 export const API_VERSION = 'v1';
 export const BASE_URL = `${API_BASE_URL}/api/${API_VERSION}`;
 
+/** Agent brain service (FastAPI, default :8800). Use /agent-service proxy in browser to avoid CORS. */
+export const AGENT_BASE_URL =
+  process.env.NEXT_PUBLIC_AGENT_URL || '/agent-service';
+
 
 
 

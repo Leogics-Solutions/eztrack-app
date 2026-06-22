@@ -16,6 +16,7 @@ import {
   Landmark,
   Receipt,
   Briefcase,
+  Bot,
   ChevronDown,
 } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
@@ -39,6 +40,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
   }, []);
 
   const dashboardItem = { href: '/', label: t.nav.dashboard, icon: LayoutDashboard };
+  const agentItem = { href: '/smartdok-agent', label: t.nav.smartdokAgent, icon: Bot };
 
   const documentItems = [
     { href: '/sales-invoices', label: t.nav.sales, icon: FileCheck },
@@ -223,6 +225,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
           {renderNavItem(dashboardItem)}
+          {renderNavItem(agentItem)}
           {renderGroup('documents', <FileCheck className="h-5 w-5 flex-shrink-0" />, t.nav.documents, documentItems)}
           {renderGroup('accounting', <CreditCard className="h-5 w-5 flex-shrink-0" />, t.nav.accounting || 'Accounting & Finance', accountingItems)}
           {renderGroup('operations', <Briefcase className="h-5 w-5 flex-shrink-0" />, t.nav.operations || 'Operations', operationItems)}

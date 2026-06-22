@@ -1099,4 +1099,43 @@ export interface Translations {
       selectInvoice: string;
     };
   };
+
+  // Smartdok Agent (AI chat)
+  agent: {
+    beta: string;
+    subtitle: string;
+    welcomeTitle: string;
+    welcomeDescription: string;
+    inputPlaceholder: string;
+    send: string;
+    newChat: string;
+    thinking: string;
+    attachFile: string;
+    dragDropOverlay: string;
+    dragDropHint: string;
+    maxFilesReached: string;
+    fileTooLarge: string;
+    unsupportedFileType: string;
+    preparingAttachments: string;
+    sentAttachments: string;
+    pendingFileCountOne: string;
+    pendingFileCountMany: string;
+    clearAttachments: string;
+    disclaimer: string;
+    approve: string;
+    reject: string;
+    sendFailed: string;
+    uploadFailed: string;
+    resolveFailed: string;
+    notAuthenticated: string;
+    actionApproved: string;
+    actionRejected: string;
+    sentAttachment: string;
+    analyzeAttachment: string;
+    prompts: {
+      cashBalance: string;
+      recentInvoices: string;
+      dueBills: string;
+    };
+  };
 }

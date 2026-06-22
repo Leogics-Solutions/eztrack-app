@@ -193,3 +193,183 @@ body {
 .border-primary {
   border-color: var(--primary);
 }
+
+/* Agent chat markdown */
+.agent-markdown {
+  color: inherit;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.agent-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.agent-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.agent-md-paragraph {
+  margin: 0.5rem 0;
+}
+
+.agent-md-paragraph:first-child {
+  margin-top: 0;
+}
+
+.agent-md-heading {
+  font-weight: 600;
+  color: var(--foreground);
+  margin: 1rem 0 0.5rem;
+  line-height: 1.35;
+}
+
+.agent-md-h1 { font-size: 1.125rem; }
+.agent-md-h2 { font-size: 1.05rem; }
+.agent-md-h3 { font-size: 0.95rem; }
+.agent-md-h4 { font-size: 0.9rem; }
+
+.agent-md-section-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 1.125rem 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 8%, var(--muted));
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  line-height: 1.4;
+}
+
+.agent-md-section-title:first-child {
+  margin-top: 0;
+}
+
+.agent-md-blockquote {
+  margin: 0.625rem 0;
+  padding: 0.625rem 0.875rem;
+  border-left: 3px solid var(--border);
+  background: var(--muted);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--foreground);
+}
+
+.agent-md-blockquote--warning {
+  border-left-color: var(--warning-dark);
+  background: var(--warning-light);
+  color: var(--warning-foreground);
+}
+
+.agent-md-blockquote-line {
+  margin: 0;
+}
+
+.agent-md-blockquote-line + .agent-md-blockquote-line {
+  margin-top: 0.35rem;
+}
+
+.agent-md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.875rem 0;
+}
+
+.agent-md-strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.agent-md-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8em;
+  background: var(--muted);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.agent-md-list {
+  margin: 0.5rem 0;
+  padding-left: 1.35rem;
+}
+
+.agent-md-list--ul {
+  list-style: disc;
+}
+
+.agent-md-list--ol {
+  list-style: decimal;
+}
+
+.agent-md-list li {
+  margin: 0.35rem 0;
+}
+
+.agent-md-list li::marker {
+  color: var(--muted-foreground);
+}
+
+.agent-md-table-wrap {
+  overflow-x: auto;
+  margin: 0.625rem 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.agent-md-table-wrap--kv {
+  margin-top: 0.375rem;
+}
+
+.agent-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.agent-md-table th,
+.agent-md-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.agent-md-table th {
+  background: var(--muted);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.agent-md-table tr:last-child td {
+  border-bottom: none;
+}
+
+.agent-md-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.agent-md-table--kv .agent-md-table-label {
+  width: 38%;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.agent-md-table--kv tbody tr:nth-child(even) td {
+  background: transparent;
+}
+
+.agent-md-table--kv tbody tr:hover td {
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.agent-markdown--inverted .agent-md-strong {
+  color: inherit;
+}
+
+.agent-markdown--inverted .agent-md-hr {
+  border-top-color: rgba(255, 255, 255, 0.25);
+}
+
+.agent-markdown--inverted .agent-md-code {
+  background: rgba(255, 255, 255, 0.15);
+}
