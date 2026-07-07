@@ -56,6 +56,8 @@ import {
     deleteGmailConnection,
     getGmailSettings,
     patchGmailSettings,
+    DEFAULT_GMAIL_SYNC_REQUEST,
+    type GmailSyncResponse,
 } from "@/services/GmailService";
 import {
     getDriveConnect,
@@ -1044,11 +1046,23 @@ const SettingsPage = () => {
     const handleGmailSync = async () => {
         setIsSyncingGmail(true);
         try {
-            const res = await postGmailSync({});
-            const msg = res.job_ids?.length
-                ? `${t.settings.integrations.gmail.syncSuccess} Job IDs: ${res.job_ids.join(', ')}`
-                : res.message || t.settings.integrations.gmail.syncSuccess;
-            showNotification(msg, 'success');
+            const res = await postGmailSync(DEFAULT_GMAIL_SYNC_REQUEST);
+            const formatSyncMessage = (sync: GmailSyncResponse) => {
+                const attachments = sync.attachments_ingested ?? 0;
+                const jobs = sync.jobs_enqueued ?? sync.job_ids?.length ?? 0;
+                const skipped = sync.messages_skipped ?? 0;
+                const classified = sync.messages_classified ?? 0;
+
+                return [
+                    t.settings.integrations.gmail.syncSuccess,
+                    `${attachments} attachment${attachments === 1 ? '' : 's'} ingested`,
+                    `${jobs} job${jobs === 1 ? '' : 's'} enqueued`,
+                    `${skipped} message${skipped === 1 ? '' : 's'} skipped`,
+                    `${classified} message${classified === 1 ? '' : 's'} classified`,
+                ].join(' ');
+            };
+
+            showNotification(formatSyncMessage(res), 'success');
             void router.push('/jobs');
         } catch (err) {
             const message = err instanceof Error ? err.message : t.settings.integrations.gmail.syncFailed;

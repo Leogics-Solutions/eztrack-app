@@ -11,8 +11,10 @@ import {
 } from "@/services/InvoiceService";
 import {
   getGmailConnections,
+  getGmailHistory,
   getGmailSyncLogs,
   type GmailConnectionInfo,
+  type GmailHistoryItem,
   type GmailSyncLogEntry,
 } from "@/services/GmailService";
 import {
@@ -29,6 +31,7 @@ const JobsPage = () => {
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [connections, setConnections] = useState<GmailConnectionInfo[]>([]);
   const [syncLogsByConn, setSyncLogsByConn] = useState<Record<number, GmailSyncLogEntry[]>>({});
+  const [gmailHistory, setGmailHistory] = useState<GmailHistoryItem[]>([]);
   const [driveConnections, setDriveConnections] = useState<DriveConnectionInfo[]>([]);
   const [driveSyncLogsByConn, setDriveSyncLogsByConn] = useState<Record<number, DriveSyncLogEntry[]>>({});
   const [isLoadingSync, setIsLoadingSync] = useState(true);
@@ -72,6 +75,13 @@ const JobsPage = () => {
       }
       setSyncLogsByConn(gmailLogs);
 
+      try {
+        const historyRes = await getGmailHistory({ limit: 100 });
+        setGmailHistory(historyRes.items ?? historyRes.history ?? []);
+      } catch {
+        setGmailHistory([]);
+      }
+
       const driveLogs: Record<number, DriveSyncLogEntry[]> = {};
       for (const c of driveActive) {
         try {
@@ -85,6 +95,7 @@ const JobsPage = () => {
     } catch {
       setConnections([]);
       setSyncLogsByConn({});
+      setGmailHistory([]);
       setDriveConnections([]);
       setDriveSyncLogsByConn({});
     } finally {
@@ -111,6 +122,9 @@ const JobsPage = () => {
     if (s === "PROCESSING" || s === "RUNNING") return t.jobs.processing;
     if (s === "SUCCESS") return t.jobs.success;
     if (s === "FAILED") return t.jobs.failed;
+    if (s === "QUEUED") return t.jobs.queued;
+    if (s === "SKIPPED") return t.jobs.skipped;
+    if (s === "NO_ATTACHMENTS") return t.jobs.noAttachments;
     return status;
   };
 
@@ -118,7 +132,7 @@ const JobsPage = () => {
     const s = status.toUpperCase();
     if (s === "SUCCESS") return "var(--green-600, #16a34a)";
     if (s === "FAILED") return "var(--red-600, #dc2626)";
-    if (s === "PROCESSING" || s === "RUNNING") return "var(--blue-600, #2563eb)";
+    if (s === "PROCESSING" || s === "RUNNING" || s === "QUEUED") return "var(--blue-600, #2563eb)";
     return "var(--muted-foreground)";
   };
 
@@ -130,6 +144,13 @@ const JobsPage = () => {
       return s;
     }
   };
+
+  const formatConfidence = (value: number | null | undefined) => {
+    if (typeof value !== "number") return "-";
+    return `${Math.round(value * 100)}%`;
+  };
+
+  const formatNullable = (value: string | null | undefined) => value || "-";
 
   return (
     <AppLayout pageName={t.jobs.title}>
@@ -272,6 +293,8 @@ const JobsPage = () => {
                         <thead>
                           <tr style={{ color: "var(--muted-foreground)", borderBottom: "1px solid var(--border)" }}>
                             <th className="text-left py-2 px-3 font-medium">{t.jobs.status}</th>
+                            <th className="text-left py-2 px-3 font-medium">{t.jobs.messagesClassified}</th>
+                            <th className="text-left py-2 px-3 font-medium">{t.jobs.messagesSkipped}</th>
                             <th className="text-left py-2 px-3 font-medium">{t.jobs.messagesProcessed}</th>
                             <th className="text-left py-2 px-3 font-medium">{t.jobs.attachmentsIngested}</th>
                             <th className="text-left py-2 px-3 font-medium">{t.jobs.jobsEnqueued}</th>
@@ -289,6 +312,12 @@ const JobsPage = () => {
                                 >
                                   {getStatusLabel(log.status ?? "")}
                                 </span>
+                              </td>
+                              <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
+                                {log.messages_classified ?? "-"}
+                              </td>
+                              <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
+                                {log.messages_skipped ?? "-"}
                               </td>
                               <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
                                 {log.messages_processed ?? "—"}
@@ -313,6 +342,99 @@ const JobsPage = () => {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Gmail Email Ingestion History */}
+        <div
+          className="rounded-lg border"
+          style={{ background: "var(--card)", borderColor: "var(--border)" }}
+        >
+          <div className="p-4 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
+            <Mail className="h-5 w-5" style={{ color: "var(--muted-foreground)" }} />
+            <div>
+              <h2 className="font-medium" style={{ color: "var(--foreground)" }}>
+                {t.jobs.emailIngestionHistory}
+              </h2>
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                {t.jobs.emailIngestionHistoryDescription}
+              </p>
+            </div>
+          </div>
+          <div className="p-4 overflow-x-auto">
+            {isLoadingSync ? (
+              <div className="py-8 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>
+                {t.jobs.loading}
+              </div>
+            ) : gmailHistory.length === 0 ? (
+              <div className="py-8 text-center text-sm" style={{ color: "var(--muted-foreground)" }}>
+                {t.jobs.noEmailHistory}
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: "var(--muted-foreground)", borderBottom: "1px solid var(--border)" }}>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.receivedAt}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.from}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.subject}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.classification}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.confidence}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.status}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.attachments}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.jobsEnqueued}</th>
+                    <th className="text-left py-2 px-3 font-medium">{t.jobs.ingestDecision}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gmailHistory.map((item) => (
+                    <tr key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td className="py-2 px-3 whitespace-nowrap" style={{ color: "var(--muted-foreground)" }}>
+                        {formatDate(item.internal_date ?? item.processed_at ?? item.last_seen_at)}
+                      </td>
+                      <td className="py-2 px-3 max-w-[220px] truncate" style={{ color: "var(--foreground)" }}>
+                        {formatNullable(item.from_email)}
+                      </td>
+                      <td className="py-2 px-3 min-w-[220px] max-w-[360px]" style={{ color: "var(--foreground)" }}>
+                        <div className="truncate">{formatNullable(item.subject)}</div>
+                        {item.snippet && (
+                          <div className="truncate text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                            {item.snippet}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
+                        {formatNullable(item.classification_label)}
+                      </td>
+                      <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
+                        {formatConfidence(item.classification_confidence)}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                          style={{ color: getStatusColor(item.status), backgroundColor: "var(--muted)" }}
+                        >
+                          {getStatusLabel(item.status)}
+                        </span>
+                        {item.error_message && (
+                          <div className="text-xs mt-1" style={{ color: "var(--red-600, #dc2626)" }}>
+                            {item.error_message}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 whitespace-nowrap" style={{ color: "var(--foreground)" }}>
+                        {item.eligible_attachments_count ?? 0}/{item.attachments_count ?? 0}
+                      </td>
+                      <td className="py-2 px-3" style={{ color: "var(--foreground)" }}>
+                        {item.jobs_enqueued ?? 0}
+                      </td>
+                      <td className="py-2 px-3 max-w-[260px] truncate" style={{ color: "var(--muted-foreground)" }}>
+                        {formatNullable(item.ingest_decision)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>

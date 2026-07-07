@@ -87,19 +87,33 @@ export interface GmailSyncRequest {
   only_unread?: boolean;
   auto_classify?: boolean;
   remark?: string;
+  use_agentic_classification?: boolean;
+  finance_only?: boolean;
+  force_reprocess?: boolean;
 }
 
 export interface GmailSyncResponse {
   sync_log_id?: number;
   status?: 'SUCCESS' | 'FAILED';
   messages_processed?: number;
+  messages_skipped?: number;
+  messages_classified?: number;
   attachments_ingested?: number;
+  attachments_skipped?: number;
   jobs_enqueued?: number;
-  job_ids?: number[];
+  job_ids?: string[];
   error_message?: string | null;
   errors?: Array<{ message?: string; attachment?: string }>;
   message?: string;
 }
+
+export const DEFAULT_GMAIL_SYNC_REQUEST: GmailSyncRequest = {
+  document_type: 'auto',
+  remark: 'Manual Gmail sync',
+  use_agentic_classification: true,
+  finance_only: true,
+  force_reprocess: false,
+};
 
 /**
  * Trigger ingestion from Gmail (sync inbox → ingest attachments).
@@ -166,7 +180,10 @@ export interface GmailSyncLogEntry {
   sync_type?: string;
   status?: string;
   messages_processed?: number;
+  messages_skipped?: number;
+  messages_classified?: number;
   attachments_ingested?: number;
+  attachments_skipped?: number;
   jobs_enqueued?: number;
   error_message?: string | null;
   started_at?: string;
@@ -197,6 +214,95 @@ export async function getGmailSyncLogs(
   }
 
   return response.json();
+}
+
+// --- Gmail ingestion history ---
+
+export type GmailMessageStatus = 'QUEUED' | 'SKIPPED' | 'NO_ATTACHMENTS' | 'PENDING' | string;
+export type GmailAttachmentStatus = 'QUEUED' | 'SKIPPED' | 'FAILED' | 'PENDING' | string;
+
+export interface GmailHistoryAttachment {
+  id: number;
+  message_id: number;
+  filename: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  status: GmailAttachmentStatus;
+  skip_reason: string | null;
+  job_id: string | null;
+  job_type: string | null;
+  document_type: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GmailHistoryItem {
+  id: number;
+  connection_id: number;
+  user_id: number;
+  gmail_message_id: string;
+  gmail_thread_id: string;
+  gmail_history_id: string | null;
+  internal_date: string | null;
+  from_email: string | null;
+  to_email: string | null;
+  subject: string | null;
+  snippet: string | null;
+  classification_label: string | null;
+  classification_confidence: number | null;
+  classification_reason: string | null;
+  ingest_decision: string | null;
+  status: GmailMessageStatus;
+  attachments_count: number;
+  eligible_attachments_count: number;
+  jobs_enqueued: number;
+  error_message: string | null;
+  last_seen_at: string | null;
+  processed_at: string | null;
+  attachments?: GmailHistoryAttachment[];
+}
+
+export interface GmailHistoryParams {
+  limit?: number;
+  connection_id?: number;
+  status?: string;
+  classification_label?: string;
+}
+
+/**
+ * Get classifier-first Gmail ingestion history.
+ * GET /api/v1/gmail/history
+ */
+export async function getGmailHistory(
+  params: GmailHistoryParams = {}
+): Promise<{ items?: GmailHistoryItem[]; history?: GmailHistoryItem[] }> {
+  const token = getAccessToken();
+  if (!token) throw new Error('No access token found');
+
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.append(key, String(value));
+    }
+  });
+
+  const queryString = query.toString();
+  const response = await fetch(`${BASE_URL}/gmail/history${queryString ? `?${queryString}` : ''}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to get Gmail ingestion history');
+  }
+
+  const data = await response.json();
+  return Array.isArray(data) ? { items: data } : data;
 }
 
 // --- User Gmail settings (ingest keywords) ---

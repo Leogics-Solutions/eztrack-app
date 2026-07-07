@@ -48,6 +48,14 @@ export function GmailIntegrationForm({
 
   return (
     <div className="space-y-4">
+      <div className="space-y-2">
+        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          {g.smartIngestionDescription}
+        </p>
+        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          {g.schedulerNote}
+        </p>
+      </div>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="space-y-1 min-w-0 flex-1">
           {connected && connections.length > 0 && (
@@ -104,10 +112,10 @@ export function GmailIntegrationForm({
       </div>
       <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
-          {g.ingestKeywords}
+          {g.legacyIngestKeywords}
         </label>
         <p className="text-sm mb-2" style={{ color: 'var(--muted-foreground)' }}>
-          {g.ingestKeywordsDescription}
+          {g.legacyIngestKeywordsDescription}
         </p>
         <div className="flex gap-2 flex-wrap">
           <input
