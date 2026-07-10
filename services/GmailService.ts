@@ -270,6 +270,20 @@ export interface GmailHistoryParams {
   classification_label?: string;
 }
 
+export interface GmailHistoryClearParams {
+  connection_id?: number;
+  reset_sync_state?: boolean;
+  include_sync_logs?: boolean;
+}
+
+export interface GmailHistoryClearResponse {
+  message?: string;
+  deleted_history_count?: number;
+  deleted_attachment_count?: number;
+  deleted_sync_log_count?: number;
+  reset_connections_count?: number;
+}
+
 /**
  * Get classifier-first Gmail ingestion history.
  * GET /api/v1/gmail/history
@@ -303,6 +317,40 @@ export async function getGmailHistory(
 
   const data = await response.json();
   return Array.isArray(data) ? { items: data } : data;
+}
+
+/**
+ * Clear Gmail ingestion history for testing.
+ * DELETE /api/v1/gmail/history
+ */
+export async function deleteGmailHistory(
+  params: GmailHistoryClearParams = {}
+): Promise<GmailHistoryClearResponse | null> {
+  const token = getAccessToken();
+  if (!token) throw new Error('No access token found');
+
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.append(key, String(value));
+    }
+  });
+
+  const queryString = query.toString();
+  const response = await fetch(`${BASE_URL}/gmail/history${queryString ? `?${queryString}` : ''}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to clear Gmail ingestion history');
+  }
+
+  if (response.status === 204) return null;
+  return response.json().catch(() => null);
 }
 
 // --- User Gmail settings (ingest keywords) ---

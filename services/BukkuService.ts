@@ -135,6 +135,45 @@ export interface BukkuDisableResponse {
   disabled: boolean;
 }
 
+export type BukkuPushStatus = 'draft' | 'ready';
+export type BukkuPushInvoiceStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED';
+
+export interface BukkuPushRequest {
+  connection_id: number;
+  invoice_ids: number[];
+  create_missing_contacts?: boolean;
+  default_account_id?: number;
+  default_contact_id?: number;
+  status?: BukkuPushStatus;
+}
+
+export interface BukkuPushReadyRequest {
+  connection_id: number;
+  statuses?: string[];
+  directions?: string[];
+  limit?: number;
+  create_missing_contacts?: boolean;
+  default_account_id?: number;
+  default_contact_id?: number;
+  status?: BukkuPushStatus;
+}
+
+export interface BukkuPushDetail {
+  invoice_id: number;
+  invoice_no: string | null;
+  status: BukkuPushInvoiceStatus;
+  bukku_object_type?: string | null;
+  bukku_id?: string | null;
+  error_message: string | null;
+}
+
+export interface BukkuPushResponse {
+  pushed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  details: BukkuPushDetail[];
+}
+
 async function parseError(response: Response, fallback: string): Promise<never> {
   const error = await response.json().catch(() => ({ error: response.statusText }));
   throw new Error(error.message || error.error || error.detail || fallback);
@@ -276,6 +315,38 @@ export async function syncBukku(data: BukkuSyncRequest): Promise<BukkuSyncRespon
   });
   if (!response.ok) {
     await parseError(response, 'Failed to sync from Bukku');
+  }
+  return response.json();
+}
+
+/**
+ * POST /bukku/push — push selected Smartdok invoices to Bukku.
+ */
+export async function pushBukkuInvoices(data: BukkuPushRequest): Promise<BukkuPushResponse> {
+  const response = await fetch(`${BASE_URL}/bukku/push`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    await parseError(response, 'Failed to push invoices to Bukku');
+  }
+  return response.json();
+}
+
+/**
+ * POST /bukku/push-ready — push validated ready invoices matching filters.
+ */
+export async function pushReadyBukkuInvoices(
+  data: BukkuPushReadyRequest
+): Promise<BukkuPushResponse> {
+  const response = await fetch(`${BASE_URL}/bukku/push-ready`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    await parseError(response, 'Failed to push ready invoices to Bukku');
   }
   return response.json();
 }

@@ -4,12 +4,13 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { RefreshCw, FileText, Mail, FolderOpen } from "lucide-react";
+import { RefreshCw, FileText, Mail, FolderOpen, Trash2 } from "lucide-react";
 import {
   listBatchJobs,
   type BatchJobListItem,
 } from "@/services/InvoiceService";
 import {
+  deleteGmailHistory,
   getGmailConnections,
   getGmailHistory,
   getGmailSyncLogs,
@@ -27,7 +28,6 @@ import {
 const JobsPage = () => {
   const { t } = useLanguage();
   const [batchJobs, setBatchJobs] = useState<BatchJobListItem[]>([]);
-  const [totalJobs, setTotalJobs] = useState(0);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [connections, setConnections] = useState<GmailConnectionInfo[]>([]);
   const [syncLogsByConn, setSyncLogsByConn] = useState<Record<number, GmailSyncLogEntry[]>>({});
@@ -35,6 +35,14 @@ const JobsPage = () => {
   const [driveConnections, setDriveConnections] = useState<DriveConnectionInfo[]>([]);
   const [driveSyncLogsByConn, setDriveSyncLogsByConn] = useState<Record<number, DriveSyncLogEntry[]>>({});
   const [isLoadingSync, setIsLoadingSync] = useState(true);
+  const [historyCleanupConnectionId, setHistoryCleanupConnectionId] = useState("all");
+  const [resetSyncState, setResetSyncState] = useState(false);
+  const [includeSyncLogs, setIncludeSyncLogs] = useState(false);
+  const [isClearingGmailHistory, setIsClearingGmailHistory] = useState(false);
+  const [gmailHistoryCleanupMessage, setGmailHistoryCleanupMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const loadBatchJobs = useCallback(async () => {
     setIsLoadingJobs(true);
@@ -42,11 +50,9 @@ const JobsPage = () => {
       const resp = await listBatchJobs();
       const data = resp?.data;
       setBatchJobs(data?.jobs ?? []);
-      setTotalJobs(data?.total_jobs ?? 0);
     } catch (err) {
       console.error("Failed to load batch jobs", err);
       setBatchJobs([]);
-      setTotalJobs(0);
     } finally {
       setIsLoadingJobs(false);
     }
@@ -151,6 +157,46 @@ const JobsPage = () => {
   };
 
   const formatNullable = (value: string | null | undefined) => value || "-";
+
+  const handleClearGmailHistory = async () => {
+    const connectionId =
+      historyCleanupConnectionId === "all" ? undefined : Number(historyCleanupConnectionId);
+    const selectedConnection = connections.find((conn) => conn.id === connectionId);
+    const scopeLabel = selectedConnection
+      ? `${t.jobs.connection}: ${selectedConnection.email}`
+      : t.jobs.allGmailConnections;
+
+    const extras = [
+      resetSyncState ? t.jobs.resetSyncState : null,
+      includeSyncLogs ? t.jobs.includeSyncLogs : null,
+    ].filter(Boolean);
+    const extraText = extras.length > 0 ? `\n${extras.join("\n")}` : "";
+
+    if (!confirm(`${t.jobs.clearEmailHistoryConfirm}\n\n${scopeLabel}${extraText}`)) return;
+
+    setIsClearingGmailHistory(true);
+    setGmailHistoryCleanupMessage(null);
+    try {
+      await deleteGmailHistory({
+        connection_id: connectionId,
+        reset_sync_state: resetSyncState,
+        include_sync_logs: includeSyncLogs,
+      });
+      setGmailHistoryCleanupMessage({
+        type: "success",
+        text: t.jobs.clearEmailHistorySuccess,
+      });
+      await loadSyncHistory();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t.jobs.clearEmailHistoryFailed;
+      setGmailHistoryCleanupMessage({
+        type: "error",
+        text: message,
+      });
+    } finally {
+      setIsClearingGmailHistory(false);
+    }
+  };
 
   return (
     <AppLayout pageName={t.jobs.title}>
@@ -351,16 +397,91 @@ const JobsPage = () => {
           className="rounded-lg border"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}
         >
-          <div className="p-4 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
-            <Mail className="h-5 w-5" style={{ color: "var(--muted-foreground)" }} />
-            <div>
-              <h2 className="font-medium" style={{ color: "var(--foreground)" }}>
-                {t.jobs.emailIngestionHistory}
-              </h2>
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                {t.jobs.emailIngestionHistoryDescription}
-              </p>
+          <div className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5" style={{ color: "var(--muted-foreground)" }} />
+                <div>
+                  <h2 className="font-medium" style={{ color: "var(--foreground)" }}>
+                    {t.jobs.emailIngestionHistory}
+                  </h2>
+                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    {t.jobs.emailIngestionHistoryDescription}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
+                  {t.jobs.clearHistoryForTesting}
+                </span>
+                <select
+                  value={historyCleanupConnectionId}
+                  onChange={(event) => setHistoryCleanupConnectionId(event.target.value)}
+                  disabled={isClearingGmailHistory}
+                  className="h-9 rounded-md border px-3 text-sm disabled:opacity-50"
+                  style={{
+                    background: "var(--background)",
+                    borderColor: "var(--border)",
+                    color: "var(--foreground)",
+                  }}
+                  aria-label={t.jobs.connectionScope}
+                >
+                  <option value="all">{t.jobs.allGmailConnections}</option>
+                  {connections.map((conn) => (
+                    <option key={conn.id} value={conn.id}>
+                      {conn.email}
+                    </option>
+                  ))}
+                </select>
+                <label className="inline-flex h-9 items-center gap-2 text-sm" style={{ color: "var(--foreground)" }}>
+                  <input
+                    type="checkbox"
+                    checked={resetSyncState}
+                    onChange={(event) => setResetSyncState(event.target.checked)}
+                    disabled={isClearingGmailHistory}
+                    className="h-4 w-4"
+                  />
+                  {t.jobs.resetSyncState}
+                </label>
+                <label className="inline-flex h-9 items-center gap-2 text-sm" style={{ color: "var(--foreground)" }}>
+                  <input
+                    type="checkbox"
+                    checked={includeSyncLogs}
+                    onChange={(event) => setIncludeSyncLogs(event.target.checked)}
+                    disabled={isClearingGmailHistory}
+                    className="h-4 w-4"
+                  />
+                  {t.jobs.includeSyncLogs}
+                </label>
+                <button
+                  type="button"
+                  onClick={handleClearGmailHistory}
+                  disabled={isClearingGmailHistory || isLoadingSync}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    borderColor: "var(--border)",
+                    color: "var(--red-600, #dc2626)",
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isClearingGmailHistory ? t.jobs.clearingEmailHistory : t.jobs.clearEmailHistory}
+                </button>
+              </div>
             </div>
+            {gmailHistoryCleanupMessage && (
+              <p
+                className="mt-3 text-sm"
+                style={{
+                  color:
+                    gmailHistoryCleanupMessage.type === "success"
+                      ? "var(--green-600, #16a34a)"
+                      : "var(--red-600, #dc2626)",
+                }}
+              >
+                {gmailHistoryCleanupMessage.text}
+              </p>
+            )}
           </div>
           <div className="p-4 overflow-x-auto">
             {isLoadingSync ? (

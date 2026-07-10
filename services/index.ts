@@ -382,6 +382,8 @@ export {
   disableBukku,
   deleteBukkuConnection,
   syncBukku,
+  pushBukkuInvoices,
+  pushReadyBukkuInvoices,
   getBukkuSyncLogs,
 } from './BukkuService';
 
@@ -399,6 +401,10 @@ export type {
   BukkuSyncResponse,
   BukkuDisableRequest,
   BukkuDisableResponse,
+  BukkuPushRequest,
+  BukkuPushReadyRequest,
+  BukkuPushDetail,
+  BukkuPushResponse,
   BukkuSyncLogSummary,
 } from './BukkuService';
 

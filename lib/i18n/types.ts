@@ -798,6 +798,8 @@ export interface Translations {
         syncing: string;
         syncSuccess: string;
         syncFailed: string;
+        maxMessages: string;
+        maxMessagesInvalid: string;
         lastSync: string;
         connectedAccount: string;
         disconnect: string;
@@ -932,6 +934,16 @@ export interface Translations {
     noJobs: string;
     noSyncLogs: string;
     noEmailHistory: string;
+    clearHistoryForTesting: string;
+    connectionScope: string;
+    allGmailConnections: string;
+    resetSyncState: string;
+    includeSyncLogs: string;
+    clearEmailHistory: string;
+    clearingEmailHistory: string;
+    clearEmailHistoryConfirm: string;
+    clearEmailHistorySuccess: string;
+    clearEmailHistoryFailed: string;
     refresh: string;
     loading: string;
     pending: string;

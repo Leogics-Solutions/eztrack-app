@@ -43,12 +43,14 @@ export interface IntegrationsSettingsSectionProps {
     connected: boolean;
     connections: GmailConnection[];
     keywordsInput: string;
+    maxMessagesInput: string;
     isLoadingKeywords: boolean;
     isSavingKeywords: boolean;
     isConnecting: boolean;
     isSyncing: boolean;
     disconnectingId: number | null;
     onKeywordsChange: (value: string) => void;
+    onMaxMessagesChange: (value: string) => void;
     onSaveKeywords: () => void;
     onConnect: () => void;
     onSync: () => void;

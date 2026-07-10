@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Check, ChevronDown, Edit2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Edit2, Plus, Send, X } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -14,6 +14,8 @@ import {
   downloadInvoicesZip,
   getSettings,
   pushInvoicesToBusinessCentral,
+  pushBukkuInvoices,
+  pushReadyBukkuInvoices,
   updateInvoice,
   markInvoiceCompliancePass,
   matchInvoicesAcrossStatements,
@@ -31,6 +33,8 @@ import {
   type DocumentDirection,
   type Project,
   type PushInvoicesResponse,
+  type BukkuConnection,
+  type BukkuPushResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
 } from "@/services";
@@ -145,6 +149,12 @@ export const DocumentsListing = ({
   const [isPushingToBC, setIsPushingToBC] = useState(false);
   const [showPushResultModal, setShowPushResultModal] = useState(false);
   const [pushResult, setPushResult] = useState<PushInvoicesResponse | null>(null);
+  const [bukkuConnectionId, setBukkuConnectionId] = useState<number | null>(null);
+  const [isBukkuConnected, setIsBukkuConnected] = useState(false);
+  const [isPushingToBukku, setIsPushingToBukku] = useState(false);
+  const [showBukkuPushResultModal, setShowBukkuPushResultModal] = useState(false);
+  const [bukkuPushResult, setBukkuPushResult] = useState<BukkuPushResponse | null>(null);
+  const [bukkuPushResultTitle, setBukkuPushResultTitle] = useState('Push to Bukku - Results');
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
   const [isReconRunning, setIsReconRunning] = useState(false);
   const [reconReport, setReconReport] = useState<MatchInvoicesAcrossStatementsResponse | null>(null);
@@ -189,10 +199,11 @@ export const DocumentsListing = ({
     page: 1,
     per_page: 20,
   });
+  const canPushReadySupplierInvoices = filters.direction_tab !== 'sales';
 
   useEffect(() => {
     loadData();
-    loadBusinessCentralConnection();
+    loadAccountingConnections();
   }, [filters, selectedOrganizationId]);
 
   useEffect(() => {
@@ -209,7 +220,7 @@ export const DocumentsListing = ({
     }
   };
 
-  const loadBusinessCentralConnection = async () => {
+  const loadAccountingConnections = async () => {
     try {
       const settings = await getSettings();
       const bcIntegration = settings?.integrations?.business_central;
@@ -220,11 +231,53 @@ export const DocumentsListing = ({
       const activeConnection = connections.find((c) => c.is_active);
       if (activeConnection) {
         setBcConnectionId(activeConnection.id);
+      } else {
+        setBcConnectionId(null);
       }
+
+      const bukkuConnections: BukkuConnection[] = settings?.integrations?.bukku?.connections ?? [];
+      const activeBukkuConnection =
+        bukkuConnections.find(
+          (connection) =>
+            connection.is_active &&
+            selectedOrganizationId !== null &&
+            connection.organization_id === selectedOrganizationId
+        ) ??
+        bukkuConnections.find((connection) => connection.is_active) ??
+        null;
+      setBukkuConnectionId(activeBukkuConnection?.id ?? null);
+      setIsBukkuConnected(Boolean(activeBukkuConnection));
     } catch (error) {
-      console.error('Failed to load Business Central connection', error);
+      console.error('Failed to load accounting connections', error);
       setIsBusinessCentralEnabled(false);
+      setBcConnectionId(null);
+      setIsBukkuConnected(false);
+      setBukkuConnectionId(null);
     }
+  };
+
+  const getBukkuDefaultAccountId = () => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('bukku_default_account_id') : null;
+    const input = prompt(
+      'Fallback Bukku account ID for unmapped invoice lines. Leave blank to push without a fallback.',
+      saved || ''
+    );
+    if (input === null) return null;
+
+    const trimmed = input.trim();
+    if (!trimmed) {
+      if (typeof window !== 'undefined') localStorage.removeItem('bukku_default_account_id');
+      return undefined;
+    }
+
+    const accountId = Number(trimmed);
+    if (!Number.isInteger(accountId) || accountId <= 0) {
+      alert('Please enter a valid Bukku account ID.');
+      return null;
+    }
+
+    if (typeof window !== 'undefined') localStorage.setItem('bukku_default_account_id', String(accountId));
+    return accountId;
   };
 
   const handlePushToBusinessCentral = async () => {
@@ -255,6 +308,77 @@ export const DocumentsListing = ({
       alert(error?.message || 'Failed to push invoices to Business Central');
     } finally {
       setIsPushingToBC(false);
+    }
+  };
+
+  const handlePushSelectedToBukku = async () => {
+    if (!bukkuConnectionId) {
+      alert('Bukku connection not available. Please configure it in Settings.');
+      return;
+    }
+
+    if (selectedInvoices.size === 0) {
+      alert('Please select at least one invoice to push.');
+      return;
+    }
+
+    const defaultAccountId = getBukkuDefaultAccountId();
+    if (defaultAccountId === null) return;
+
+    setIsPushingToBukku(true);
+    try {
+      const result = await pushBukkuInvoices({
+        connection_id: bukkuConnectionId,
+        invoice_ids: Array.from(selectedInvoices),
+        create_missing_contacts: true,
+        default_account_id: defaultAccountId,
+        status: 'draft',
+      });
+      setBukkuPushResult(result);
+      setBukkuPushResultTitle('Push selected to Bukku - Results');
+      setShowBukkuPushResultModal(true);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to push invoices to Bukku', error);
+      alert(error instanceof Error ? error.message : 'Failed to push invoices to Bukku');
+    } finally {
+      setIsPushingToBukku(false);
+    }
+  };
+
+  const handlePushReadySupplierInvoicesToBukku = async () => {
+    if (!bukkuConnectionId) {
+      alert('Bukku connection not available. Please configure it in Settings.');
+      return;
+    }
+
+    if (!confirm('Push up to 100 validated supplier invoices to Bukku as draft purchase bills?')) {
+      return;
+    }
+
+    const defaultAccountId = getBukkuDefaultAccountId();
+    if (defaultAccountId === null) return;
+
+    setIsPushingToBukku(true);
+    try {
+      const result = await pushReadyBukkuInvoices({
+        connection_id: bukkuConnectionId,
+        statuses: ['VALIDATED'],
+        directions: ['AP'],
+        limit: 100,
+        create_missing_contacts: true,
+        default_account_id: defaultAccountId,
+        status: 'draft',
+      });
+      setBukkuPushResult(result);
+      setBukkuPushResultTitle('Push ready supplier invoices to Bukku - Results');
+      setShowBukkuPushResultModal(true);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to push ready supplier invoices to Bukku', error);
+      alert(error instanceof Error ? error.message : 'Failed to push ready supplier invoices to Bukku');
+    } finally {
+      setIsPushingToBukku(false);
     }
   };
 
@@ -1794,6 +1918,40 @@ export const DocumentsListing = ({
                 )}
               </button>
             )}
+            {isBukkuConnected && (
+              <>
+                <button
+                  onClick={handlePushSelectedToBukku}
+                  disabled={selectedInvoices.size === 0 || isPushingToBukku}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isPushingToBukku ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Pushing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Push selected to Bukku{selectedInvoices.size > 0 ? ` (${selectedInvoices.size})` : ''}
+                    </>
+                  )}
+                </button>
+                {canPushReadySupplierInvoices && (
+                  <button
+                    onClick={handlePushReadySupplierInvoicesToBukku}
+                    disabled={isPushingToBukku}
+                    className="px-4 py-2 border border-emerald-600 text-emerald-700 dark:text-emerald-300 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Send className="h-4 w-4" />
+                    Push ready suppliers
+                  </button>
+                )}
+              </>
+            )}
             <button
               onClick={bulkDelete}
               disabled={selectedInvoices.size === 0}
@@ -2873,6 +3031,131 @@ export const DocumentsListing = ({
               <button
                 onClick={() => {
                   setShowPushResultModal(false);
+                }}
+                className="px-6 py-2 rounded-md transition-colors hover:opacity-90"
+                style={{
+                  background: 'var(--primary)',
+                  color: 'white',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Push to Bukku Result Modal */}
+      {showBukkuPushResultModal && bukkuPushResult && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowBukkuPushResultModal(false);
+            }
+          }}
+        >
+          <div
+            className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            style={{
+              background: 'var(--card)',
+              borderColor: 'var(--border)',
+            }}
+          >
+            <div className="p-6 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
+              <h3 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+                {bukkuPushResultTitle}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowBukkuPushResultModal(false);
+                }}
+                className="text-2xl hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--foreground)' }}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {bukkuPushResult.pushed_count}
+                  </div>
+                  <div className="text-sm text-green-700 dark:text-green-300">Pushed</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-red-50 dark:bg-red-900/20">
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {bukkuPushResult.failed_count}
+                  </div>
+                  <div className="text-sm text-red-700 dark:text-red-300">Failed</div>
+                </div>
+                <div className="text-center p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                  <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                    {bukkuPushResult.skipped_count}
+                  </div>
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300">Skipped</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {bukkuPushResult.details.length === 0 ? (
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    No invoice rows returned.
+                  </div>
+                ) : (
+                  bukkuPushResult.details.map((detail) => (
+                    <div
+                      key={detail.invoice_id}
+                      className={`p-3 rounded-md border ${detail.status === 'SUCCESS'
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                          : detail.status === 'FAILED'
+                            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                            : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="font-medium" style={{ color: 'var(--foreground)' }}>
+                            Invoice #{detail.invoice_id} {detail.invoice_no && `(${detail.invoice_no})`}
+                          </div>
+                          <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                            Status: <span className="font-semibold">{detail.status}</span>
+                          </div>
+                          {detail.bukku_object_type && (
+                            <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                              Bukku object: {detail.bukku_object_type}
+                            </div>
+                          )}
+                          {detail.bukku_id && (
+                            <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                              Bukku ID: {detail.bukku_id}
+                            </div>
+                          )}
+                          {detail.error_message && (
+                            <div className="text-sm mt-1 text-red-600 dark:text-red-400">
+                              {detail.error_message}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-md font-semibold ${detail.status === 'SUCCESS'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : detail.status === 'FAILED'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                          }`}>
+                          {detail.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
+              <button
+                onClick={() => {
+                  setShowBukkuPushResultModal(false);
                 }}
                 className="px-6 py-2 rounded-md transition-colors hover:opacity-90"
                 style={{

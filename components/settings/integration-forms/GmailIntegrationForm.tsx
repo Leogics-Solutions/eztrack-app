@@ -9,12 +9,14 @@ export interface GmailIntegrationFormProps {
   connected: boolean;
   connections: GmailConnection[];
   keywordsInput: string;
+  maxMessagesInput: string;
   isLoadingKeywords: boolean;
   isSavingKeywords: boolean;
   isConnecting: boolean;
   isSyncing: boolean;
   disconnectingId: number | null;
   onKeywordsChange: (value: string) => void;
+  onMaxMessagesChange: (value: string) => void;
   onSaveKeywords: () => void;
   onConnect: () => void;
   onSync: () => void;
@@ -27,12 +29,14 @@ export function GmailIntegrationForm({
   connected,
   connections,
   keywordsInput,
+  maxMessagesInput,
   isLoadingKeywords,
   isSavingKeywords,
   isConnecting,
   isSyncing,
   disconnectingId,
   onKeywordsChange,
+  onMaxMessagesChange,
   onSaveKeywords,
   onConnect,
   onSync,
@@ -86,7 +90,7 @@ export function GmailIntegrationForm({
             </ul>
           )}
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0 flex-wrap items-end">
           {!connected ? (
             <button
               type="button"
@@ -98,15 +102,37 @@ export function GmailIntegrationForm({
               {isConnecting ? g.connecting : g.connect}
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={isSyncing}
-              className="px-4 py-2 rounded-md font-medium text-sm transition-colors disabled:opacity-50 border"
-              style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-            >
-              {isSyncing ? g.syncing : g.syncNow}
-            </button>
+            <>
+              <label className="block text-sm">
+                <span className="block text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>
+                  {g.maxMessages}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  step={1}
+                  value={maxMessagesInput}
+                  onChange={(e) => onMaxMessagesChange(e.target.value)}
+                  disabled={isSyncing}
+                  className="w-28 px-3 py-2 border rounded-md text-sm"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card)',
+                    color: 'var(--foreground)',
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={isSyncing}
+                className="px-4 py-2 rounded-md font-medium text-sm transition-colors disabled:opacity-50 border"
+                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+              >
+                {isSyncing ? g.syncing : g.syncNow}
+              </button>
+            </>
           )}
         </div>
       </div>

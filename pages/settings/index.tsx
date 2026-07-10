@@ -152,6 +152,7 @@ const SettingsPage = () => {
     const [isSyncingGmail, setIsSyncingGmail] = useState(false);
     const [disconnectingConnectionId, setDisconnectingConnectionId] = useState<number | null>(null);
     const [gmailKeywordsInput, setGmailKeywordsInput] = useState("");
+    const [gmailMaxMessagesInput, setGmailMaxMessagesInput] = useState("50");
     const [isLoadingGmailKeywords, setIsLoadingGmailKeywords] = useState(false);
     const [isSavingGmailKeywords, setIsSavingGmailKeywords] = useState(false);
     const gmailCallbackProcessedRef = useRef(false);
@@ -1044,9 +1045,18 @@ const SettingsPage = () => {
 
     // Gmail: trigger sync (ingest attachments from inbox)
     const handleGmailSync = async () => {
+        const parsedMaxMessages = Number(gmailMaxMessagesInput);
+        if (!Number.isInteger(parsedMaxMessages) || parsedMaxMessages < 1 || parsedMaxMessages > 500) {
+            showNotification(t.settings.integrations.gmail.maxMessagesInvalid, 'error');
+            return;
+        }
+
         setIsSyncingGmail(true);
         try {
-            const res = await postGmailSync(DEFAULT_GMAIL_SYNC_REQUEST);
+            const res = await postGmailSync({
+                ...DEFAULT_GMAIL_SYNC_REQUEST,
+                max_messages: parsedMaxMessages,
+            });
             const formatSyncMessage = (sync: GmailSyncResponse) => {
                 const attachments = sync.attachments_ingested ?? 0;
                 const jobs = sync.jobs_enqueued ?? sync.job_ids?.length ?? 0;
@@ -2198,12 +2208,14 @@ const SettingsPage = () => {
                             connected: gmailConnected,
                             connections: gmailConnections,
                             keywordsInput: gmailKeywordsInput,
+                            maxMessagesInput: gmailMaxMessagesInput,
                             isLoadingKeywords: isLoadingGmailKeywords,
                             isSavingKeywords: isSavingGmailKeywords,
                             isConnecting: isConnectingGmail,
                             isSyncing: isSyncingGmail,
                             disconnectingId: disconnectingConnectionId,
                             onKeywordsChange: setGmailKeywordsInput,
+                            onMaxMessagesChange: setGmailMaxMessagesInput,
                             onSaveKeywords: handleSaveGmailKeywords,
                             onConnect: handleConnectGmail,
                             onSync: handleGmailSync,
