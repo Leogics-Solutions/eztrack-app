@@ -878,7 +878,7 @@ export async function createInvoiceUploadIntent(
 ): Promise<UploadIntentResponse> {
   const body: UploadIntentRequest = {
     filename: file.name,
-    content_type: file.type || 'application/octet-stream',
+    content_type: getFileContentType(file),
     size_bytes: file.size,
     document_type: options?.document_type,
     direction: options?.direction,
@@ -908,7 +908,7 @@ export async function uploadFileToS3(
   requiredHeaders?: Record<string, string>
 ): Promise<void> {
   const headers: Record<string, string> = {
-    'Content-Type': file.type || 'application/octet-stream',
+    'Content-Type': getFileContentType(file),
     ...requiredHeaders,
   };
 
@@ -1360,7 +1360,7 @@ export async function batchUploadInvoices(
   // Step 1: Get presigned URLs for all files
   const filesMetadata = files.map(f => ({
     filename: f.name,
-    content_type: f.type || 'application/octet-stream',
+    content_type: getFileContentType(f),
     size_bytes: f.size,
     direction: options?.direction,
     project_id: options?.project_id,
@@ -1400,7 +1400,7 @@ export async function batchUploadInvoices(
   // Step 2: Upload all files to S3 in parallel
   await Promise.all(
     items.map((item, index) =>
-      uploadFileToS3(item.upload_url, files[index], { 'Content-Type': files[index].type || 'application/octet-stream' })
+      uploadFileToS3(item.upload_url, files[index], { 'Content-Type': getFileContentType(files[index]) })
     )
   );
 
@@ -2090,7 +2090,7 @@ export async function uploadToGroup(
     headers: getScopedHeaders(),
     body: JSON.stringify({
       filename: file.name,
-      content_type: file.type || 'application/octet-stream',
+      content_type: getFileContentType(file),
       size_bytes: file.size,
     }),
   });

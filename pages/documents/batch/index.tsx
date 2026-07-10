@@ -50,6 +50,19 @@ interface ResultSummary {
   }>;
 }
 
+const COMBINED_DOC_ACCEPTED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif'] as const;
+const COMBINED_DOC_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,image/*';
+const COMBINED_DOC_HELP_TEXT = 'PDF files or images are accepted for combined document processing.';
+
+function isAcceptedCombinedDocFile(file: File): boolean {
+  if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
+    return true;
+  }
+
+  const fileExtension = file.name.toLowerCase().split('.').pop();
+  return COMBINED_DOC_ACCEPTED_EXTENSIONS.some(extension => extension === fileExtension);
+}
+
 const BatchUpload = () => {
   const router = useRouter();
   const { t } = useLanguage();
@@ -157,15 +170,12 @@ const BatchUpload = () => {
       return;
     }
 
-    // Validate file types for combined_docs (only PDFs allowed)
+    // Validate file types for combined_docs (PDFs and images allowed)
     if (documentType === 'combined_docs') {
-      const invalidFiles = selectedFiles.filter(file => {
-        const fileExtension = file.name.toLowerCase().split('.').pop();
-        return fileExtension !== 'pdf';
-      });
+      const invalidFiles = selectedFiles.filter(file => !isAcceptedCombinedDocFile(file));
       
       if (invalidFiles.length > 0) {
-        alert(`Combined Documents mode only accepts PDF files. Please remove the following non-PDF files:\n${invalidFiles.map(f => f.name).join('\n')}`);
+        alert(`Combined Documents mode only accepts PDF files or images. Please remove the following unsupported files:\n${invalidFiles.map(f => f.name).join('\n')}`);
         return;
       }
     }
@@ -525,7 +535,7 @@ const BatchUpload = () => {
                 </select>
                 <small className="text-xs text-[var(--muted-foreground)] mt-1 block">
                   {documentType === 'combined_docs'
-                    ? 'Combined Documents: Only accepts PDF files. Processes each page individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links all documents from the same PDF.'
+                    ? 'Combined Documents: Accepts PDF files and images. Processes each page or image individually, classifies document types (invoice, export invoice, bill of lading, custom form, DO), and automatically links documents uploaded together.'
                     : documentType === 'petty_cash' && documentSubCategory === 'summary'
                     ? 'Summary Petty Cash: Processes petty cash summary documents. Sub-category will be saved to invoice remarks.'
                     : documentType === 'petty_cash'
@@ -597,12 +607,12 @@ const BatchUpload = () => {
           <FileUpload
             onFilesSelect={handleFilesSelect}
             multiple={true}
-            accept={documentType === 'combined_docs' ? '.pdf' : 'image/*,.pdf'}
+            accept={documentType === 'combined_docs' ? COMBINED_DOC_ACCEPT : 'image/*,.pdf'}
             required={true}
             label={t.documents.batchUploadPage.selectFiles}
             requiredText={t.documents.batchUploadPage.selectFilesRequired}
             helpText={documentType === 'combined_docs' 
-              ? 'Only PDF files are accepted for combined document processing.'
+              ? COMBINED_DOC_HELP_TEXT
               : t.documents.batchUploadPage.selectFilesHelp
             }
           />

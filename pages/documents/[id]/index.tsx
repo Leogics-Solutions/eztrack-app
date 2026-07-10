@@ -214,7 +214,7 @@ const InvoiceDetail = () => {
   const { id } = router.query;
   const { t } = useLanguage();
   const { showToast } = useToast();
-  const { selectedOrganizationId } = useOrganization();
+  const { selectedOrganizationId, isLoading: isOrganizationLoading } = useOrganization();
 
   // State
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -247,11 +247,11 @@ const InvoiceDetail = () => {
 
   // Load invoice data
   useEffect(() => {
-    if (id) {
+    if (id && !isOrganizationLoading) {
       loadInvoiceData();
+      loadBusinessCentralConnection();
     }
-    loadBusinessCentralConnection();
-  }, [id]);
+  }, [id, selectedOrganizationId, isOrganizationLoading]);
 
   useEffect(() => {
     loadProjects();
