@@ -614,7 +614,7 @@ export type {
   BulkDeleteDocumentsResponse,
 } from './DocumentService';
 
-// Agent Service
+// Agent Service (conversational chat agent)
 export { chatWithAgent } from './AgentService';
 
 export type {
@@ -622,3 +622,66 @@ export type {
   AgentChatData,
   AgentChatResponse,
 } from './AgentService';
+
+// Smartdok Agents Service (configurable automation agents + runs)
+export {
+  listAgents,
+  getAgent,
+  createAgent,
+  previewAgentDesign,
+  updateAgent,
+  deleteAgent,
+  getWhatsAppConnection,
+  connectWhatsApp,
+  disconnectWhatsApp,
+  addChannel,
+  updateChannel,
+  deleteChannel,
+  addOutput,
+  updateOutput,
+  deleteOutput,
+  listRuns,
+  getRun,
+  getRunSource,
+  uploadRun,
+  reviewRun,
+  generateRun,
+  approveRun,
+  sendRunToWhatsApp,
+  repushRunToSqlAccount,
+  createSqlAccountCustomerAndRepush,
+  createSqlAccountItemsAndRepush,
+  rejectRun,
+} from './AgentsService';
+
+// SQL Account SDK Live connection selection/testing
+export {
+  listSqlAccountConnections,
+  testSqlAccountConnection,
+  updateSqlAccountConnection,
+} from './SqlAccountService';
+
+export type {
+  SqlAccountConnection,
+  SqlAccountConnectionListResponse,
+  SqlAccountTestResponse,
+} from './SqlAccountService';
+
+export type {
+  Agent,
+  AgentDesignCapability,
+  AgentDesignPreview,
+  WhatsAppConnection,
+  AgentChannel,
+  AgentOutput,
+  AgentListResponse,
+  AgentRun,
+  AgentRunLine,
+  AgentRunForex,
+  AgentRunData,
+  AgentRunEvent,
+  AgentRunListItem,
+  AgentRunListResponse,
+  SqlAccountCustomerProposal,
+  SqlAccountStockItemProposal,
+} from './AgentsService';

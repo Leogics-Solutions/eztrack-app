@@ -17,6 +17,7 @@ import {
   Receipt,
   Briefcase,
   ChevronDown,
+  Bot,
 } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
 
@@ -60,6 +61,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
     { href: '/jobs', label: t.nav.jobs, icon: FileText },
   ];
 
+  const agentsItem = { href: '/agents', label: t.nav.agents, icon: Bot };
   const settingsItem = { href: '/settings', label: t.nav.settings, icon: Settings };
 
   const renderNavItem = (item: { href: string; label: string; icon: typeof LayoutDashboard }) => {
@@ -226,6 +228,7 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
           {renderGroup('documents', <FileCheck className="h-5 w-5 flex-shrink-0" />, t.nav.documents, documentItems)}
           {renderGroup('accounting', <CreditCard className="h-5 w-5 flex-shrink-0" />, t.nav.accounting || 'Accounting & Finance', accountingItems)}
           {renderGroup('operations', <Briefcase className="h-5 w-5 flex-shrink-0" />, t.nav.operations || 'Operations', operationItems)}
+          {renderNavItem(agentsItem)}
           {renderNavItem(settingsItem)}
         </ul>
       </nav>
