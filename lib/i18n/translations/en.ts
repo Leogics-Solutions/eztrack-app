@@ -45,6 +45,7 @@ export const en: Translations = {
     accounts: 'Chart of Accounts',
     creditors: 'Creditors',
     smartdokAgent: 'Smartdok Agent',
+    agents: 'Agents',
     settings: 'Settings',
   },
   header: {

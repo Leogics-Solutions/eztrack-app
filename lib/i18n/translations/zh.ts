@@ -45,6 +45,7 @@ export const zh: Translations = {
     accounts: '会计科目表',
     creditors: '债权人',
     smartdokAgent: 'Smartdok Agent',
+    agents: '智能助手',
     settings: '设置',
   },
   header: {

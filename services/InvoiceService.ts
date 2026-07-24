@@ -239,6 +239,11 @@ export interface ListInvoicesParams {
   missing_po?: boolean;
   missing_custom_form?: boolean;
   not_bank_reconciled?: boolean;
+  // Compliance-review filters (mirror the requires_*_review response flags)
+  requires_wht_review?: boolean;
+  requires_k1_review?: boolean;
+  requires_sst_review?: boolean;
+  requires_einvoice_review?: boolean;
   project_id?: number;
 }
 
@@ -1048,6 +1053,18 @@ export async function listInvoices(
   }
   if (params?.not_bank_reconciled !== undefined) {
     queryParams.append('not_bank_reconciled', params.not_bank_reconciled.toString());
+  }
+  if (params?.requires_wht_review !== undefined) {
+    queryParams.append('requires_wht_review', params.requires_wht_review.toString());
+  }
+  if (params?.requires_k1_review !== undefined) {
+    queryParams.append('requires_k1_review', params.requires_k1_review.toString());
+  }
+  if (params?.requires_sst_review !== undefined) {
+    queryParams.append('requires_sst_review', params.requires_sst_review.toString());
+  }
+  if (params?.requires_einvoice_review !== undefined) {
+    queryParams.append('requires_einvoice_review', params.requires_einvoice_review.toString());
   }
   if (params?.project_id !== undefined) {
     queryParams.append('project_id', params.project_id.toString());

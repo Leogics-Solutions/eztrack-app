@@ -48,6 +48,7 @@ export interface Translations {
     accounts: string;
     creditors: string;
     smartdokAgent: string;
+    agents: string;
     settings: string;
   };
 

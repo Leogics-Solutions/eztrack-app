@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../invoiceReaderBackend"
+		},
+		{
+			"path": "../../../../Downloads/MapleSamples"
+		},
+		{
+			"path": "../../../../Documents/GitHub/sql-account-sdk"
+		}
+	],
+	"settings": {}
+}

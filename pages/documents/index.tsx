@@ -186,6 +186,10 @@ export const DocumentsListing = ({
     missing_po: false,
     missing_custom_form: false,
     not_bank_reconciled: false,
+    requires_wht_review: false,
+    requires_k1_review: false,
+    requires_sst_review: false,
+    requires_einvoice_review: false,
     page: 1,
     per_page: 20,
   });
@@ -328,6 +332,10 @@ export const DocumentsListing = ({
         missing_po: filters.missing_po || undefined,
         missing_custom_form: filters.missing_custom_form || undefined,
         not_bank_reconciled: filters.not_bank_reconciled || undefined,
+        requires_wht_review: filters.requires_wht_review || undefined,
+        requires_k1_review: filters.requires_k1_review || undefined,
+        requires_sst_review: filters.requires_sst_review || undefined,
+        requires_einvoice_review: filters.requires_einvoice_review || undefined,
       });
 
       if (!response.success) {
@@ -464,6 +472,10 @@ export const DocumentsListing = ({
       missing_po: false,
       missing_custom_form: false,
       not_bank_reconciled: false,
+      requires_wht_review: false,
+      requires_k1_review: false,
+      requires_sst_review: false,
+      requires_einvoice_review: false,
       page: 1,
       per_page: 20,
     });
@@ -1562,6 +1574,49 @@ export const DocumentsListing = ({
                             className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                           />
                           <span className="text-sm">Not Reconciled</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Compliance Review */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Compliance Review</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.requires_wht_review}
+                            onChange={(e) => handleFilterChange('requires_wht_review', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">WHT Review</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.requires_k1_review}
+                            onChange={(e) => handleFilterChange('requires_k1_review', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">K1 Review</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.requires_sst_review}
+                            onChange={(e) => handleFilterChange('requires_sst_review', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">SST Review</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.requires_einvoice_review}
+                            onChange={(e) => handleFilterChange('requires_einvoice_review', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">e-Invoice Review</span>
                         </label>
                       </div>
                     </div>
