@@ -21,6 +21,7 @@ export const en: Translations = {
   },
   nav: {
     dashboard: 'Dashboard',
+    capture: 'Capture',
     documents: 'Documents',
     accounting: 'Accounting & Finance',
     operations: 'Operations',

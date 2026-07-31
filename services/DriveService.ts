@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -21,16 +22,14 @@ export interface DriveConnectResponse {
  * GET /api/v1/drive/connect
  * Redirect the user to auth_url; after approval, call postDriveCallback with code and state.
  */
-export async function getDriveConnect(): Promise<DriveConnectResponse> {
+export async function getDriveConnect(returnTo?: 'capture'): Promise<DriveConnectResponse> {
   const token = getAccessToken();
   if (!token) throw new Error('No access token found');
 
-  const response = await fetch(`${BASE_URL}/drive/connect`, {
+  const query = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : '';
+  const response = await fetch(`${BASE_URL}/drive/connect${query}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -63,10 +62,7 @@ export async function postDriveCallback(data: DriveCallbackRequest): Promise<Dri
 
   const response = await fetch(`${BASE_URL}/drive/callback`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -80,6 +76,7 @@ export async function postDriveCallback(data: DriveCallbackRequest): Promise<Dri
 
 // --- Sync (trigger ingestion from Drive) ---
 export interface DriveSyncRequest {
+  connection_id?: number;
   folder_ids?: string[];
   document_type?: string;
   max_files?: number;
@@ -93,7 +90,7 @@ export interface DriveSyncResponse {
   files_processed?: number;
   files_ingested?: number;
   jobs_enqueued?: number;
-  job_ids?: number[];
+  job_ids?: string[];
   error_message?: string | null;
   errors?: Array<{ message?: string; file?: string }>;
   message?: string;
@@ -110,10 +107,7 @@ export async function postDriveSync(data?: DriveSyncRequest): Promise<DriveSyncR
 
   const response = await fetch(`${BASE_URL}/drive/sync`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data ?? {}),
   });
 
@@ -135,6 +129,27 @@ export interface DriveUserSettingsUpdateRequest {
   drive_default_folder_ids?: string[];
 }
 
+export interface DriveFolderWatch {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  connection_id: number;
+  name: string;
+  folder_id: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DriveFolderWatchInput {
+  id?: number;
+  connection_id: number;
+  name: string;
+  folder_id: string;
+  sort_order: number;
+}
+
 /**
  * Get current user's Drive settings (folder IDs).
  * GET /api/v1/drive/settings
@@ -145,10 +160,7 @@ export async function getDriveSettings(): Promise<DriveUserSettingsResponse> {
 
   const response = await fetch(`${BASE_URL}/drive/settings`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -170,10 +182,7 @@ export async function patchDriveSettings(data: DriveUserSettingsUpdateRequest): 
 
   const response = await fetch(`${BASE_URL}/drive/settings`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -182,6 +191,33 @@ export async function patchDriveSettings(data: DriveUserSettingsUpdateRequest): 
     throw new Error(error.message || error.error || 'Failed to update Drive settings');
   }
 
+  return response.json();
+}
+
+export async function getDriveFolderWatches(): Promise<{ folders: DriveFolderWatch[] }> {
+  const response = await fetch(`${BASE_URL}/drive/folders`, {
+    method: 'GET',
+    headers: getScopedHeaders(),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.detail || error.message || error.error || 'Failed to get Drive folders');
+  }
+  return response.json();
+}
+
+export async function replaceDriveFolderWatches(
+  folders: DriveFolderWatchInput[]
+): Promise<{ folders: DriveFolderWatch[] }> {
+  const response = await fetch(`${BASE_URL}/drive/folders`, {
+    method: 'PUT',
+    headers: getScopedHeaders(),
+    body: JSON.stringify({ folders }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.detail || error.message || error.error || 'Failed to save Drive folders');
+  }
   return response.json();
 }
 
@@ -205,10 +241,7 @@ export async function getDriveConnections(): Promise<{ connections: DriveConnect
 
   const response = await fetch(`${BASE_URL}/drive/connections`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -243,10 +276,7 @@ export async function getDriveSyncLogs(
 
   const response = await fetch(`${BASE_URL}/drive/sync/logs/${connectionId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -270,9 +300,7 @@ export async function deleteDriveConnection(connectionId: number): Promise<void>
 
   const response = await fetch(`${BASE_URL}/drive/connections/${connectionId}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {

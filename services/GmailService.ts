@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -21,16 +22,14 @@ export interface GmailConnectResponse {
  * GET /api/v1/gmail/connect
  * Redirect the user to auth_url; after approval, call postGmailCallback with code and state.
  */
-export async function getGmailConnect(): Promise<GmailConnectResponse> {
+export async function getGmailConnect(returnTo?: 'capture'): Promise<GmailConnectResponse> {
   const token = getAccessToken();
   if (!token) throw new Error('No access token found');
 
-  const response = await fetch(`${BASE_URL}/gmail/connect`, {
+  const query = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : '';
+  const response = await fetch(`${BASE_URL}/gmail/connect${query}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -63,10 +62,7 @@ export async function postGmailCallback(data: GmailCallbackRequest): Promise<Gma
 
   const response = await fetch(`${BASE_URL}/gmail/callback`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -80,6 +76,7 @@ export async function postGmailCallback(data: GmailCallbackRequest): Promise<Gma
 
 // --- Sync (trigger ingestion from Gmail) ---
 export interface GmailSyncRequest {
+  connection_id?: number;
   since_date?: string;
   label_ids?: string[];
   document_type?: string;
@@ -95,7 +92,7 @@ export interface GmailSyncResponse {
   messages_processed?: number;
   attachments_ingested?: number;
   jobs_enqueued?: number;
-  job_ids?: number[];
+  job_ids?: string[];
   error_message?: string | null;
   errors?: Array<{ message?: string; attachment?: string }>;
   message?: string;
@@ -112,10 +109,7 @@ export async function postGmailSync(data?: GmailSyncRequest): Promise<GmailSyncR
 
   const response = await fetch(`${BASE_URL}/gmail/sync`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data ?? {}),
   });
 
@@ -147,10 +141,7 @@ export async function getGmailConnections(): Promise<{ connections: GmailConnect
 
   const response = await fetch(`${BASE_URL}/gmail/connections`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -185,10 +176,7 @@ export async function getGmailSyncLogs(
 
   const response = await fetch(`${BASE_URL}/gmail/sync/logs/${connectionId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -220,10 +208,7 @@ export async function getGmailSettings(): Promise<GmailUserSettingsResponse> {
 
   const response = await fetch(`${BASE_URL}/gmail/settings`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {
@@ -245,10 +230,7 @@ export async function patchGmailSettings(data: GmailUserSettingsUpdateRequest): 
 
   const response = await fetch(`${BASE_URL}/gmail/settings`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -273,9 +255,7 @@ export async function deleteGmailConnection(connectionId: number): Promise<void>
 
   const response = await fetch(`${BASE_URL}/gmail/connections/${connectionId}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getScopedHeaders(),
   });
 
   if (!response.ok) {

@@ -24,6 +24,7 @@ export interface Translations {
   // Navigation
   nav: {
     dashboard: string;
+    capture: string;
     documents: string;
     accounting: string;
     operations: string;

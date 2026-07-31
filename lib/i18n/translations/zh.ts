@@ -20,6 +20,7 @@ export const zh: Translations = {
     close: '关闭',
   },
   nav: {
+    capture: 'Capture',
     dashboard: '仪表板',
     documents: '文档',
     accounting: '会计与财务',

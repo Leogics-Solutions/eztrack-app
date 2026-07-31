@@ -8,7 +8,7 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  Menu,
+  Inbox,
 } from 'lucide-react';
 
 export function MobileBottomNav() {
@@ -17,10 +17,10 @@ export function MobileBottomNav() {
 
   const navItems = [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
+    { href: '/capture', label: t.nav.capture, icon: Inbox },
     { href: '/documents', label: t.nav.documents, icon: FileCheck },
     { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
     { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
-    { href: '/creditor-accounts', label: t.nav.creditors, icon: Menu },
   ];
 
   return (
