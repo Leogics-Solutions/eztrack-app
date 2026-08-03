@@ -3,7 +3,7 @@
 import { AppLayout } from '@/components/layout';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, CheckCircle2, AlertTriangle, FileText, Send, Download, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, FileText, Send, Download, FileSpreadsheet, Image as ImageIcon, LoaderCircle, Trash2, Plus } from 'lucide-react';
 import {
   getRun, getRunSource, reviewRun, generateRun, approveRun, sendRunToWhatsApp, repushRunToSqlAccount, createSqlAccountCustomerAndRepush, createSqlAccountItemsAndRepush, rejectRun,
   type AgentRun, type AgentRunData, type AgentRunForex, type AgentRunLine, type SqlAccountCustomerProposal, type SqlAccountStockItemProposal,
@@ -21,13 +21,19 @@ export default function AgentRunPage() {
   const [forexDraft, setForexDraft] = useState<AgentRunForex | null>(null);
   const [customerDraft, setCustomerDraft] = useState('');
   const [customerCodeDraft, setCustomerCodeDraft] = useState('');
+  const [customerAddressDraft, setCustomerAddressDraft] = useState('');
+  const [customerAttnDraft, setCustomerAttnDraft] = useState('');
+  const [customerPhoneDraft, setCustomerPhoneDraft] = useState('');
+  const [customerEmailDraft, setCustomerEmailDraft] = useState('');
   const [documentCodeDraft, setDocumentCodeDraft] = useState('');
   const [invoiceDateDraft, setInvoiceDateDraft] = useState('');
+  const [noConversion, setNoConversion] = useState(false);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [sourceMime, setSourceMime] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
+  const busy = pending !== null;
   const [error, setError] = useState<string | null>(null);
   const [customerProposal, setCustomerProposal] = useState<SqlAccountCustomerProposal | null>(null);
   const [itemProposals, setItemProposals] = useState<SqlAccountStockItemProposal[]>([]);
@@ -39,27 +45,42 @@ export default function AgentRunPage() {
     setForexDraft(reviewed?.forex ? { ...reviewed.forex } : null);
     setCustomerDraft(reviewed?.customer || '');
     setCustomerCodeDraft(reviewed?.customer_code || '');
+    setCustomerAddressDraft(reviewed?.customer_address || '');
+    setCustomerAttnDraft(reviewed?.customer_attn || '');
+    setCustomerPhoneDraft(reviewed?.customer_phone || '');
+    setCustomerEmailDraft(reviewed?.customer_email || '');
     setDocumentCodeDraft(reviewed?.code || '');
     setInvoiceDateDraft(reviewed?.inv_date || '');
+    setNoConversion(Boolean(reviewed?.no_conversion));
     const proposal = (r.output_refs as { sql_account?: { customer_proposal?: SqlAccountCustomerProposal } } | undefined)?.sql_account?.customer_proposal;
     setCustomerProposal(proposal?.code && proposal.code.length <= 10 && proposal.company_name ? { code: proposal.code, company_name: proposal.company_name, address: proposal.address || '' } : null);
     setItemProposals((r.output_refs as { sql_account?: { item_proposals?: SqlAccountStockItemProposal[] } } | undefined)?.sql_account?.item_proposals || []);
   };
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!runId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       hydrate(await getRun(runId));
       setError(null);
     } catch (e) {
-      setError((e as Error)?.message || 'Failed to load run');
+      if (!silent) setError((e as Error)?.message || 'Failed to load run');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [runId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // While the agent is still reading the document, poll quietly so the page shows
+  // live progress and flips to the review form the moment extraction finishes —
+  // rather than blocking on one long request for a large (900+ item) order.
+  useEffect(() => {
+    const s = run?.status;
+    if (s !== 'RECEIVED' && s !== 'EXTRACTING') return;
+    const id = setInterval(() => { load(true); }, 3000);
+    return () => clearInterval(id);
+  }, [run?.status, load]);
 
   useEffect(() => {
     let active = true;
@@ -88,6 +109,11 @@ export default function AgentRunPage() {
   const data: AgentRunData | undefined = run?.corrected_data || run?.extracted_data || undefined;
   const forex = forexDraft;
   const totals = data?.totals || {};
+  // Flag when the extracted grand total drifts from the PO's stated total.
+  const statedTotal = forex?.expected_total ?? null;
+  const grandTotal = totals.grand_total_myr ?? null;
+  const totalDelta = statedTotal != null && grandTotal != null ? Math.round((grandTotal - statedTotal) * 100) / 100 : null;
+  const totalMismatch = totalDelta != null && Math.abs(totalDelta) > 0.05;
   const documents = (run?.output_refs as { documents?: { do?: DocPreview; invoice?: DocPreview } } | undefined)?.documents;
   const whatsappDelivery = (run?.output_refs as { notify?: { status?: string; detail?: string; note?: string } } | undefined)?.notify;
   const sqlAccountDelivery = (run?.output_refs as { sql_account?: SqlAccountDelivery } | undefined)?.sql_account;
@@ -105,8 +131,13 @@ export default function AgentRunPage() {
     ...(data || {}),
     customer: customerDraft.trim() || null,
     customer_code: customerCodeDraft.trim() || null,
+    customer_address: customerAddressDraft.trim() || null,
+    customer_attn: customerAttnDraft.trim() || null,
+    customer_phone: customerPhoneDraft.trim() || null,
+    customer_email: customerEmailDraft.trim() || null,
     code: documentCodeDraft.trim() || null,
     inv_date: invoiceDateDraft.trim() || null,
+    no_conversion: noConversion,
     forex,
     lines,
   });
@@ -120,6 +151,14 @@ export default function AgentRunPage() {
       }
       return next;
     }));
+  };
+
+  const addLine = () => {
+    setLines((previous) => [...previous, { name: '', qty: null, unit_price_foreign: null, amount_foreign: null }]);
+  };
+
+  const deleteLine = (index: number) => {
+    setLines((previous) => previous.filter((_, current) => current !== index));
   };
 
   const updateMatch = (index: number, patch: Partial<NonNullable<AgentRunLine['match']>>) => {
@@ -138,14 +177,17 @@ export default function AgentRunPage() {
     }));
   };
 
-  const act = async (fn: () => Promise<AgentRun>) => {
-    setBusy(true);
+  // Track which action is running, not just that one is. SQL Account pushes wait
+  // on the connector for up to 90s, so the clicked button has to show progress
+  // while the rest stay disabled against concurrent edits to the same run.
+  const act = async (key: string, fn: () => Promise<AgentRun>) => {
+    setPending(key);
     try {
       hydrate(await fn());
     } catch (e) {
       alert((e as Error)?.message || 'Action failed');
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
@@ -170,7 +212,7 @@ export default function AgentRunPage() {
                 <div><span className="text-[var(--muted-foreground)]">Customer: </span><b>{data?.customer || '—'}</b></div>
                 <div><span className="text-[var(--muted-foreground)]">Code: </span>{data?.code || '—'}</div>
                 <div><span className="text-[var(--muted-foreground)]">Invoice date: </span>{data?.inv_date || '—'}</div>
-                <div><span className="text-[var(--muted-foreground)]">Status: </span><b>{status}</b></div>
+                <div><span className="text-[var(--muted-foreground)]">Status: </span><b>{status}</b>{run.revision ? <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">Revision R{run.revision}</span> : null}</div>
               </div>
               {run.source_caption && (
                 <div className="max-w-xl">
@@ -179,6 +221,18 @@ export default function AgentRunPage() {
                 </div>
               )}
             </div>
+
+            {(status === 'RECEIVED' || status === 'EXTRACTING') && (
+              <div className="mt-4 flex items-center gap-3 rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/5 p-4">
+                <LoaderCircle className="h-5 w-5 animate-spin text-[var(--primary)]" />
+                <div className="text-sm">
+                  <p className="font-medium">Agent is working on this order…</p>
+                  <p className="text-[var(--muted-foreground)]">{status === 'EXTRACTING'
+                    ? 'Reading the document and extracting line items. Large orders (900+ items) can take a minute or two — this page updates automatically.'
+                    : 'Received — queued for extraction. This page updates automatically.'}</p>
+                </div>
+              </div>
+            )}
 
             {forex && (
               <div className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${forex.matches === false ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
@@ -198,6 +252,7 @@ export default function AgentRunPage() {
               <b>SQL Account:</b> {sqlAccountDelivery.status === 'created'
                 ? `created Delivery Order ${sqlAccountDelivery.delivery_order?.document_no || '—'} and Sales Invoice ${sqlAccountDelivery.invoice?.document_no || '—'}.`
                 : `not posted. ${sqlAccountDelivery.detail || sqlAccountDelivery.note || 'Check the SQL Account connection and master-data matches.'}`}
+              {sqlAccountDelivery.status === 'created' && sqlAccountDelivery.note && <p className="mt-2 text-xs">⚠ {sqlAccountDelivery.note}</p>}
               {sqlAccountDelivery.customer_creation?.customer?.code && <p className="mt-2 text-xs"><b>Customer master:</b> {sqlAccountDelivery.customer_creation.status === 'created' ? 'created' : 'already existed'} — {sqlAccountDelivery.customer_creation.customer.code} {sqlAccountDelivery.customer_creation.customer.company_name ? `(${sqlAccountDelivery.customer_creation.customer.company_name})` : ''}.</p>}
             </div>}
             {sourceWarnings.length > 0 && (
@@ -216,7 +271,12 @@ export default function AgentRunPage() {
                 <Field label="SQL Account customer code"><input maxLength={10} value={customerCodeDraft} onChange={(event) => setCustomerCodeDraft(event.target.value.toUpperCase())} placeholder="Optional" className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="Reference code"><input value={documentCodeDraft} onChange={(event) => setDocumentCodeDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="Invoice date"><input type="date" value={invoiceDateDraft} onChange={(event) => setInvoiceDateDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Attn"><input value={customerAttnDraft} onChange={(event) => setCustomerAttnDraft(event.target.value)} placeholder="Contact person" className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Phone"><input value={customerPhoneDraft} onChange={(event) => setCustomerPhoneDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Email"><input value={customerEmailDraft} onChange={(event) => setCustomerEmailDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Address"><input value={customerAddressDraft} onChange={(event) => setCustomerAddressDraft(event.target.value)} placeholder="Billing / delivery address" className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
               </div>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">Contact details are pulled from the document when present; edit them and they print in the DO/Invoice header.</p>
             </section>
           )}
 
@@ -243,9 +303,11 @@ export default function AgentRunPage() {
                   <h2 className="font-semibold">Conversion details</h2>
                   <p className="text-sm text-[var(--muted-foreground)]">Review the rate extracted from the WhatsApp message. Saving recalculates every MYR line value.</p>
                 </div>
-                {!forex && <button type="button" onClick={() => updateForex({})} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--hover-bg)]">Add conversion rate</button>}
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium"><input type="checkbox" checked={noConversion} onChange={(event) => { setNoConversion(event.target.checked); if (event.target.checked) setForexDraft(null); }} className="h-4 w-4 accent-[var(--primary)]" /> Already MYR — no conversion</label>
+                {!noConversion && !forex && <button type="button" onClick={() => updateForex({})} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--hover-bg)]">Add conversion rate</button>}
               </div>
-              {forex ? (
+              {noConversion && <p className="mt-2 rounded-md bg-[var(--muted)] p-3 text-sm text-[var(--muted-foreground)]">This order is treated as already in MYR. The extracted prices are used directly with no exchange rate.</p>}
+              {noConversion ? null : forex ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <Field label="Original currency"><input value={forex.currency || ''} onChange={(e) => updateForex({ currency: e.target.value })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                   <Field label="Formula amount"><input type="number" value={forex.amount ?? ''} onChange={(e) => updateForex({ amount: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
@@ -253,7 +315,7 @@ export default function AgentRunPage() {
                   <Field label="Conversion rate"><input type="number" step="any" value={forex.rate ?? ''} onChange={(e) => updateForex({ rate: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                   <Field label="Flat fee (MYR)"><input type="number" step="any" value={forex.flat_fee ?? ''} onChange={(e) => updateForex({ flat_fee: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                 </div>
-              ) : <p className="mt-3 text-sm text-amber-700">No conversion formula was detected. Add the rate from the WhatsApp message before you generate a foreign-currency invoice.</p>}
+              ) : <p className="mt-3 text-sm text-amber-700">No conversion formula was detected. Add the rate from the WhatsApp message, or tick “Already MYR” if this order needs no conversion.</p>}
             </section>
           )}
 
@@ -265,10 +327,13 @@ export default function AgentRunPage() {
                   <th className="px-3 py-2">Product (source)</th><th className="px-3 py-2">SKU</th><th className="px-3 py-2">English description</th>
                   <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Amount ({originalCurrency})</th>
                   <th className="px-3 py-2 text-right">Unit (MYR)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="px-3 py-2">Match</th>
+                  {canReview && <th className="px-3 py-2 w-px"><span className="sr-only">Actions</span></th>}
                 </tr></thead>
                 <tbody>{lines.map((line, index) => (
                   <tr key={index} className="border-t border-[var(--border)] align-top">
-                    <td className="px-3 py-2"><div>{line.name}</div><div className="text-xs text-[var(--muted-foreground)]">{line.model}</div></td>
+                    <td className="px-3 py-2">{canReview
+                      ? <><input value={line.name || ''} onChange={(e) => updateLine(index, { name: e.target.value })} placeholder="Item name" className="w-48 rounded border border-[var(--border)] bg-transparent px-2 py-1" /><input value={line.model || ''} onChange={(e) => updateLine(index, { model: e.target.value })} placeholder="Model / code" className="mt-1 w-48 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-xs" /><div className="mt-1 flex gap-1"><input value={line.color || ''} onChange={(e) => updateLine(index, { color: e.target.value })} placeholder="Color" className="w-24 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-xs" /><input value={line.unit || ''} onChange={(e) => updateLine(index, { unit: e.target.value })} placeholder="UOM" className="w-16 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-xs" /></div></>
+                      : <><div>{line.name}</div><div className="text-xs text-[var(--muted-foreground)]">{[line.model, line.color, line.unit].filter(Boolean).join(' · ')}</div></>}</td>
                     <td className="px-3 py-2"><input disabled={!canReview} value={line.match?.sku_code || ''} onChange={(e) => updateMatch(index, { sku_code: e.target.value })} className="w-24 rounded border border-[var(--border)] bg-transparent px-2 py-1" /></td>
                     <td className="px-3 py-2"><input disabled={!canReview} value={line.match?.en_description || ''} onChange={(e) => updateMatch(index, { en_description: e.target.value })} className="w-56 rounded border border-[var(--border)] bg-transparent px-2 py-1" /></td>
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" value={line.qty ?? ''} onChange={(e) => updateLine(index, { qty: numeric(e.target.value) })} className="w-20 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
@@ -276,11 +341,16 @@ export default function AgentRunPage() {
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.amount_foreign ?? ''} onChange={(e) => updateLine(index, { amount_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
                     <td className="px-3 py-2 text-right">{fmt(line.unit_price_myr)}</td><td className="px-3 py-2 text-right">{fmt(line.amount_myr)}</td>
                     <td className="px-3 py-2">{line.match?.matched ? <span className="text-xs text-green-700">{Math.round((line.match.confidence || 0) * 100)}%</span> : <span className="text-xs text-amber-700">unmatched</span>}</td>
+                    {canReview && <td className="px-3 py-2"><button type="button" onClick={() => deleteLine(index)} aria-label={`Delete line ${index + 1}`} title="Delete this line" className="rounded p-1.5 text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 dark:hover:text-red-300"><Trash2 className="h-4 w-4" /></button></td>}
                   </tr>
                 ))}</tbody>
               </table>
             </div>
-            <div className="p-4 border-t border-[var(--border)] text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{fmt(totals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(totals.qty_total)}</b></span><span>Flat fee: <b>RM {fmt(totals.flat_fee)}</b></span><span>Grand total: <b>RM {fmt(totals.grand_total_myr)}</b></span></div>
+            {canReview && <div className="px-4 py-3 border-t border-[var(--border)]"><button type="button" onClick={addLine} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--hover-bg)]"><Plus className="h-4 w-4" /> Add line</button></div>}
+            <div className="border-t border-[var(--border)]">
+              {totalMismatch && <div className="px-4 pt-3 flex justify-end"><span className="rounded-md bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">⚠ Extracted total <b>RM {fmt(grandTotal)}</b> vs PO stated <b>RM {fmt(statedTotal)}</b> — differ by <b>RM {fmt(totalDelta)}</b>. Check the lines before generating.</span></div>}
+              <div className="p-4 text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{fmt(totals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(totals.qty_total)}</b></span>{totals.flat_fee ? <span className="text-[var(--muted-foreground)]">Handling fee RM {fmt(totals.flat_fee)} folded into unit prices</span> : null}<span>Grand total: <b>RM {fmt(totals.grand_total_myr)}</b></span></div>
+            </div>
           </div>
 
           {documents && <div className="grid gap-6 lg:grid-cols-2"><DocCard title="Delivery Order" doc={documents.do} withPrices={false} /><DocCard title="Invoice" doc={documents.invoice} withPrices /></div>}
@@ -294,7 +364,7 @@ export default function AgentRunPage() {
                 <Field label="Company name"><input value={customerProposal.company_name} onChange={(event) => setCustomerProposal({ ...customerProposal, company_name: event.target.value })} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="Billing address"><textarea value={customerProposal.address || ''} onChange={(event) => setCustomerProposal({ ...customerProposal, address: event.target.value })} rows={3} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)] sm:col-span-2" /></Field>
               </div>
-              <button disabled={busy || customerProposal.code.trim().length < 2 || customerProposal.company_name.trim().length < 2} onClick={() => act(() => createSqlAccountCustomerAndRepush(runId, customerProposal))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create customer & re-push</button>
+              <button disabled={busy || customerProposal.code.trim().length < 2 || customerProposal.company_name.trim().length < 2} onClick={() => act('proposal-customer', () => createSqlAccountCustomerAndRepush(runId, { ...customerProposal, attn: customerAttnDraft.trim() || null, phone: customerPhoneDraft.trim() || null, email: customerEmailDraft.trim() || null }))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">{pending === 'proposal-customer' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'proposal-customer' ? 'Creating customer in SQL Account…' : 'Create customer & re-push'}</button>
             </section>
           )}
           {needsSqlCustomer && (
@@ -304,27 +374,31 @@ export default function AgentRunPage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <Field label="Customer / company name"><input value={customerDraft} onChange={(event) => setCustomerDraft(event.target.value)} placeholder="e.g. COMPANY SDN BHD" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="SQL Account customer code"><input maxLength={10} value={customerCodeDraft} onChange={(event) => setCustomerCodeDraft(event.target.value.toUpperCase())} placeholder="Existing or new code" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Attn"><input value={customerAttnDraft} onChange={(event) => setCustomerAttnDraft(event.target.value)} placeholder="Contact person" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Phone"><input value={customerPhoneDraft} onChange={(event) => setCustomerPhoneDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Email"><input value={customerEmailDraft} onChange={(event) => setCustomerEmailDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Billing address"><textarea value={customerAddressDraft} onChange={(event) => setCustomerAddressDraft(event.target.value)} rows={2} placeholder="Saved on the new SQL Account customer master" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)] sm:col-span-2" /></Field>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
-                <button disabled={busy || customerCodeDraft.trim().length < 2} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return repushRunToSqlAccount(runId); })} className="inline-flex items-center gap-2 rounded-md border border-violet-500/50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300"><Send className="h-4 w-4" /> Use existing code & re-push</button>
-                <button disabled={busy || customerCodeDraft.trim().length < 2 || customerDraft.trim().length < 2} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return createSqlAccountCustomerAndRepush(runId, { code: customerCodeDraft, company_name: customerDraft, address: '' }); })} className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create customer & re-push</button>
+                <button disabled={busy || customerCodeDraft.trim().length < 2} onClick={() => act('existing-code', async () => { await reviewRun(runId, buildCorrected()); return repushRunToSqlAccount(runId); })} className="inline-flex items-center gap-2 rounded-md border border-violet-500/50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300">{pending === 'existing-code' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'existing-code' ? 'Pushing to SQL Account…' : 'Use existing code & re-push'}</button>
+                <button disabled={busy || customerCodeDraft.trim().length < 2 || customerDraft.trim().length < 2} onClick={() => act('manual-customer', async () => { await reviewRun(runId, buildCorrected()); return createSqlAccountCustomerAndRepush(runId, { code: customerCodeDraft, company_name: customerDraft, address: customerAddressDraft.trim() || null, attn: customerAttnDraft.trim() || null, phone: customerPhoneDraft.trim() || null, email: customerEmailDraft.trim() || null }); })} className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">{pending === 'manual-customer' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'manual-customer' ? 'Creating customer in SQL Account…' : 'Create customer & re-push'}</button>
               </div>
             </section>
           )}
           {status === 'COMPLETED' && sqlAccountDelivery?.status === 'needs_item_approval' && itemProposals.length > 0 && (
-            <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5"><h2 className="font-semibold">Suggested SQL Account stock items</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">These products were not found in SQL Account. Review the proposed master records before creating them.</p><div className="mt-4 space-y-3">{itemProposals.map((item, index) => <div key={item.source_index} className="grid gap-3 rounded border border-[var(--border)] p-3 sm:grid-cols-[160px_1fr_100px]"><input value={item.code} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, code: event.target.value.toUpperCase() } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.description} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, description: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.uom || 'UNIT'} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, uom: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /></div>)}</div><button disabled={busy} onClick={() => act(() => createSqlAccountItemsAndRepush(runId, itemProposals))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create items & re-push</button></section>
+            <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5"><h2 className="font-semibold">Suggested SQL Account stock items</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">These products were not found in SQL Account. Review the proposed master records before creating them.</p><div className="mt-4 space-y-3">{itemProposals.map((item, index) => <div key={item.source_index} className="grid gap-3 rounded border border-[var(--border)] p-3 sm:grid-cols-[160px_1fr_100px]"><input value={item.code} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, code: event.target.value.toUpperCase() } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.description} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, description: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.uom || 'UNIT'} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, uom: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /></div>)}</div><button disabled={busy} onClick={() => act('create-items', () => createSqlAccountItemsAndRepush(runId, itemProposals))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">{pending === 'create-items' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'create-items' ? 'Creating stock items in SQL Account…' : 'Create items & re-push'}</button></section>
           )}
 
           <div className="flex flex-wrap gap-3">
             {status === 'PENDING_REVIEW' && <>
-              <button disabled={busy} onClick={() => act(() => reviewRun(runId, buildCorrected()))} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Save corrections</button>
-              <button disabled={busy || !hasAllMyrAmounts} title={hasAllMyrAmounts ? undefined : 'Every line needs an original price and a valid MYR conversion before invoice generation'} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"><FileText className="h-4 w-4" /> Generate DO + Invoice</button>
+              <button disabled={busy} onClick={() => act('save', () => reviewRun(runId, buildCorrected()))} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] disabled:opacity-50 flex items-center gap-2">{pending === 'save' && <LoaderCircle className="h-4 w-4 animate-spin" />} {pending === 'save' ? 'Saving…' : 'Save corrections'}</button>
+              <button disabled={busy || !hasAllMyrAmounts} title={hasAllMyrAmounts ? undefined : 'Every line needs an original price and a valid MYR conversion before invoice generation'} onClick={() => act('generate', async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2">{pending === 'generate' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} {pending === 'generate' ? 'Generating DO + Invoice…' : 'Generate DO + Invoice'}</button>
             </>}
             {status === 'DRAFT_GENERATED' && <>
-              <button disabled={busy || !hasAllMyrAmounts} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Re-generate</button>
-              <button disabled={busy} onClick={() => act(() => approveRun(runId, buildCorrected()))} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"><Send className="h-4 w-4" /> Approve & run configured outputs</button>
+              <button disabled={busy || !hasAllMyrAmounts} onClick={() => act('regenerate', async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)] disabled:opacity-50 flex items-center gap-2">{pending === 'regenerate' && <LoaderCircle className="h-4 w-4 animate-spin" />} {pending === 'regenerate' ? 'Re-generating…' : 'Re-generate'}</button>
+              <button disabled={busy} onClick={() => act('approve', () => approveRun(runId, buildCorrected()))} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">{pending === 'approve' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'approve' ? 'Approving & running outputs…' : 'Approve & run configured outputs'}</button>
             </>}
-            {(status === 'PENDING_REVIEW' || status === 'DRAFT_GENERATED') && <button disabled={busy} onClick={() => act(() => rejectRun(runId, 'Rejected by reviewer'))} className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50">Reject</button>}
+            {(status === 'PENDING_REVIEW' || status === 'DRAFT_GENERATED') && <button disabled={busy} onClick={() => act('reject', () => rejectRun(runId, 'Rejected by reviewer'))} className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50 flex items-center gap-2">{pending === 'reject' && <LoaderCircle className="h-4 w-4 animate-spin" />} {pending === 'reject' ? 'Rejecting…' : 'Reject'}</button>}
             {status === 'COMPLETED' && (
               whatsappDelivery?.status === 'sent'
                 ? <span className="text-green-700 flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Completed — Delivery Order and Invoice PDFs were sent to WhatsApp.</span>
@@ -333,10 +407,10 @@ export default function AgentRunPage() {
                   : <span className="text-green-700 flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Completed — DO + Invoice generated.</span>
             )}
             {status === 'COMPLETED' && whatsappDelivery?.status === 'failed' && (
-              <button disabled={busy} onClick={() => act(() => sendRunToWhatsApp(runId))} className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] disabled:opacity-50 flex items-center gap-2"><Send className="h-4 w-4" /> Retry WhatsApp delivery</button>
+              <button disabled={busy} onClick={() => act('whatsapp', () => sendRunToWhatsApp(runId))} className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] disabled:opacity-50 flex items-center gap-2">{pending === 'whatsapp' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'whatsapp' ? 'Sending to WhatsApp…' : 'Retry WhatsApp delivery'}</button>
             )}
             {status === 'COMPLETED' && (
-              <button disabled={busy} onClick={() => act(() => repushRunToSqlAccount(runId))} className="px-4 py-2 border border-violet-500/50 text-violet-700 rounded-md hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300 flex items-center gap-2"><Send className="h-4 w-4" /> {sqlAccountDelivery ? 'Re-push to SQL Account' : 'Push to SQL Account'}</button>
+              <button disabled={busy} onClick={() => act('sql-push', () => repushRunToSqlAccount(runId))} className="px-4 py-2 border border-violet-500/50 text-violet-700 rounded-md hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300 flex items-center gap-2">{pending === 'sql-push' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending === 'sql-push' ? 'Pushing to SQL Account…' : sqlAccountDelivery ? 'Re-push to SQL Account' : 'Push to SQL Account'}</button>
             )}
           </div>
         </div>
@@ -351,10 +425,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 interface DocPreview {
   doc_no?: string;
-  header?: { seller_entity?: string; customer?: string; date?: string; currency?: string };
-  lines?: Array<{ no: number; item_code?: string | null; description?: string | null; qty?: number | null; unit_price?: number | null; amount?: number | null }>;
+  header?: { seller_entity?: string; customer?: string; customer_address?: string | null; customer_attn?: string | null; customer_phone?: string | null; customer_email?: string | null; date?: string; currency?: string };
+  lines?: Array<{ no: number; item_code?: string | null; description?: string | null; color?: string | null; uom?: string | null; qty?: number | null; unit_price?: number | null; amount?: number | null; foc?: boolean; is_header?: boolean }>;
+  separate_item_code?: boolean;
+  show_uom?: boolean;
+  show_color?: boolean;
   total_qty?: number | null;
-  flat_fee?: number | null;
+  fee_note?: string | null;
   grand_total?: number | null;
 }
 
@@ -371,12 +448,18 @@ interface SqlAccountDelivery {
 
 function DocCard({ title, doc, withPrices }: { title: string; doc?: DocPreview; withPrices: boolean }) {
   if (!doc) return null;
+  const h = doc.header;
+  const showCode = doc.separate_item_code !== false;
+  const showColor = !!doc.show_color;
+  const showUom = !!doc.show_uom;
+  const contact = [h?.customer_attn && `Attn: ${h.customer_attn}`, h?.customer_phone, h?.customer_email, h?.customer_address].filter(Boolean).join(' · ');
   return <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-5">
     <div className="flex justify-between items-baseline"><h3 className="font-bold">{title}</h3><span className="text-sm text-[var(--muted-foreground)]">{doc.doc_no}</span></div>
-    <div className="mt-1 text-sm text-[var(--muted-foreground)]">{doc.header?.seller_entity} → {doc.header?.customer} · {doc.header?.date}</div>
-    <table className="w-full text-xs mt-3"><thead><tr className="text-left text-[var(--muted-foreground)]"><th className="py-1">#</th><th className="py-1">Code</th><th className="py-1">Description</th><th className="py-1 text-right">Qty</th>{withPrices && <><th className="py-1 text-right">Unit</th><th className="py-1 text-right">Amount</th></>}</tr></thead>
-      <tbody>{(doc.lines || []).map((line) => <tr key={line.no} className="border-t border-[var(--border)]"><td className="py-1">{line.no}</td><td className="py-1">{line.item_code || '—'}</td><td className="py-1">{line.description}</td><td className="py-1 text-right">{fmt(line.qty)}</td>{withPrices && <><td className="py-1 text-right">{fmt(line.unit_price)}</td><td className="py-1 text-right">{fmt(line.amount)}</td></>}</tr>)}</tbody>
+    <div className="mt-1 text-sm text-[var(--muted-foreground)]">{h?.seller_entity} → {h?.customer} · {h?.date}</div>
+    {contact && <div className="text-xs text-[var(--muted-foreground)]">{contact}</div>}
+    <table className="w-full text-xs mt-3"><thead><tr className="text-left text-[var(--muted-foreground)]"><th className="py-1">#</th>{showCode && <th className="py-1">Code</th>}<th className="py-1">Description</th>{showColor && <th className="py-1">Color</th>}<th className="py-1 text-right">Qty</th>{showUom && <th className="py-1">UOM</th>}{withPrices && <><th className="py-1 text-right">Unit</th><th className="py-1 text-right">Amount</th></>}</tr></thead>
+      <tbody>{(doc.lines || []).map((line) => <tr key={line.no} className="border-t border-[var(--border)]"><td className="py-1">{line.no}</td>{showCode && <td className="py-1">{line.item_code || '—'}</td>}<td className="py-1">{line.description}</td>{showColor && <td className="py-1">{line.is_header ? '' : (line.color || '')}</td>}<td className="py-1 text-right">{line.is_header ? '' : fmt(line.qty)}</td>{showUom && <td className="py-1">{line.is_header ? '' : (line.uom || '')}</td>}{withPrices && <><td className="py-1 text-right">{line.is_header ? '' : fmt(line.unit_price)}</td><td className="py-1 text-right">{line.is_header ? '' : fmt(line.amount)}</td></>}</tr>)}</tbody>
     </table>
-    <div className="mt-2 text-right text-sm">{withPrices ? <>Flat fee RM {fmt(doc.flat_fee)} · <b>Total RM {fmt(doc.grand_total)}</b></> : <>Total qty <b>{fmt(doc.total_qty)}</b></>}</div>
+    <div className="mt-2 text-right text-sm">{withPrices ? <><b>Total RM {fmt(doc.grand_total)}</b>{doc.fee_note ? <div className="text-xs font-normal text-[var(--muted-foreground)]">{doc.fee_note}</div> : null}</> : <>Total qty <b>{fmt(doc.total_qty)}</b></>}</div>
   </div>;
 }

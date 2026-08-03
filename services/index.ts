@@ -652,18 +652,21 @@ export {
   createSqlAccountCustomerAndRepush,
   createSqlAccountItemsAndRepush,
   rejectRun,
+  deleteRun,
 } from './AgentsService';
 
 // SQL Account SDK Live connection selection/testing
 export {
   listSqlAccountConnections,
   testSqlAccountConnection,
+  createSqlAccountConnection,
   updateSqlAccountConnection,
 } from './SqlAccountService';
 
 export type {
   SqlAccountConnection,
   SqlAccountConnectionListResponse,
+  SqlAccountConnectionPayload,
   SqlAccountTestResponse,
 } from './SqlAccountService';
 

@@ -78,6 +78,7 @@ export interface WhatsAppConnection {
 export interface AgentRunLine {
   name?: string;
   model?: string;
+  color?: string;
   unit?: string;
   qty?: number | null;
   category?: string | null;
@@ -110,9 +111,14 @@ export interface AgentRunForex {
 export interface AgentRunData {
   customer?: string | null;
   customer_code?: string | null;
+  customer_address?: string | null;
+  customer_attn?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
   code?: string | null;
   inv_date?: string | null;
   currency?: string | null;
+  no_conversion?: boolean | null;
   forex?: AgentRunForex | null;
   lines?: AgentRunLine[];
   totals?: Record<string, number | null>;
@@ -135,6 +141,8 @@ export interface AgentRun {
   user_id: number;
   organization_id?: number | null;
   status: string;
+  revision?: number;
+  po_label?: string | null;
   source_channel?: string | null;
   source_ref?: string | null;
   source_filename?: string | null;
@@ -156,6 +164,8 @@ export interface AgentRunListItem {
   id: number;
   agent_id: number;
   status: string;
+  revision?: number;
+  po_label?: string | null;
   source_channel?: string | null;
   source_filename?: string | null;
   source_caption?: string | null;
@@ -366,6 +376,9 @@ export interface SqlAccountCustomerProposal {
   code: string;
   company_name: string;
   address?: string | null;
+  attn?: string | null;
+  phone?: string | null;
+  email?: string | null;
 }
 
 export interface SqlAccountStockItemProposal {
@@ -393,4 +406,14 @@ export async function rejectRun(runId: number, reason?: string): Promise<AgentRu
     method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ reason: reason ?? null }),
   });
   return handle<AgentRun>(res);
+}
+
+/** Permanently delete a captured run. Documents already sent to WhatsApp or
+ *  posted to SQL Account are not retracted; only Smartdok's record is removed. */
+export async function deleteRun(runId: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}`, { method: 'DELETE', headers: getScopedHeaders() });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(error.message || error.detail || 'Could not delete this run.');
+  }
 }

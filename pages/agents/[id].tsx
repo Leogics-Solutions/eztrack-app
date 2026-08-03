@@ -3,11 +3,11 @@
 import { AppLayout } from '@/components/layout';
 import { useLanguage } from '@/lib/i18n';
 import { useOrganization } from '@/lib/OrganizationContext';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useRouter } from 'next/router';
-import { Upload, FileSpreadsheet, ArrowLeft, Pencil } from 'lucide-react';
+import { Upload, FileSpreadsheet, ArrowLeft, Pencil, Trash2, LoaderCircle } from 'lucide-react';
 import {
-  getAgent, listRuns, uploadRun,
+  getAgent, listRuns, uploadRun, deleteRun,
   type Agent, type AgentRunListItem,
 } from '@/services/AgentsService';
 
@@ -43,6 +43,7 @@ export default function AgentDetailPage() {
   const [file, setFile] = useState<File | null>(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!agentId) return;
@@ -73,6 +74,27 @@ export default function AgentDetailPage() {
       alert((e as Error)?.message || 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const onDelete = async (run: AgentRunListItem, event: MouseEvent) => {
+    event.stopPropagation();  // the row itself opens the run
+    const label = run.source_filename ? `"${run.source_filename}"` : `PO #${run.id}`;
+    // A COMPLETED run has already produced its DO + Invoice and fired the
+    // configured outputs. Deleting drops Smartdok's record only; anything
+    // delivered to WhatsApp or SQL Account stays where it was sent.
+    const sent = run.status === 'COMPLETED'
+      ? '\n\nThis PO is completed. Its Delivery Order and Invoice may already have been sent to WhatsApp or posted to SQL Account — deleting removes the Smartdok record only, and will not retract them.'
+      : '';
+    if (!window.confirm(`Delete ${label} (PO #${run.id})? This cannot be undone.${sent}`)) return;
+    setDeletingId(run.id);
+    try {
+      await deleteRun(run.id);
+      setRuns((previous) => previous.filter((item) => item.id !== run.id));
+    } catch (e) {
+      alert((e as Error)?.message || 'Could not delete this PO.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -163,6 +185,7 @@ export default function AgentDetailPage() {
                     <th className="px-4 py-2">File</th>
                     <th className="px-4 py-2">Status</th>
                     <th className="px-4 py-2">Received</th>
+                    <th className="px-4 py-2 w-px"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -174,13 +197,25 @@ export default function AgentDetailPage() {
                     >
                       <td className="px-4 py-2">{r.id}</td>
                       <td className="px-4 py-2">{r.source_channel}</td>
-                      <td className="px-4 py-2">{r.source_filename || '—'}</td>
+                      <td className="px-4 py-2">{r.source_filename || '—'}{r.revision ? <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">REV R{r.revision}</span> : null}{r.po_label ? <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">PO {r.po_label}</span> : null}</td>
                       <td className="px-4 py-2"><StatusBadge status={r.status} /></td>
                       <td className="px-4 py-2">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={(event) => onDelete(r, event)}
+                          disabled={deletingId !== null}
+                          aria-label={`Delete PO #${r.id}`}
+                          title="Delete this PO"
+                          className="rounded p-1.5 text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-700 disabled:opacity-40 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                        >
+                          {deletingId === r.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {runs.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-6 text-center text-[var(--muted-foreground)]">No POs captured yet.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--muted-foreground)]">No POs captured yet.</td></tr>
                   )}
                 </tbody>
               </table>

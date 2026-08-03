@@ -12,7 +12,7 @@ import {
   connectWhatsApp, disconnectWhatsApp, getWhatsAppConnection, previewAgentDesign,
   updateAgent, updateChannel, updateOutput, type Agent, type AgentChannel, type AgentDesignPreview, type AgentOutput, type WhatsAppConnection,
 } from '@/services/AgentsService';
-import { listSqlAccountConnections, testSqlAccountConnection, updateSqlAccountConnection, type SqlAccountConnection } from '@/services/SqlAccountService';
+import { createSqlAccountConnection, listSqlAccountConnections, testSqlAccountConnection, updateSqlAccountConnection, type SqlAccountConnection, type SqlAccountConnectionPayload } from '@/services/SqlAccountService';
 
 type ChannelType = 'whatsapp_group' | 'email' | 'google_drive' | 'upload' | 'mcp';
 type DraftChannel = Pick<AgentChannel, 'channel_type' | 'channel_ref' | 'is_active'> & { id?: number };
@@ -51,8 +51,18 @@ export default function EditAgentPage() {
   const [sqlEnabled, setSqlEnabled] = useState(false);
   const [sqlConnectionId, setSqlConnectionId] = useState<number | ''>('');
   const [sqlApiUrl, setSqlApiUrl] = useState('');
+  const [sqlDiscountCode, setSqlDiscountCode] = useState('');
   const [sqlTesting, setSqlTesting] = useState(false);
   const [sqlTestMessage, setSqlTestMessage] = useState<string | null>(null);
+  const [sqlAdding, setSqlAdding] = useState(false);
+  const [sqlCreating, setSqlCreating] = useState(false);
+  const [sqlNewName, setSqlNewName] = useState('');
+  const [sqlNewApiUrl, setSqlNewApiUrl] = useState('');
+  const [sqlNewApiKey, setSqlNewApiKey] = useState('');
+  // Written on demand: the API never returns a key, so rotating one means
+  // re-entering it rather than editing a value we could have shown back.
+  const [sqlRotateKey, setSqlRotateKey] = useState('');
+  const [separateItemCode, setSeparateItemCode] = useState(false);
 
   useEffect(() => {
     if (!agentId) return;
@@ -65,13 +75,16 @@ export default function EditAgentPage() {
         id: channel.id, channel_type: channel.channel_type,
         channel_ref: channel.channel_ref || null, is_active: channel.is_active,
       })));
+      setSeparateItemCode(Boolean((result.config as { separate_item_code?: boolean } | null)?.separate_item_code));
       setSqlConnections(connectionResult.connections);
       const sqlOutput = result.outputs.find((output) => output.output_type === 'sql_account');
       const configuredId = Number(sqlOutput?.config?.connection_id);
       setSqlEnabled(Boolean(sqlOutput?.is_active));
       const selectedId = Number.isFinite(configuredId) && configuredId > 0 ? configuredId : (connectionResult.connections.find((connection) => connection.is_active)?.id || '');
       setSqlConnectionId(selectedId);
-      setSqlApiUrl(connectionResult.connections.find((connection) => connection.id === selectedId)?.api_url || '');
+      const selected = connectionResult.connections.find((connection) => connection.id === selectedId);
+      setSqlApiUrl(selected?.api_url || '');
+      setSqlDiscountCode(String((selected?.config as { discount_item_code?: string } | null)?.discount_item_code || ''));
     }).catch((reason) => setError(reason?.message || 'Could not load this agent.'))
       .finally(() => setLoading(false));
   }, [agentId]);
@@ -133,6 +146,7 @@ export default function EditAgentPage() {
       const basicUpdate: Partial<Agent> = {
         name: name.trim(), description: description.trim() || null, instructions: brief.trim() || null,
         approval_required: preview?.approval_required ?? agent.approval_required,
+        config: { ...(agent.config || {}), separate_item_code: separateItemCode },
         ...(preview ? {
           skills: preview.skills,
           record_type: preview.record_type || agent.record_type,
@@ -142,9 +156,19 @@ export default function EditAgentPage() {
       await updateAgent(agent.id, basicUpdate);
 
       const selectedConnection = sqlConnections.find((connection) => connection.id === sqlConnectionId);
-      if (sqlEnabled && selectedConnection && sqlApiUrl.trim() !== (selectedConnection.api_url || '').trim()) {
-        const updatedConnection = await updateSqlAccountConnection(selectedConnection.id, { api_url: sqlApiUrl.trim().replace(/\/$/, '') });
-        setSqlConnections((connections) => connections.map((connection) => connection.id === updatedConnection.id ? updatedConnection : connection));
+      if (sqlEnabled && selectedConnection) {
+        const connectionPatch: SqlAccountConnectionPayload = {};
+        if (sqlApiUrl.trim() !== (selectedConnection.api_url || '').trim()) connectionPatch.api_url = sqlApiUrl.trim().replace(/\/$/, '');
+        if (sqlRotateKey.trim()) connectionPatch.api_key = sqlRotateKey.trim();
+        const savedDiscount = String((selectedConnection.config as { discount_item_code?: string } | null)?.discount_item_code || '');
+        if (sqlDiscountCode.trim() !== savedDiscount) {
+          connectionPatch.config = { ...(selectedConnection.config || {}), discount_item_code: sqlDiscountCode.trim() || null };
+        }
+        if (Object.keys(connectionPatch).length > 0) {
+          const updatedConnection = await updateSqlAccountConnection(selectedConnection.id, connectionPatch);
+          setSqlConnections((connections) => connections.map((connection) => connection.id === updatedConnection.id ? updatedConnection : connection));
+          setSqlRotateKey('');
+        }
       }
 
       const remainingIds = new Set(channels.flatMap((channel) => channel.id ? [channel.id] : []));
@@ -215,6 +239,10 @@ export default function EditAgentPage() {
     setSqlTesting(true); setSqlTestMessage(null);
     try {
       const selectedConnection = sqlConnections.find((connection) => connection.id === sqlConnectionId);
+      if (selectedConnection && sqlRotateKey.trim()) {
+        await updateSqlAccountConnection(selectedConnection.id, { api_key: sqlRotateKey.trim() });
+        setSqlRotateKey('');
+      }
       if (selectedConnection && sqlApiUrl.trim() !== (selectedConnection.api_url || '').trim()) {
         const updatedConnection = await updateSqlAccountConnection(selectedConnection.id, { api_url: sqlApiUrl.trim().replace(/\/$/, '') });
         setSqlConnections((connections) => connections.map((connection) => connection.id === updatedConnection.id ? updatedConnection : connection));
@@ -224,6 +252,30 @@ export default function EditAgentPage() {
     } catch (reason) {
       setSqlTestMessage((reason as Error)?.message || 'Could not test the SQL Account connection.');
     } finally { setSqlTesting(false); }
+  };
+
+  // SDK Live pushes require mode 'sdk_call' plus URL and key, so creation always
+  // sets all three. A staging-default connection would pass a test and then fail
+  // every approval push.
+  const createSqlConnection = async () => {
+    if (!sqlNewApiUrl.trim() || !sqlNewApiKey.trim()) { setSqlTestMessage('Enter both the SDK Live API URL and connector key.'); return; }
+    setSqlCreating(true); setSqlTestMessage(null);
+    try {
+      const created = await createSqlAccountConnection({
+        name: sqlNewName.trim() || 'SQL Account SDK Live',
+        mode: 'sdk_call',
+        api_url: sqlNewApiUrl.trim().replace(/\/$/, ''),
+        api_key: sqlNewApiKey.trim(),
+      });
+      setSqlConnections((connections) => [created, ...connections]);
+      setSqlConnectionId(created.id);
+      setSqlApiUrl(created.api_url || '');
+      setSqlAdding(false);
+      setSqlNewName(''); setSqlNewApiUrl(''); setSqlNewApiKey('');
+      setSqlTestMessage('Connection saved. Test it to confirm the connector is reachable.');
+    } catch (reason) {
+      setSqlTestMessage((reason as Error)?.message || 'Could not create the SQL Account connection.');
+    } finally { setSqlCreating(false); }
   };
 
   return (
@@ -245,6 +297,12 @@ export default function EditAgentPage() {
             </div>
             <section className="mt-7 border-t border-[var(--border)] pt-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
+                <div><h2 className="font-semibold">Document layout</h2><p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">By default the item code is folded into each line’s description. Enable this for customers who want ITEM CODE as its own column on the DO/Invoice.</p></div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium"><input type="checkbox" checked={separateItemCode} onChange={(event) => setSeparateItemCode(event.target.checked)} className="h-4 w-4 accent-cyan-600" /> Separate item code column</label>
+              </div>
+            </section>
+            <section className="mt-7 border-t border-[var(--border)] pt-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-700 dark:text-violet-300"><Database className="h-4.5 w-4.5" /></span>
                   <div><h2 className="font-semibold">SQL Account output</h2><p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">After approval, create the Delivery Order and Sales Invoice in your on-premise SQL Account through SDK Live.</p></div>
@@ -252,13 +310,23 @@ export default function EditAgentPage() {
                 <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium"><input type="checkbox" checked={sqlEnabled} onChange={(event) => { setSqlEnabled(event.target.checked); setSqlTestMessage(null); }} className="h-4 w-4 accent-violet-600" /> Enable SQL push</label>
               </div>
               {sqlEnabled && <div className="mt-4 rounded-xl border border-violet-500/25 bg-violet-500/5 p-4">
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                  <label className="text-sm font-medium">Connection<select value={sqlConnectionId} onChange={(event) => { const id = event.target.value ? Number(event.target.value) : ''; setSqlConnectionId(id); setSqlApiUrl(sqlConnections.find((connection) => connection.id === id)?.api_url || ''); setSqlTestMessage(null); }} className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500"><option value="">Select SQL Account connection</option>{sqlConnections.filter((connection) => connection.is_active).map((connection) => <option key={connection.id} value={connection.id}>{connection.name || `SQL Account connection #${connection.id}`} ({connection.mode})</option>)}</select></label>
-                  <button type="button" disabled={!sqlConnectionId || !sqlApiUrl.trim() || sqlTesting} onClick={testSqlConnection} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-violet-500/40 px-3.5 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300">{sqlTesting && <LoaderCircle className="h-4 w-4 animate-spin" />}{sqlTesting ? 'Testing…' : 'Test connection'}</button>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                  <label className="text-sm font-medium">Connection<select value={sqlConnectionId} onChange={(event) => { const id = event.target.value ? Number(event.target.value) : ''; setSqlConnectionId(id); const picked = sqlConnections.find((connection) => connection.id === id); setSqlApiUrl(picked?.api_url || ''); setSqlDiscountCode(String((picked?.config as { discount_item_code?: string } | null)?.discount_item_code || '')); setSqlTestMessage(null); }} className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500"><option value="">Select SQL Account connection</option>{sqlConnections.filter((connection) => connection.is_active).map((connection) => <option key={connection.id} value={connection.id}>{connection.name || `SQL Account connection #${connection.id}`} ({connection.mode})</option>)}</select></label>
+                  <button type="button" onClick={() => { setSqlAdding((adding) => !adding); setSqlTestMessage(null); }} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-violet-500/40 px-3.5 text-sm font-medium text-violet-700 hover:bg-violet-500/10 dark:text-violet-300"><Plus className="h-4 w-4" />{sqlAdding ? 'Cancel' : 'Add connection'}</button>
+                  <button type="button" disabled={!sqlConnectionId || !sqlApiUrl.trim() || sqlTesting || sqlAdding} onClick={testSqlConnection} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-violet-500/40 px-3.5 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300">{sqlTesting && <LoaderCircle className="h-4 w-4 animate-spin" />}{sqlTesting ? 'Testing…' : 'Test connection'}</button>
                 </div>
-                <label className="mt-3 block text-sm font-medium">SDK Live API URL<input type="url" value={sqlApiUrl} onChange={(event) => { setSqlApiUrl(event.target.value); setSqlTestMessage(null); }} placeholder="http://127.0.0.1:8787" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500" /></label>
-                {sqlConnections.filter((connection) => connection.is_active).length === 0 && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">No active SQL Account connection is available yet. Configure the SDK Live connection first.</p>}
-                {sqlTestMessage && <p className={`mt-3 text-sm ${sqlTestMessage.startsWith('Connected:') ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{sqlTestMessage}</p>}
+                {sqlAdding ? <div className="mt-3 grid gap-3 rounded-lg border border-violet-500/25 bg-[var(--card)] p-3">
+                  <label className="text-sm font-medium">Name<input value={sqlNewName} onChange={(event) => setSqlNewName(event.target.value)} placeholder="SQL Account SDK Live" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2.5 font-normal outline-none focus:border-violet-500" /></label>
+                  <label className="text-sm font-medium">SDK Live API URL<input type="url" value={sqlNewApiUrl} onChange={(event) => setSqlNewApiUrl(event.target.value)} placeholder="https://sqlsdk.ngrok.app" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2.5 font-normal outline-none focus:border-violet-500" /></label>
+                  <label className="text-sm font-medium">Connector key<input type="password" autoComplete="new-password" value={sqlNewApiKey} onChange={(event) => setSqlNewApiKey(event.target.value)} placeholder="X-SQLAccount-Connector-Key value" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2.5 font-normal outline-none focus:border-violet-500" /><span className="mt-1.5 block text-xs font-normal text-[var(--muted-foreground)]">Stored write-only and never shown again. It must match the key your SDK Live connector expects.</span></label>
+                  <div><button type="button" disabled={sqlCreating || !sqlNewApiUrl.trim() || !sqlNewApiKey.trim()} onClick={createSqlConnection} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-violet-600 px-3.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50">{sqlCreating && <LoaderCircle className="h-4 w-4 animate-spin" />}{sqlCreating ? 'Saving…' : 'Save connection'}</button></div>
+                </div> : sqlConnectionId ? <>
+                  <label className="mt-3 block text-sm font-medium">SDK Live API URL<input type="url" value={sqlApiUrl} onChange={(event) => { setSqlApiUrl(event.target.value); setSqlTestMessage(null); }} placeholder="http://127.0.0.1:8787" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500" /></label>
+                  <label className="mt-3 block text-sm font-medium">Connector key<input type="password" autoComplete="new-password" value={sqlRotateKey} onChange={(event) => { setSqlRotateKey(event.target.value); setSqlTestMessage(null); }} placeholder="Leave blank to keep the saved key" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500" /></label>
+                  <label className="mt-3 block text-sm font-medium">Discount item code<input value={sqlDiscountCode} onChange={(event) => { setSqlDiscountCode(event.target.value); setSqlTestMessage(null); }} placeholder="e.g. DISCOUNT (leave blank if unused)" className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 font-normal outline-none focus:border-violet-500" /><span className="mt-1.5 block text-xs font-normal text-[var(--muted-foreground)]">SQL Account stock/service code used to post a discount/deduction line (e.g. “Deduct −1,143.96”). Set it so the SQL invoice total matches; leave blank to skip discounts and apply them in SQL Account.</span></label>
+                </> : null}
+                {!sqlAdding && sqlConnections.filter((connection) => connection.is_active).length === 0 && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">No active SQL Account connection yet. Choose “Add connection” and enter your SDK Live URL and connector key.</p>}
+                {sqlTestMessage && <p className={`mt-3 text-sm ${/^(Connected:|Connection saved)/.test(sqlTestMessage) ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{sqlTestMessage}</p>}
                 <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">This URL is called by the Smartdok backend, not by your browser. Use <code>http://127.0.0.1:8787</code> only when the backend and connector run on the same Windows machine; otherwise use the connector machine’s reachable LAN URL. Smartdok will look up the customer and stock item in SQL Account at approval time.</p>
               </div>}
             </section>
