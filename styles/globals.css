@@ -18,7 +18,7 @@
 
   /* Secondary Colors - Mint/Aqua accent */
   --secondary: #7ECEAD;
-  --secondary-foreground: #FFFFFF;
+  --secondary-foreground: #0F172A;
   --secondary-hover: #6ABF9E;
   --secondary-light: #A1D3C8;
   --secondary-dark: #5AA68E;
@@ -93,7 +93,7 @@
 
   /* Secondary Colors - Mint contrast */
   --secondary: #7ECEAD;
-  --secondary-foreground: #FFFFFF;
+  --secondary-foreground: #0F172A;
   --secondary-hover: #6ABF9E;
   --secondary-light: #A1D3C8;
   --secondary-dark: #5AA68E;

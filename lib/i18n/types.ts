@@ -25,6 +25,11 @@ export interface Translations {
   nav: {
     dashboard: string;
     capture: string;
+    automations: string;
+    review: string;
+    records: string;
+    knowledgeBase: string;
+    integrations: string;
     documents: string;
     accounting: string;
     operations: string;

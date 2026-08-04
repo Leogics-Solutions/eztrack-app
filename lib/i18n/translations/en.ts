@@ -21,7 +21,12 @@ export const en: Translations = {
   },
   nav: {
     dashboard: 'Dashboard',
-    capture: 'Capture',
+    capture: 'Inbox',
+    automations: 'Automations',
+    review: 'Review',
+    records: 'Records',
+    knowledgeBase: 'Knowledge Base',
+    integrations: 'Integrations',
     documents: 'Documents',
     accounting: 'Accounting & Finance',
     operations: 'Operations',

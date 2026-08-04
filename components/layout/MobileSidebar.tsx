@@ -3,25 +3,18 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
-import {
-  FileCheck,
-  LayoutDashboard,
-  Settings,
-  Users,
-  FileText,
-  Menu,
-  X,
-  CreditCard,
-  Landmark,
-  Receipt,
-  Briefcase,
-  ChevronDown,
-  Inbox,
-} from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
+import {
+  getPrimaryNavigation,
+  getSettingsNavigation,
+  isNavigationChildActive,
+  isNavigationItemActive,
+  type AppNavigationItem,
+} from './navigation';
 
 interface MobileSidebarProps {
   isOpen: boolean;
@@ -32,45 +25,33 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
-  const [openGroups, setOpenGroups] = useState({
-    documents: true,
-    accounting: true,
-    operations: true,
-  });
-  const [hasMounted, setHasMounted] = useState(false);
+  const [recordsOpen, setRecordsOpen] = useState(true);
+  const primaryItems = getPrimaryNavigation(t);
+  const settingsItem = getSettingsNavigation(t);
 
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  const dashboardItem = { href: '/', label: t.nav.dashboard, icon: LayoutDashboard };
-  const captureItem = { href: '/capture', label: t.nav.capture, icon: Inbox };
-
-  const documentItems = [
-    { href: '/sales-invoices', label: t.nav.sales, icon: FileCheck },
-    { href: '/purchase-invoices', label: t.nav.purchases, icon: FileCheck },
-    { href: '/supporting-documents', label: t.nav.supportingDocuments, icon: FileCheck },
-  ];
-
-  const accountingItems = [
-    { href: '/chart-of-accounts', label: t.nav.accounts, icon: FileText },
-    { href: '/creditor-accounts', label: t.nav.creditors, icon: Users },
-    { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
-    { href: '/bank-statements', label: t.nav.bankStatements, icon: CreditCard },
-    { href: '/payment-gateways', label: t.nav.paymentGateways, icon: Landmark },
-    { href: '/supplier-statements', label: t.nav.supplierStatements, icon: Receipt },
-  ];
-
-  const operationItems = [
-    { href: '/project-gp', label: t.nav.projects, icon: Briefcase },
-    { href: '/jobs', label: t.nav.jobs, icon: FileText },
-  ];
-
-  const settingsItem = { href: '/settings', label: t.nav.settings, icon: Settings };
-
-  const renderNavItem = (item: { href: string; label: string; icon: typeof LayoutDashboard }) => {
+  const renderNavItem = (item: AppNavigationItem) => {
     const Icon = item.icon;
-    const isActive = router.pathname === item.href;
+    const isActive = isNavigationItemActive(router.pathname, item);
+
+    if (item.children?.length) {
+      return (
+        <li key={item.href}>
+          <button type="button" onClick={() => setRecordsOpen((open) => !open)} aria-expanded={recordsOpen} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition-colors" style={{ background: isActive ? 'var(--secondary)' : 'transparent', color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>
+            <Icon className="h-5 w-5 shrink-0" />
+            <span className="flex-1">{item.label}</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${recordsOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {recordsOpen && (
+            <ul className="mt-1 ml-5 space-y-1 border-l border-[var(--border)] pl-3">
+              {item.children.map((child) => {
+                const childActive = isNavigationChildActive(router.pathname, router.asPath, child);
+                return <li key={child.href}><Link href={child.href} onClick={onClose} className="block rounded-md px-3 py-2 text-sm" style={{ background: childActive ? 'var(--secondary)' : 'transparent', color: childActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>{child.label}</Link></li>;
+              })}
+            </ul>
+          )}
+        </li>
+      );
+    }
 
     return (
       <li key={item.href}>
@@ -98,61 +79,6 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           <Icon className="h-5 w-5 flex-shrink-0" />
           <span>{item.label}</span>
         </Link>
-      </li>
-    );
-  };
-
-  const renderGroup = (
-    groupKey: 'documents' | 'accounting' | 'operations',
-    icon: React.ReactNode,
-    label: string,
-    items: Array<{ href: string; label: string; icon: typeof LayoutDashboard }>
-  ) => {
-    const isGroupOpen = openGroups[groupKey];
-    const isGroupActive = items.some((item) => router.pathname === item.href);
-
-    return (
-      <li key={groupKey}>
-        <button
-          type="button"
-          onClick={() => setOpenGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition-colors"
-          style={{
-            background: isGroupActive ? 'var(--secondary)' : 'transparent',
-            color: isGroupActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)',
-          }}
-        >
-          {icon}
-          <span className="flex-1">{label}</span>
-          <ChevronDown
-            className={`h-4 w-4 transition-transform ${hasMounted && isGroupOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {hasMounted && isGroupOpen && (
-          <ul className="mt-1 space-y-1 pl-8">
-            {items.map((item) => {
-              const Icon = item.icon;
-              const isActive = router.pathname === item.href;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={onClose}
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors"
-                    style={{
-                      background: isActive ? 'var(--secondary)' : 'transparent',
-                      color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)',
-                    }}
-                  >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </li>
     );
   };
@@ -242,9 +168,12 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           <div className="px-4 py-4 border-b" style={{ borderBottomColor: 'var(--border)' }}>
             <div className="flex items-center gap-3">
               {user?.avatar ? (
-                <img
+                <Image
                   src={user.avatar}
                   alt={user.name || 'User'}
+                  width={40}
+                  height={40}
+                  unoptimized
                   className="h-10 w-10 rounded-full object-cover"
                   style={{ border: '2px solid var(--border)' }}
                 />
@@ -274,11 +203,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto py-4">
             <ul className="space-y-1 px-2">
-              {renderNavItem(dashboardItem)}
-              {renderNavItem(captureItem)}
-              {renderGroup('documents', <FileCheck className="h-5 w-5 flex-shrink-0" />, t.nav.documents, documentItems)}
-              {renderGroup('accounting', <CreditCard className="h-5 w-5 flex-shrink-0" />, t.nav.accounting || 'Accounting & Finance', accountingItems)}
-              {renderGroup('operations', <Briefcase className="h-5 w-5 flex-shrink-0" />, t.nav.operations || 'Operations', operationItems)}
+              {primaryItems.map(renderNavItem)}
               {renderNavItem(settingsItem)}
             </ul>
           </nav>

@@ -3,13 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useLanguage } from '@/lib/i18n';
-import {
-  FileCheck,
-  LayoutDashboard,
-  Users,
-  FileText,
-  Inbox,
-} from 'lucide-react';
+import { Database, Inbox, LayoutDashboard, ListChecks, Workflow } from 'lucide-react';
+import { isNavigationItemActive } from './navigation';
 
 export function MobileBottomNav() {
   const router = useRouter();
@@ -18,9 +13,9 @@ export function MobileBottomNav() {
   const navItems = [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
     { href: '/capture', label: t.nav.capture, icon: Inbox },
-    { href: '/documents', label: t.nav.documents, icon: FileCheck },
-    { href: '/coa-viewer', label: t.nav.coaViewer, icon: FileText },
-    { href: '/chart-of-accounts', label: t.nav.accounts, icon: Users },
+    { href: '/review', label: t.nav.review, icon: ListChecks },
+    { href: '/automations', label: t.nav.automations, icon: Workflow },
+    { href: '/records', label: t.nav.records, icon: Database },
   ];
 
   return (
@@ -34,7 +29,7 @@ export function MobileBottomNav() {
     >
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isActive = router.pathname === item.href;
+        const isActive = isNavigationItemActive(router.pathname, item);
 
         return (
           <Link

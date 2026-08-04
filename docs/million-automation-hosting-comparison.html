@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Million Automation Hosting Options</title>
+  <style>
+    @page { size: A4 landscape; margin: 13mm; }
+    :root { --navy:#15355b; --blue:#2f80c9; --sky:#eaf4ff; --green:#147d64; --mint:#e8f7f1; --amber:#b36a00; --sand:#fff5df; --ink:#19212b; --muted:#586474; --line:#d6dee8; --pale:#f7f9fc; }
+    * { box-sizing:border-box; }
+    body { color:var(--ink); font-family:Arial, Helvetica, sans-serif; font-size:10.2pt; line-height:1.38; margin:0; }
+    h1 { color:var(--navy); font-size:25pt; letter-spacing:-.45px; margin:0 0 4px; }
+    h2 { color:var(--navy); font-size:15pt; margin:0 0 8px; }
+    h3 { font-size:11.5pt; margin:0 0 5px; }
+    p { margin:0 0 7px; }
+    .sub { color:var(--muted); font-size:11.5pt; margin-bottom:14px; }
+    .band { border-top:4px solid var(--blue); margin:0 0 14px; }
+    .grid { display:grid; gap:13px; }
+    .two { grid-template-columns:1fr 1fr; }
+    .three { grid-template-columns:1fr 1fr 1fr; }
+    .card { background:var(--pale); border:1px solid var(--line); border-radius:8px; padding:12px; break-inside:avoid; }
+    .option-local { border-top:5px solid var(--green); }
+    .option-cloud { border-top:5px solid var(--blue); }
+    .tag { border-radius:999px; display:inline-block; font-size:8.5pt; font-weight:bold; letter-spacing:.3px; padding:3px 8px; text-transform:uppercase; }
+    .tag.green { background:var(--mint); color:#0e674f; }
+    .tag.blue { background:var(--sky); color:#1d5f99; }
+    .tag.amber { background:var(--sand); color:#8a5300; }
+    .note { background:var(--sand); border-left:4px solid var(--amber); padding:9px 11px; }
+    table { border-collapse:collapse; margin-top:7px; width:100%; }
+    th { background:var(--navy); color:#fff; font-weight:600; text-align:left; }
+    td, th { border:1px solid var(--line); padding:7px 8px; vertical-align:top; }
+    td:first-child { font-weight:600; width:24%; }
+    tr:nth-child(even) td { background:#fafcff; }
+    .money { font-family:"Courier New", monospace; font-weight:bold; white-space:nowrap; }
+    .small { color:var(--muted); font-size:8.5pt; }
+    .page-break { break-before:page; page-break-before:always; }
+    .decision { background:var(--mint); border:1px solid #b7dfd2; border-radius:8px; padding:12px 14px; }
+    ul { margin:5px 0 0 18px; padding:0; }
+    li { margin-bottom:4px; }
+    a { color:#165f9d; }
+    .footer { color:var(--muted); font-size:8pt; margin-top:12px; }
+    .architecture { border:1px solid var(--line); border-radius:8px; padding:8px; }
+    .architecture svg { display:block; height:auto; width:100%; }
+  </style>
+</head>
+<body>
+  <div class="band"></div>
+  <h1>Million Automation Hosting Options</h1>
+  <p class="sub">Decision paper: dedicated on-premise PC vs. Windows cloud VM connected through a private VPN</p>
+
+  <div class="decision">
+    <strong>Recommendation:</strong> choose a dedicated on-premise automation PC for the first production rollout. It keeps Million close to its local SQL database, has fewer network failure points, and becomes cheaper than the cloud route after roughly 8–11 months. Choose the cloud VM only when remote operations and off-site resilience justify the recurring cost and a successful latency pilot.
+  </div>
+
+  <div class="grid two" style="margin-top:13px;">
+    <section class="card option-local">
+      <span class="tag green">Option 1 · preferred for V1</span>
+      <h2 style="margin-top:7px;">Dedicated automation PC</h2>
+      <div class="architecture">
+        <svg viewBox="0 0 660 225" role="img" aria-label="Architecture: Smartdok sends approved invoice jobs by HTTPS to an on-premise automation PC running Million; the PC connects over the local LAN to the Million SQL database.">
+          <defs><marker id="arrow-local" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#586474"/></marker></defs>
+          <rect x="14" y="80" width="140" height="65" rx="8" fill="#eaf4ff" stroke="#2f80c9" stroke-width="2"/>
+          <text x="84" y="107" text-anchor="middle" font-size="15" font-weight="700" fill="#15355b">Smartdok</text><text x="84" y="127" text-anchor="middle" font-size="12" fill="#19212b">Approved job queue</text>
+          <line x1="155" y1="113" x2="251" y2="113" stroke="#586474" stroke-width="2" marker-end="url(#arrow-local)"/><text x="204" y="98" text-anchor="middle" font-size="11" fill="#586474">outbound HTTPS</text>
+          <rect x="260" y="52" width="180" height="122" rx="8" fill="#e8f7f1" stroke="#147d64" stroke-width="2"/>
+          <text x="350" y="81" text-anchor="middle" font-size="15" font-weight="700" fill="#15355b">Automation PC</text><text x="350" y="104" text-anchor="middle" font-size="12" fill="#19212b">Sync agent + Million Desktop</text><text x="350" y="126" text-anchor="middle" font-size="12" fill="#19212b">Dedicated Windows user</text><text x="350" y="148" text-anchor="middle" font-size="11" fill="#586474">No public RDP or SQL access</text>
+          <line x1="442" y1="113" x2="522" y2="113" stroke="#586474" stroke-width="2" marker-end="url(#arrow-local)"/><text x="483" y="98" text-anchor="middle" font-size="11" fill="#586474">local LAN</text>
+          <rect x="530" y="80" width="116" height="65" rx="8" fill="#fff5df" stroke="#b36a00" stroke-width="2"/>
+          <text x="588" y="107" text-anchor="middle" font-size="14" font-weight="700" fill="#15355b">Million SQL</text><text x="588" y="127" text-anchor="middle" font-size="12" fill="#19212b">Existing database</text>
+          <text x="330" y="207" text-anchor="middle" font-size="11" fill="#586474">Invoice status, document number and evidence return to Smartdok</text>
+        </svg>
+      </div>
+      <ul>
+        <li>Lowest latency to Million and its database.</li>
+        <li>Works even if the internet is temporarily unavailable for local processing.</li>
+        <li>Requires office power, local hardware care and a UPS.</li>
+      </ul>
+    </section>
+
+    <section class="card option-cloud">
+      <span class="tag blue">Option 2 · cloud + private VPN</span>
+      <h2 style="margin-top:7px;">Windows cloud VM</h2>
+      <div class="architecture">
+        <svg viewBox="0 0 660 225" role="img" aria-label="Architecture: Smartdok sends approved jobs to a cloud Windows VM. The cloud VM runs Million and reaches the on-premise Million SQL database across an encrypted VPN tunnel through an office VPN connector.">
+          <defs><marker id="arrow-cloud" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#586474"/></marker></defs>
+          <rect x="10" y="80" width="112" height="65" rx="8" fill="#eaf4ff" stroke="#2f80c9" stroke-width="2"/>
+          <text x="66" y="107" text-anchor="middle" font-size="15" font-weight="700" fill="#15355b">Smartdok</text><text x="66" y="127" text-anchor="middle" font-size="12" fill="#19212b">Job queue</text>
+          <line x1="123" y1="113" x2="190" y2="113" stroke="#586474" stroke-width="2" marker-end="url(#arrow-cloud)"/><text x="156" y="98" text-anchor="middle" font-size="11" fill="#586474">HTTPS</text>
+          <rect x="198" y="52" width="142" height="122" rx="8" fill="#eaf4ff" stroke="#2f80c9" stroke-width="2"/>
+          <text x="269" y="81" text-anchor="middle" font-size="15" font-weight="700" fill="#15355b">Cloud VM</text><text x="269" y="104" text-anchor="middle" font-size="12" fill="#19212b">Windows + Million</text><text x="269" y="126" text-anchor="middle" font-size="12" fill="#19212b">Automation agent</text><text x="269" y="148" text-anchor="middle" font-size="11" fill="#586474">No public RDP</text>
+          <line x1="342" y1="113" x2="414" y2="113" stroke="#586474" stroke-width="2" marker-end="url(#arrow-cloud)"/><text x="378" y="88" text-anchor="middle" font-size="11" fill="#147d64">encrypted</text><text x="378" y="102" text-anchor="middle" font-size="11" fill="#147d64">WireGuard / IPsec</text>
+          <rect x="422" y="80" width="103" height="65" rx="8" fill="#e8f7f1" stroke="#147d64" stroke-width="2"/>
+          <text x="474" y="107" text-anchor="middle" font-size="13" font-weight="700" fill="#15355b">Office VPN</text><text x="474" y="127" text-anchor="middle" font-size="12" fill="#19212b">Connector</text>
+          <line x1="527" y1="113" x2="550" y2="113" stroke="#586474" stroke-width="2" marker-end="url(#arrow-cloud)"/>
+          <rect x="557" y="80" width="93" height="65" rx="8" fill="#fff5df" stroke="#b36a00" stroke-width="2"/>
+          <text x="603" y="107" text-anchor="middle" font-size="13" font-weight="700" fill="#15355b">Million SQL</text><text x="603" y="127" text-anchor="middle" font-size="11" fill="#19212b">On-premise</text>
+          <text x="330" y="207" text-anchor="middle" font-size="11" fill="#586474">Only the VPN connector can reach the database; block inbound SQL and public RDP</text>
+        </svg>
+      </div>
+      <ul>
+        <li>Off-site operation and simpler remote support.</li>
+        <li>Needs stable office internet, VPN monitoring and a latency pilot.</li>
+        <li>Internet/VPN failure stops Million access to the local database.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="page-break" style="margin-top:13px;">
+    <h2>Budgetary cost comparison (RM)</h2>
+    <table>
+      <thead><tr><th>Cost area</th><th>Option 1: dedicated PC</th><th>Option 2: cloud VM + private VPN</th></tr></thead>
+      <tbody>
+        <tr><td>Compute baseline</td><td>Modern Core i5 / Ryzen 5, 16 GB RAM, 512 GB SSD, Windows Pro</td><td>2 vCPU, 8 GB RAM, 160 GB storage, Windows Server/Windows VM</td></tr>
+        <tr><td>Upfront infrastructure</td><td class="money">RM 3,300–4,300</td><td class="money">RM 600–1,500</td></tr>
+        <tr><td>Monthly running cost</td><td class="money">RM 10–30</td><td class="money">RM 350–450</td></tr>
+        <tr><td>Estimated first-year total</td><td class="money">RM 3,420–4,660</td><td class="money">RM 4,800–6,900</td></tr>
+        <tr><td>Estimated three-year total</td><td class="money">RM 3,660–5,380</td><td class="money">RM 13,200–17,700</td></tr>
+      </tbody>
+    </table>
+    <p class="small" style="margin-top:6px;">Cost ranges exclude the common Million licence, automation development, accounting support, ISP upgrades and tax. Cloud estimate includes an AWS Lightsail-equivalent 2 vCPU / 8 GB Windows instance, backups and a small VPN allowance. Actual provider billing, exchange conversion and SST may vary.</p>
+  </section>
+
+  <div class="band"></div>
+  <h2>How the private VPN option should be implemented</h2>
+  <div class="grid two">
+    <section class="card">
+      <h3>Secure design</h3>
+      <ul>
+        <li>Install a VPN connector at the office network edge. It initiates the connection outbound; do not expose the Million SQL port to the internet.</li>
+        <li>Cloud VM receives jobs from Smartdok over HTTPS and talks to Million only across the encrypted private tunnel.</li>
+        <li>Allow the cloud VM to reach only the required Million server IP and port; deny lateral network access.</li>
+        <li>Use MFA, named administrator accounts and IP-restricted remote support. No internet-facing RDP.</li>
+        <li>Encrypt VM disks, take daily backups, and retain automation logs/screenshots outside the VM.</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h3>Cloud pilot acceptance tests</h3>
+      <ul>
+        <li>Million opens and saves a demo Purchase Invoice and Sales Invoice reliably over the tunnel.</li>
+        <li>At least 50 consecutive rehearsal jobs complete with no duplicate document numbers.</li>
+        <li>VPN reconnect recovers cleanly after office internet outage and VM restart.</li>
+        <li>Automation detects a partially entered form and stops for review rather than retrying blindly.</li>
+        <li>Million licensing, USB-dongle availability and vendor support are confirmed for the VM.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section style="margin-top:13px;">
+    <h2>Cost assumptions and sizing</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Assumption used</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>On-premise PC</td><td>Acer Malaysia lists a Ryzen 5 / 16 GB / 512 GB desktop at RM 2,999 with Windows 11 Home. The range adds Windows Pro, UPS, headless display/other small hardware and price variation.</td><td>Buy business-grade hardware; a UPS avoids incomplete entry during short power failures.</td></tr>
+        <tr><td>Cloud VM</td><td>AWS Lightsail lists a Windows 2 vCPU / 8 GB / 160 GB bundle at US$74/month. At USD/MYR 4.081, this is about RM302/month before tax, backups and VPN.</td><td>Budget RM350–450/month to allow backups and a managed/private-tunnel allowance.</td></tr>
+        <tr><td>VPN</td><td>Use WireGuard/IPsec or an approved zero-trust overlay. The tunnel is between the cloud VM and office connector—not a public database connection.</td><td>Cloud is viable only after a latency/reliability pilot with the real Million database.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="decision" style="margin-top:13px;">
+    <strong>Decision rule:</strong> select the dedicated PC when the database remains in the office and cost/reliability are the priority. Select the cloud VM only when the company accepts the recurring spend and wants off-site administration, and the pilot proves Million performs consistently through the private tunnel.
+  </section>
+
+  <section style="margin-top:13px;">
+    <h2>Sources</h2>
+    <ol class="small">
+      <li><a href="https://www.million.my/accounting-with-invoicing/">Million Software — Accounting with Invoicing system requirements</a>.</li>
+      <li><a href="https://store.acer.com/en-my/desktops/consumer/operating_system-windows_11_home_single_language">Acer Malaysia — Revo Box Ryzen 5 / 16 GB / 512 GB listing</a>.</li>
+      <li><a href="https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-bundles.html">AWS Lightsail — Windows instance bundles</a> and <a href="https://aws.amazon.com/lightsail/pricing/">pricing</a>.</li>
+      <li><a href="https://financialmarkets.bnm.gov.my/data-download-exchange-rates?date_range=month_date&amp;ex_session=09%3A00%3A00&amp;quotation=myr&amp;rate_type=middle_data">Bank Negara Malaysia — USD/MYR exchange rates</a>; planning conversion used: RM4.081 per US$.</li>
+      <li><a href="https://docs.aws.amazon.com/vpn/latest/s2svpn/VPC_VPN.html">AWS — Site-to-Site VPN overview</a>. The proposed design can also use a managed WireGuard/zero-trust alternative.</li>
+    </ol>
+  </section>
+  <p class="footer">Prepared 31 July 2026 · Costs are planning estimates, not a vendor quotation.</p>
+</body>
+</html>

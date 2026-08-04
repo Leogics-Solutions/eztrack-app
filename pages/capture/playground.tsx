@@ -9,7 +9,7 @@ import {
   type ChannelInstructionSource,
 } from '@/services/CaptureService';
 import { FlaskConical, UploadCloud } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ChangeEvent, type DragEvent, useEffect, useState } from 'react';
 
 const SOURCES: Array<{ value: ChannelInstructionSource; label: string }> = [
   { value: 'UPLOAD', label: 'Upload' },
@@ -19,6 +19,9 @@ const SOURCES: Array<{ value: ChannelInstructionSource; label: string }> = [
   { value: 'DRIVE', label: 'Google Drive' },
   { value: 'TELEGRAM', label: 'Telegram' },
 ];
+
+const ALLOWED_ATTACHMENT_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'];
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 export default function CapturePlaygroundPage() {
   const { selectedOrganizationId } = useOrganization();
@@ -30,6 +33,7 @@ export default function CapturePlaygroundPage() {
     source_type: 'GMAIL' as ChannelInstructionSource,
   });
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
   const [runAi, setRunAi] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CapturePlaygroundResult | null>(null);
@@ -57,6 +61,32 @@ export default function CapturePlaygroundPage() {
     } finally {
       setRunning(false);
     }
+  };
+
+  const selectAttachment = (file: File | null) => {
+    if (!file) return;
+    const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(extension)) {
+      setError('Attach a PDF, PNG, JPG, or JPEG file.');
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setError('Attachment must be 10MB or smaller.');
+      return;
+    }
+    setAttachment(file);
+    setError(null);
+  };
+
+  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    selectAttachment(event.target.files?.[0] || null);
+    event.target.value = '';
+  };
+
+  const handleAttachmentDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    setIsDraggingAttachment(false);
+    selectAttachment(event.dataTransfer.files?.[0] || null);
   };
 
   return (
@@ -143,19 +173,30 @@ export default function CapturePlaygroundPage() {
               </label>
             </div>
 
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] p-5 text-center hover:bg-[var(--muted)]">
+            <label
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDraggingAttachment(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (event.currentTarget === event.target) setIsDraggingAttachment(false);
+              }}
+              onDrop={handleAttachmentDrop}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-5 text-center transition-colors ${isDraggingAttachment ? 'border-cyan-500 bg-cyan-500/10' : 'border-[var(--border)] hover:bg-[var(--muted)]'}`}
+            >
               <UploadCloud className="h-6 w-6 text-cyan-600" />
               <span className="mt-2 text-sm font-medium">
-                {attachment ? attachment.name : 'Attach a PDF or image (optional)'}
+                {attachment ? attachment.name : isDraggingAttachment ? 'Drop file to attach' : 'Attach a PDF or image (optional)'}
               </span>
               <span className="mt-1 text-xs text-[var(--muted-foreground)]">
-                PDF, PNG, JPG or JPEG · maximum 10MB
+                Drag and drop, or click to browse · PDF, PNG, JPG or JPEG · maximum 10MB
               </span>
               <input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg"
                 className="sr-only"
-                onChange={(event) => setAttachment(event.target.files?.[0] || null)}
+                onChange={handleAttachmentChange}
               />
             </label>
 

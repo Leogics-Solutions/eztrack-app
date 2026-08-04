@@ -5,7 +5,7 @@ export default function FinanceRecordsRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/documents');
+    router.replace('/records');
   }, [router]);
 
   return null;

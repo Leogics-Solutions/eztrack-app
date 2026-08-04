@@ -21,6 +21,11 @@ export const zh: Translations = {
   },
   nav: {
     capture: 'Capture',
+    automations: 'Automations',
+    review: 'Review',
+    records: 'Records',
+    knowledgeBase: 'Knowledge Base',
+    integrations: 'Integrations',
     dashboard: '仪表板',
     documents: '文档',
     accounting: '会计与财务',

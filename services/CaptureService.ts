@@ -9,6 +9,7 @@ import { BASE_URL } from './config';
 import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
 export type CaptureAction = 'ACCEPT' | 'FILTER';
+export type CaptureRuleEvaluationMode = 'DETERMINISTIC' | 'AI';
 export type ChannelInstructionSource = Exclude<CaptureSource, 'ALL'>;
 export type CaptureSource =
   | 'ALL'
@@ -30,10 +31,12 @@ export interface CaptureRule {
   id: string;
   name: string;
   source_type: CaptureSource;
+  evaluation_mode: CaptureRuleEvaluationMode;
   field: CaptureRuleField;
   operator: CaptureRuleOperator;
   value: string;
   action: CaptureAction;
+  ai_instructions: string;
   priority: number;
   is_active: boolean;
 }
@@ -85,6 +88,44 @@ export interface CaptureEvent {
 
 export interface CaptureInboxResponse {
   items: CaptureEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type CaptureInboxStage = 'TO_REVIEW' | 'IN_PROGRESS' | 'COMPLETED';
+export type CaptureInboxView = 'ALL' | CaptureInboxStage;
+
+export interface CaptureWorkItem {
+  id: string;
+  stage: CaptureInboxStage;
+  status: string;
+  status_label: string;
+  source_type: string;
+  title: string;
+  sender?: string | null;
+  preview?: string | null;
+  filenames: string[];
+  reason?: string | null;
+  workflow_name: string;
+  capture_event_id?: number | null;
+  job_id?: string | null;
+  result_type?: string | null;
+  result_id?: number | null;
+  review_url?: string | null;
+  requires_attention: boolean;
+  received_at: string;
+  updated_at: string;
+}
+
+export interface CaptureWorkInboxResponse {
+  items: CaptureWorkItem[];
+  counts: {
+    all: number;
+    to_review: number;
+    in_progress: number;
+    completed: number;
+  };
   total: number;
   page: number;
   page_size: number;
@@ -260,6 +301,42 @@ export async function listCaptureInbox(params: {
     headers: getScopedHeaders(),
   });
   return handle<CaptureInboxResponse>(response);
+}
+
+export async function listCaptureWorkInbox(params: {
+  view?: CaptureInboxView;
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  sourceType?: string;
+  search?: string;
+  includeIgnored?: boolean;
+} = {}): Promise<CaptureWorkInboxResponse> {
+  const query = new URLSearchParams();
+  query.set('view', params.view || 'TO_REVIEW');
+  query.set('page', String(params.page || 1));
+  query.set('page_size', String(params.pageSize || 30));
+  if (params.status && params.status !== 'ALL') query.set('status', params.status);
+  if (params.sourceType && params.sourceType !== 'ALL') query.set('source_type', params.sourceType);
+  if (params.search) query.set('search', params.search);
+  if (params.includeIgnored) query.set('include_ignored', 'true');
+
+  const response = await fetch(`${BASE_URL}/capture/inbox/work-items?${query.toString()}`, {
+    headers: getScopedHeaders(),
+  });
+  return handle<CaptureWorkInboxResponse>(response);
+}
+
+export async function updateCaptureEventsBulkDecision(
+  eventIds: number[],
+  action: 'IGNORE' | 'RESTORE'
+): Promise<{ requested_count: number; updated_count: number; action: 'IGNORE' | 'RESTORE' }> {
+  const response = await fetch(`${BASE_URL}/capture/inbox/bulk-decision`, {
+    method: 'PATCH',
+    headers: getScopedHeaders(),
+    body: JSON.stringify({ event_ids: eventIds, action }),
+  });
+  return handle(response);
 }
 
 export async function getCaptureEvent(eventId: number): Promise<CaptureEvent> {

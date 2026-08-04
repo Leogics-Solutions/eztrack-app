@@ -541,10 +541,12 @@ export default function CaptureChannelsPage() {
   const telegramRequest = requestFor('TELEGRAM');
 
   return (
-    <AppLayout pageName="Capture channels">
+    <AppLayout pageName="Integrations">
       <CaptureShell
         title="Input channels"
         description="Connect the places where customers send purchase orders and supporting documents. Every connector feeds the same Smart Inbox."
+        eyebrow="Integrations"
+        showNavigation={false}
         actions={(
           <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh status
