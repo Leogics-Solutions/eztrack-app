@@ -118,8 +118,9 @@ export default function AgentRunPage() {
   const whatsappDelivery = (run?.output_refs as { notify?: { status?: string; detail?: string; note?: string } } | undefined)?.notify;
   const sqlAccountDelivery = (run?.output_refs as { sql_account?: SqlAccountDelivery } | undefined)?.sql_account;
   const sourceWarnings = (data?.source?.warnings as string[] | undefined) || [];
-  const hasExtractedLines = lines.length > 0;
-  const hasAllMyrAmounts = hasExtractedLines && lines.every((line) => line.amount_myr != null);
+  const orderLines = lines.filter((line) => line.category !== 'header');
+  const headingCount = lines.length - orderLines.length;
+  const hasAllMyrAmounts = orderLines.length > 0 && orderLines.every((line) => line.amount_myr != null);
   const sourceName = run?.source_filename || 'received document';
   const sourceExt = sourceName.split('.').pop()?.toLowerCase() || '';
   const sourceIsPdf = sourceMime === 'application/pdf' || sourceExt === 'pdf';
@@ -315,12 +316,12 @@ export default function AgentRunPage() {
                   <Field label="Conversion rate"><input type="number" step="any" value={forex.rate ?? ''} onChange={(e) => updateForex({ rate: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                   <Field label="Flat fee (MYR)"><input type="number" step="any" value={forex.flat_fee ?? ''} onChange={(e) => updateForex({ flat_fee: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                 </div>
-              ) : <p className="mt-3 text-sm text-amber-700">No conversion formula was detected. Add the rate from the WhatsApp message, or tick “Already MYR” if this order needs no conversion.</p>}
+              ) : <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Conversion rate required: this foreign-currency PO cannot be generated as an RM 0.00 invoice. Add the rate from WhatsApp, or tick “Already MYR” only when the source prices are already MYR.</p>}
             </section>
           )}
 
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
-            <div className="p-4 border-b border-[var(--border)] font-semibold">Extracted lines ({lines.length})</div>
+            <div className="p-4 border-b border-[var(--border)] font-semibold">Extracted order lines ({orderLines.length}){headingCount ? <span className="font-normal text-[var(--muted-foreground)]"> + {headingCount} section heading{headingCount === 1 ? '' : 's'}</span> : null}</div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-[var(--muted-foreground)]">
@@ -349,7 +350,7 @@ export default function AgentRunPage() {
             {canReview && <div className="px-4 py-3 border-t border-[var(--border)]"><button type="button" onClick={addLine} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--hover-bg)]"><Plus className="h-4 w-4" /> Add line</button></div>}
             <div className="border-t border-[var(--border)]">
               {totalMismatch && <div className="px-4 pt-3 flex justify-end"><span className="rounded-md bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">⚠ Extracted total <b>RM {fmt(grandTotal)}</b> vs PO stated <b>RM {fmt(statedTotal)}</b> — differ by <b>RM {fmt(totalDelta)}</b>. Check the lines before generating.</span></div>}
-              <div className="p-4 text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{fmt(totals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(totals.qty_total)}</b></span>{totals.flat_fee ? <span className="text-[var(--muted-foreground)]">Handling fee RM {fmt(totals.flat_fee)} folded into unit prices</span> : null}<span>Grand total: <b>RM {fmt(totals.grand_total_myr)}</b></span></div>
+              <div className="p-4 text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{fmt(totals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(totals.qty_total)}</b></span>{totals.flat_fee ? <span className="text-[var(--muted-foreground)]">Handling fee RM {fmt(totals.flat_fee)} folded into unit prices</span> : null}<span>Grand total: <b>{totals.grand_total_myr == null ? 'Conversion required' : `RM ${fmt(totals.grand_total_myr)}`}</b></span></div>
             </div>
           </div>
 
