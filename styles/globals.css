@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Smartdok controls its theme with data-theme, not the operating system's
+   prefers-color-scheme setting. Without this selector, Tailwind's dark:
+   utilities can activate inside the visible light theme and produce mixed,
+   low-contrast surfaces. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* ------------------------- */
 /* LIGHT THEME (Default)     */
 /* ------------------------- */

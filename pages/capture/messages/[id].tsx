@@ -4,18 +4,22 @@ import { CaptureShell } from '@/components/capture/CaptureShell';
 import { AppLayout } from '@/components/layout';
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
+  getCaptureAttachmentPreview,
   getCaptureEvent,
   updateCaptureEventDecision,
+  type CaptureAttachmentPreview,
   type CaptureEvent,
 } from '@/services/CaptureService';
 import {
   ArrowLeft,
+  ExternalLink,
   File,
   Mail,
   MessageSquareText,
   RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
@@ -27,14 +31,25 @@ export default function CaptureMessageDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, CaptureAttachmentPreview>>({});
 
   useEffect(() => {
     if (!eventId) return;
     setLoading(true);
     getCaptureEvent(eventId)
-      .then((event) => {
+      .then(async (event) => {
         setItem(event);
         setError(null);
+        const previews = await Promise.all(event.attachments.map(async (_attachment, index) => {
+          try {
+            return [index, await getCaptureAttachmentPreview(event.id, index)] as const;
+          } catch {
+            return null;
+          }
+        }));
+        setAttachmentPreviews(Object.fromEntries(
+          previews.filter((preview): preview is readonly [number, CaptureAttachmentPreview] => preview !== null)
+        ));
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load the message.'))
       .finally(() => setLoading(false));
@@ -88,18 +103,28 @@ export default function CaptureMessageDetailPage() {
               <div className="border-t border-[var(--border)] p-5">
                 <h3 className="mb-3 text-sm font-medium">Attachments</h3>
                 <div className="space-y-2">
-                  {item.attachments.map((attachment) => (
-                    <div key={`${attachment.external_id}-${attachment.filename}`} className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-3">
-                      <File className="h-5 w-5 text-cyan-600" />
-                      <div className="min-w-0 flex-1">
+                  {item.attachments.map((attachment, index) => {
+                    const preview = attachmentPreviews[index];
+                    const contentType = preview?.content_type || attachment.content_type || '';
+                    const isImage = contentType.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(attachment.filename);
+                    const isPdf = contentType === 'application/pdf' || /\.pdf$/i.test(attachment.filename);
+                    return (
+                    <div key={`${attachment.external_id}-${attachment.filename}`} className="overflow-hidden rounded-lg border border-[var(--border)]">
+                      <div className="flex items-center gap-3 p-3">
+                        <File className="h-5 w-5 text-cyan-600" />
+                        <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{attachment.filename}</p>
                         <p className="text-xs text-[var(--muted-foreground)]">
                           {attachment.content_type || 'Unknown type'}
                           {attachment.size_bytes ? ` · ${(attachment.size_bytes / 1024).toFixed(1)} KB` : ''}
                         </p>
+                        </div>
+                        {preview && <a href={preview.preview_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-semibold hover:bg-[var(--muted)]">Open <ExternalLink className="h-3.5 w-3.5" /></a>}
                       </div>
+                      {preview && isImage && <a href={preview.preview_url} target="_blank" rel="noreferrer" className="block border-t border-[var(--border)] bg-slate-100 p-3 dark:bg-slate-950"><Image src={preview.preview_url} alt={`Preview of ${attachment.filename}`} width={1200} height={900} unoptimized className="mx-auto max-h-[620px] w-full rounded-md object-contain" /></a>}
+                      {preview && isPdf && <iframe src={preview.preview_url} title={`Preview of ${attachment.filename}`} className="h-[620px] w-full border-t border-[var(--border)] bg-white" />}
                     </div>
-                  ))}
+                  );})}
                   {item.attachments.length === 0 && <p className="text-sm text-[var(--muted-foreground)]">No supported attachment was found.</p>}
                 </div>
               </div>

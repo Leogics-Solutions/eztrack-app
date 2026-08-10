@@ -129,6 +129,8 @@ export interface GmailConnectionInfo {
   is_active: boolean;
   last_sync_at: string | null;
   created_at: string;
+  oauth_scopes?: string[];
+  can_send?: boolean;
 }
 
 /**

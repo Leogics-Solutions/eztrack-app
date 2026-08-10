@@ -591,11 +591,12 @@ export default function CaptureChannelsPage() {
                     <div key={connection.id} className="space-y-3 rounded-xl border border-[var(--border)] p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-medium">{connection.email}</p>
+                          <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{connection.email}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${connection.can_send ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{connection.can_send ? 'Capture & send' : 'Capture only'}</span></div>
                           <p className="mt-1 text-xs text-[var(--muted-foreground)]">{connection.last_sync_at ? `Last sync ${new Date(connection.last_sync_at).toLocaleString()}` : 'Not synced yet'}</p>
                         </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => void sync('gmail', connection.id)} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${busy === `gmail-sync-${connection.id}` ? 'animate-spin' : ''}`} /> Sync now</button>
+                         <div className="flex gap-2">
+                           {!connection.can_send && <button type="button" onClick={() => void connect('gmail')} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"><Link2 className="h-3.5 w-3.5" /> Allow sending</button>}
+                           <button type="button" onClick={() => void sync('gmail', connection.id)} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${busy === `gmail-sync-${connection.id}` ? 'animate-spin' : ''}`} /> Sync now</button>
                           <button type="button" onClick={() => void disconnect('gmail', connection.id)} disabled={busy !== null} className="rounded-lg p-2 text-red-600 hover:bg-red-500/10 disabled:opacity-50" aria-label="Disconnect Gmail"><Unplug className="h-4 w-4" /></button>
                         </div>
                       </div>

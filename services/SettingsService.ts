@@ -25,6 +25,8 @@ export interface GmailConnection {
   id: number;
   email: string;
   is_active: boolean;
+  oauth_scopes?: string[];
+  can_send?: boolean;
   last_sync_at: string | null;
   created_at: string;
 }
@@ -56,9 +58,9 @@ export interface IntegrationSettings {
   xero?: {
     enabled: boolean;
     connection_count: number;
-    connections: any[];
+    connections: unknown[];
   };
-  [key: string]: any; // Allow for other integrations
+  [key: string]: unknown; // Allow for other integrations
 }
 
 export interface UserInfo {
@@ -78,7 +80,7 @@ export type GetSettingsResponse = SettingsResponse;
 // For backward compatibility and feature flags (if needed in future)
 export interface UpdateSettingsRequest {
   business_central_enabled?: boolean;
-  [key: string]: any; // Allow for other settings
+  [key: string]: unknown; // Allow for other settings
 }
 
 export type UpdateSettingsResponse = SettingsResponse;

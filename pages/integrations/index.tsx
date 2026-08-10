@@ -3,6 +3,10 @@
 import { AppLayout } from '@/components/layout';
 import { useOrganization } from '@/lib/OrganizationContext';
 import { getSettings, type SettingsResponse } from '@/services/SettingsService';
+import { listWhatsAppConnections } from '@/services/WhatsAppService';
+import { listWeChatConnections } from '@/services/WeChatService';
+import { listSqlAccountConnections } from '@/services/SqlAccountService';
+import { listEmailConnections } from '@/services/EmailConnectionService';
 import {
   ArrowRight,
   Building2,
@@ -39,11 +43,20 @@ export default function IntegrationsPage() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [whatsappCount, setWhatsappCount] = useState(0);
+  const [wechatCount, setWechatCount] = useState(0);
+  const [sqlAccountCount, setSqlAccountCount] = useState(0);
+  const [emailCount, setEmailCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setSettings(await getSettings());
+      const [nextSettings, whatsapp, wechat, sqlAccounts, emailConnections] = await Promise.all([getSettings(), listWhatsAppConnections(), listWeChatConnections(), listSqlAccountConnections(), listEmailConnections()]);
+      setSettings(nextSettings);
+      setWhatsappCount(whatsapp.length);
+      setWechatCount(wechat.length);
+      setSqlAccountCount(sqlAccounts.connections.length);
+      setEmailCount(emailConnections.length);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load integration status.');
@@ -86,12 +99,13 @@ export default function IntegrationsPage() {
               <IntegrationCard icon={Upload} title="Web & mobile upload" description="Drag-and-drop, file picker, and mobile camera uploads." status="Ready" statusTone="connected" href="/documents/new" action="Upload documents" />
               <IntegrationCard icon={Mail} title="Gmail" description="Import attachments and messages from connected Gmail accounts." status={gmailCount ? `${gmailCount} connected` : 'Available'} statusTone={gmailCount ? 'connected' : 'available'} href="/capture/channels" action="Manage Gmail" />
               <IntegrationCard icon={FolderOpen} title="Google Drive" description="Watch selected folders and import new business documents." status={driveCount ? `${driveCount} connected` : 'Available'} statusTone={driveCount ? 'connected' : 'available'} href="/capture/channels" action="Manage Drive" />
-              <IntegrationCard icon={MessageCircle} title="WhatsApp Business" description="Receive official WhatsApp messages, images, and PDFs." status="Assisted setup" statusTone="assisted" href="/capture/channels" action="Request setup" />
-              <IntegrationCard icon={Send} title="Email & Telegram channels" description="Provision a dedicated inbound address or Telegram bot." status="Assisted setup" statusTone="assisted" href="/capture/channels" action="View channels" />
+              <IntegrationCard icon={MessageCircle} title="WhatsApp" description="Pair one or more WhatsApp accounts. Automations can reuse their available groups." status={whatsappCount ? `${whatsappCount} configured` : 'Available'} statusTone={whatsappCount ? 'connected' : 'available'} href="/integrations/whatsapp" action="Manage connections" />
+              <IntegrationCard icon={MessageCircle} title="WeChat" description="Connect the pinned Windows group runner for payment-slip automations." status={wechatCount ? `${wechatCount} configured` : 'Available'} statusTone={wechatCount ? 'connected' : 'available'} href="/integrations/wechat" action="Manage connections" />
+              <IntegrationCard icon={Send} title="Email mailboxes" description="Send outsourced work requests and monitor same-thread replies through Yahoo or another IMAP/SMTP mailbox." status={emailCount ? `${emailCount} connected` : 'Available'} statusTone={emailCount ? 'connected' : 'available'} href="/integrations/email" action="Manage email" />
             </IntegrationSection>
 
             <IntegrationSection title="Accounting & ERP outputs" description="Destinations used after Smartdok completes checks and obtains the required approval.">
-              <IntegrationCard icon={Database} title="SQL Accounting" description="Create configured invoices, delivery orders, and accounting drafts after approval." status="Managed setup" statusTone="assisted" href="/automations" action="Configure automation" />
+              <IntegrationCard icon={Database} title="SQL Accounting" description="Give approved agents narrow tools for customers, items, delivery orders, invoices and official PDFs." status={sqlAccountCount ? `${sqlAccountCount} connected` : 'Available'} statusTone={sqlAccountCount ? 'connected' : 'available'} href="/integrations/sql-account" action="Manage connections" />
               <IntegrationCard icon={Building2} title="Microsoft Business Central" description="Push approved purchase invoices to a connected Business Central company." status={bcCount ? `${bcCount} connected` : 'Available'} statusTone={bcCount ? 'connected' : 'available'} href="/settings" action="Manage connection" />
               <IntegrationCard icon={FileSpreadsheet} title="Xero & AutoCount exchange" description="Export processed invoices and statements in supported import formats." status="Available in Records" statusTone="available" href="/records" action="Open Records" />
               <IntegrationCard icon={Download} title="Bukku ledger exchange" description="Upload Bukku general-ledger exports for bank-ledger completeness checks." status="File exchange" statusTone="available" href="/bank-statements" action="Open reconciliation" />

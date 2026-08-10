@@ -7,6 +7,7 @@ import {
   type CaptureWorkItem,
 } from '@/services/CaptureService';
 import { listInvoices, type Invoice } from '@/services/InvoiceService';
+import { listRuns, type AgentRunListItem } from '@/services/AgentsService';
 import {
   AlertTriangle,
   ArrowRight,
@@ -37,7 +38,32 @@ interface ReviewTask {
   href: string;
   updatedAt: string;
   amount?: string;
-  source: 'inbox' | 'record';
+  source: 'inbox' | 'record' | 'automation';
+}
+
+function automationTask(run: AgentRunListItem): ReviewTask {
+  const status = run.status.toUpperCase();
+  const failed = status === 'FAILED' || status === 'OUTPUT_FAILED';
+  const readyToApprove = status === 'DRAFT_GENERATED';
+  const deliveryPending = status === 'DELIVERY_PENDING';
+  const title = run.po_label?.trim() || run.source_caption?.trim() || run.source_filename || `Automation run #${run.id}`;
+  return {
+    id: `automation-${run.id}`,
+    title,
+    subtitle: run.source_filename || humanize(run.source_channel || 'automation'),
+    workflow: run.agent_name || `Automation #${run.agent_id}`,
+    kind: failed ? 'processing' : readyToApprove ? 'approval' : deliveryPending ? 'processing' : 'validation',
+    reason: failed
+      ? 'The automation could not finish. Open it to inspect the error and retry.'
+      : readyToApprove
+        ? 'The extracted data is ready for approval.'
+        : deliveryPending
+          ? 'SQL Accounting created the records, but official PDF delivery is still pending.'
+          : 'Review the extracted data before the automation creates external records.',
+    href: `/review/${run.id}`,
+    updatedAt: run.completed_at || run.received_at || new Date(0).toISOString(),
+    source: 'automation',
+  };
 }
 
 const KIND_META: Record<ReviewKind, { label: string; icon: LucideIcon; style: string }> = {
@@ -114,22 +140,31 @@ export default function ReviewPage() {
   const [workflow, setWorkflow] = useState('ALL');
 
   const load = useCallback(async () => {
-    const [captureResult, invoiceResult] = await Promise.allSettled([
+    const [captureResult, invoiceResult, runResult] = await Promise.allSettled([
       listCaptureWorkInbox({ view: 'TO_REVIEW', page: 1, pageSize: 100, sourceType: 'ALL', search: '', includeIgnored: false }),
       listInvoices({ page: 1, page_size: 100 }),
+      listRuns({ page: 1, pageSize: 100 }),
     ]);
 
     const next: ReviewTask[] = [];
-    if (captureResult.status === 'fulfilled') next.push(...captureResult.value.items.map(captureTask));
+    if (captureResult.status === 'fulfilled') {
+      next.push(...captureResult.value.items.filter((item) => item.result_type !== 'automation_run').map(captureTask));
+    }
     if (invoiceResult.status === 'fulfilled') {
       next.push(...invoiceResult.value.data.invoices.map(invoiceTask).filter((task): task is ReviewTask => Boolean(task)));
+    }
+    if (runResult.status === 'fulfilled') {
+      next.push(...runResult.value.runs
+        .filter((run) => ['PENDING_REVIEW', 'DRAFT_GENERATED', 'DELIVERY_PENDING', 'FAILED', 'OUTPUT_FAILED'].includes(run.status.toUpperCase()))
+        .map(automationTask));
     }
     next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     setTasks(next);
 
-    if (captureResult.status === 'rejected' && invoiceResult.status === 'rejected') {
+    const rejectedSources = [captureResult, invoiceResult, runResult].filter((result) => result.status === 'rejected').length;
+    if (rejectedSources === 3) {
       setError('Review items could not be loaded. Check the API connection and try again.');
-    } else if (captureResult.status === 'rejected' || invoiceResult.status === 'rejected') {
+    } else if (rejectedSources > 0) {
       setError('Some review sources could not be loaded. The available tasks are shown below.');
     } else {
       setError(null);

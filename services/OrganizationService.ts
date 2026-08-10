@@ -127,6 +127,30 @@ export interface UpdateMemberRoleResponse {
   message: string;
 }
 
+export interface OrganizationInvitation {
+  id: number;
+  organization_id: number;
+  email: string;
+  role: OrganizationRole;
+  status: 'PENDING' | 'ACCEPTED' | 'CANCELLED';
+  invited_by_user_id: number;
+  user_id?: number | null;
+  full_name?: string | null;
+  created_at: string;
+}
+
+export interface ListOrganizationInvitationsResponse {
+  success: boolean;
+  data: OrganizationInvitation[];
+  message: string;
+}
+
+export interface InviteOrganizationMemberResponse {
+  success: boolean;
+  data: OrganizationInvitation;
+  message: string;
+}
+
 /**
  * Get access token from localStorage
  */
@@ -378,6 +402,48 @@ export async function addOrganizationMember(
   }
 
   return response.json();
+}
+
+export async function listOrganizationInvitations(orgId: number): Promise<ListOrganizationInvitationsResponse> {
+  const token = getAccessToken();
+  if (!token) throw new Error('No access token found');
+  const response = await fetch(`${BASE_URL}/organizations/${orgId}/invitations`, {
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to list invitations');
+  }
+  return response.json();
+}
+
+export async function inviteOrganizationMember(orgId: number, data: AddOrganizationMemberRequest): Promise<InviteOrganizationMemberResponse> {
+  const token = getAccessToken();
+  if (!token) throw new Error('No access token found');
+  const response = await fetch(`${BASE_URL}/organizations/${orgId}/invitations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    const detail = Array.isArray(error.detail) ? error.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(', ') : error.detail;
+    throw new Error(detail || error.message || error.error || 'Failed to invite member');
+  }
+  return response.json();
+}
+
+export async function cancelOrganizationInvitation(orgId: number, invitationId: number): Promise<void> {
+  const token = getAccessToken();
+  if (!token) throw new Error('No access token found');
+  const response = await fetch(`${BASE_URL}/organizations/${orgId}/invitations/${invitationId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to cancel invitation');
+  }
 }
 
 /**

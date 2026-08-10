@@ -8,6 +8,8 @@ export type KnowledgeReferenceType =
   | 'PRICE_LIST'
   | 'TAX_CODES'
   | 'POLICY'
+  | 'BUSINESS_ENTITY_REGISTRY'
+  | 'DOCUMENT_TEMPLATE'
   | 'OTHER';
 
 export interface KnowledgeSource {
@@ -22,6 +24,16 @@ export interface KnowledgeSource {
   status: 'PENDING_UPLOAD' | 'STORED' | 'FAILED' | string;
   error_message?: string | null;
   indexed_chunks: number;
+  metadata_json?: {
+    kind?: string;
+    entity_name?: string;
+    document_type?: 'DELIVERY_ORDER' | 'SALES_INVOICE' | 'QUOTATION';
+    variant?: string;
+    render_mode?: 'REFERENCE_EXAMPLE' | 'BACKGROUND';
+    entities?: Array<Record<string, unknown>>;
+    providers?: Array<Record<string, unknown>>;
+    summary?: Record<string, number>;
+  } | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -46,11 +58,19 @@ export async function listKnowledgeSources(): Promise<KnowledgeListResponse> {
   return json(await fetch(`${BASE_URL}/knowledge-base`, { headers: getScopedHeaders() }));
 }
 
+export async function getKnowledgeSource(id: number): Promise<KnowledgeSource> {
+  return json(await fetch(`${BASE_URL}/knowledge-base/${id}`, { headers: getScopedHeaders() }));
+}
+
 export async function uploadKnowledgeSource(input: {
   file: File;
   title?: string;
   description?: string;
   referenceType: KnowledgeReferenceType;
+  entityName?: string;
+  documentType?: 'DELIVERY_ORDER' | 'SALES_INVOICE' | 'QUOTATION';
+  templateVariant?: string;
+  templateRenderMode?: 'REFERENCE_EXAMPLE' | 'BACKGROUND';
 }): Promise<KnowledgeSource> {
   const intent = await json<{ source: KnowledgeSource; upload_url: string }>(await fetch(`${BASE_URL}/knowledge-base/upload-intent`, {
     method: 'POST',
@@ -62,6 +82,10 @@ export async function uploadKnowledgeSource(input: {
       title: input.title?.trim() || undefined,
       description: input.description?.trim() || undefined,
       reference_type: input.referenceType,
+      entity_name: input.entityName?.trim() || undefined,
+      document_type: input.documentType,
+      template_variant: input.templateVariant?.trim() || undefined,
+      template_render_mode: input.templateRenderMode || 'REFERENCE_EXAMPLE',
     }),
   }));
 

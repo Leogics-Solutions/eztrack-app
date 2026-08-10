@@ -17,6 +17,7 @@ export type CaptureSource =
   | 'INBOUND_EMAIL'
   | 'GMAIL'
   | 'WHATSAPP'
+  | 'WECHAT'
   | 'DRIVE'
   | 'TELEGRAM';
 export type CaptureRuleField = 'sender' | 'subject' | 'body' | 'filename' | 'source_type';
@@ -63,6 +64,12 @@ export interface CaptureAttachment {
   content_type?: string | null;
   size_bytes?: number | null;
   external_id?: string | null;
+}
+
+export interface CaptureAttachmentPreview {
+  filename: string;
+  content_type?: string | null;
+  preview_url: string;
 }
 
 export interface CaptureEvent {
@@ -344,6 +351,17 @@ export async function getCaptureEvent(eventId: number): Promise<CaptureEvent> {
     headers: getScopedHeaders(),
   });
   return handle<CaptureEvent>(response);
+}
+
+export async function getCaptureAttachmentPreview(
+  eventId: number,
+  attachmentIndex: number
+): Promise<CaptureAttachmentPreview> {
+  const response = await fetch(
+    `${BASE_URL}/capture/inbox/${eventId}/attachments/${attachmentIndex}/preview`,
+    { headers: getScopedHeaders() }
+  );
+  return handle<CaptureAttachmentPreview>(response);
 }
 
 export async function updateCaptureEventDecision(

@@ -81,6 +81,8 @@ export interface AgentRunLine {
   unit?: string;
   qty?: number | null;
   category?: string | null;
+  parent_group?: string | null;
+  pricing_scope?: string | null;
   unit_price_foreign?: number | null;
   amount_foreign?: number | null;
   unit_price_myr?: number | null;
@@ -101,6 +103,7 @@ export interface AgentRunForex {
   operator?: string | null;
   rate?: number | null;
   flat_fee?: number | null;
+  adjustments?: Array<{ operator?: string | null; currency?: string | null; amount?: number | null }>;
   computed_total?: number | null;
   expected_total?: number | null;
   matches?: boolean | null;
@@ -113,10 +116,79 @@ export interface AgentRunData {
   code?: string | null;
   inv_date?: string | null;
   currency?: string | null;
+  issuing_entity?: {
+    status?: 'RESOLVED' | 'AMBIGUOUS' | 'UNRESOLVED' | 'NOT_CONFIGURED' | string;
+    entity_key?: string | null;
+    key?: string | null;
+    legal_name?: string | null;
+    display_name?: string | null;
+    role?: 'ISSUER' | 'CONSIGNEE' | string | null;
+    route?: 'INTERNAL' | 'OUTSOURCED' | string | null;
+    fulfilment_mode?: 'INTERNAL' | 'OUTSOURCED' | string | null;
+    aliases?: string[];
+    sql_connection_id?: number | null;
+    template_sources?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  } | null;
+  fulfilment_route?: 'INTERNAL' | 'OUTSOURCED' | string | null;
   forex?: AgentRunForex | null;
+  conversion?: {
+    status?: 'NOT_REQUIRED' | 'PENDING_RATE' | 'INCOMPLETE' | 'CONVERTED' | string;
+    source_currency?: string | null;
+    target_currency?: string | null;
+    rate_required?: boolean;
+    priced_line_count?: number;
+    converted_line_count?: number;
+    reason?: string | null;
+  };
   lines?: AgentRunLine[];
   totals?: Record<string, number | null>;
   source?: Record<string, unknown>;
+  reconciliation?: {
+    status?: 'MATCHED' | 'MISMATCH' | 'NOT_DECLARED' | string;
+    expected_foreign_total?: number | null;
+    extracted_foreign_total?: number | null;
+    variance_foreign?: number | null;
+    currency?: string | null;
+    currency_matches?: boolean | null;
+    requires_review?: boolean;
+  };
+  package?: {
+    status?: 'COMPLETE' | 'WAITING_FOR_DOCUMENTS' | 'NEEDS_REVIEW' | 'NOT_REQUIRED' | string;
+    expected_set_count?: number | null;
+    received_primary_document_count?: number;
+    remaining_foreign_total?: number | null;
+    supporting_document_count?: number;
+    source_run_ids?: number[];
+    manually_combined?: boolean;
+  };
+  documents?: Array<{
+    sheet?: string;
+    document_type?: string;
+    role?: string;
+    priced?: boolean;
+    row_count?: number;
+    run_id?: number;
+    filename?: string;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface ReviewFieldDefinition {
+  key: string;
+  label?: string;
+  description?: string;
+  type?: string;
+  structure?: 'SCALAR' | 'TABLE' | string;
+  required?: boolean;
+  children?: ReviewFieldDefinition[];
+}
+
+export interface AgentRunReviewSchema {
+  template_key?: string | null;
+  document_types?: string[];
+  fields?: ReviewFieldDefinition[];
+  approval?: Record<string, unknown>;
 }
 
 export interface AgentRunEvent {
@@ -135,6 +207,11 @@ export interface AgentRun {
   user_id: number;
   organization_id?: number | null;
   status: string;
+  revision?: number;
+  po_label?: string | null;
+  agent_name?: string | null;
+  record_type?: string | null;
+  review_schema?: AgentRunReviewSchema;
   source_channel?: string | null;
   source_ref?: string | null;
   source_filename?: string | null;
@@ -159,6 +236,8 @@ export interface AgentRunListItem {
   source_channel?: string | null;
   source_filename?: string | null;
   source_caption?: string | null;
+  po_label?: string | null;
+  agent_name?: string | null;
   received_at?: string | null;
   completed_at?: string | null;
 }
@@ -314,6 +393,16 @@ export async function getRunSource(runId: number): Promise<Blob> {
   return res.blob();
 }
 
+export async function getRunFile(runId: number, fileKey: string): Promise<Blob> {
+  const query = new URLSearchParams({ file_key: fileKey });
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/file?${query.toString()}`, { headers: getScopedHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.detail || 'Could not download the run file.');
+  }
+  return res.blob();
+}
+
 export async function uploadRun(agentId: number, file: File, caption = ''): Promise<AgentRun> {
   const form = new FormData();
   form.append('file', file);
@@ -324,9 +413,31 @@ export async function uploadRun(agentId: number, file: File, caption = ''): Prom
   return handle<AgentRun>(res);
 }
 
+export async function uploadPaymentBundle(agentId: number, files: File[], caption: string): Promise<AgentRun> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  form.append('caption', caption);
+  const res = await fetch(`${BASE_URL}/agents/${agentId}/runs/payment-bundle`, { method: 'POST', headers: getScopedHeadersForFormData(), body: form });
+  return handle<AgentRun>(res);
+}
+
 export async function reviewRun(runId: number, correctedData: AgentRunData): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/review`, {
     method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ corrected_data: correctedData }),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function refreshPaymentPreview(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/refresh-payment-preview`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function combineRuns(targetRunId: number, sourceRunId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${targetRunId}/combine/${sourceRunId}`, {
+    method: 'POST', headers: getScopedHeaders(),
   });
   return handle<AgentRun>(res);
 }
@@ -348,6 +459,14 @@ export async function approveRun(runId: number, correctedData?: AgentRunData): P
 
 export async function sendRunToWhatsApp(runId: number): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/send-whatsapp`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
+/** Retry only official-file retrieval and source delivery; accounting writes are never repeated. */
+export async function retryRunDelivery(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/retry-delivery`, {
     method: 'POST', headers: getScopedHeaders(),
   });
   return handle<AgentRun>(res);
