@@ -10,17 +10,23 @@ export interface RegisterRequest {
   email: string;
   password: string;
   full_name: string;
-  industry: string;
+  verification_token: string;
+  company_name?: string;
+  industry?: string;
+  anonymous_id?: string;
+  session_id?: string;
+  referral_source?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
 }
 
 export interface RegisterResponse {
   success: boolean;
   data: {
-    id: number;
-    email: string;
-    full_name: string;
-    role: string;
-    status: string;
+    user: User;
+    tokens: LoginResponse['data'];
+    onboarding: { status: string; completed: boolean };
   };
   message: string;
 }
@@ -73,6 +79,16 @@ export interface LogoutResponse {
   success: boolean;
   data: null;
   message: string;
+}
+
+export function persistTokens(tokens: LoginResponse['data']): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('access_token', tokens.access_token);
+  localStorage.setItem('refresh_token', tokens.refresh_token);
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `auth_token=${tokens.access_token}; Path=/; Expires=${expires}; SameSite=Lax${secure}`;
+  document.cookie = `session=${tokens.access_token}; Path=/; Expires=${expires}; SameSite=Lax${secure}`;
 }
 
 /**
@@ -135,8 +151,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 
   // Store tokens after successful login
   if (result.success && result.data && typeof window !== 'undefined') {
-    localStorage.setItem('access_token', result.data.access_token);
-    localStorage.setItem('refresh_token', result.data.refresh_token);
+    persistTokens(result.data);
 
     // Also set cookies so Next.js middleware can validate the session in production
     try {

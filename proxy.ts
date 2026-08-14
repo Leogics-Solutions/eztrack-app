@@ -12,15 +12,16 @@ export function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Allow access to login page without authentication
-  if (pathname === '/login') {
+  const publicPaths = ['/login', '/signup', '/forgot-password', '/support'];
+  // Allow self-service entry points without authentication
+  if (publicPaths.includes(pathname)) {
     // Check if user is already authenticated
     const authToken = request.cookies.get('auth_token')?.value;
     const sessionToken = request.cookies.get('session')?.value;
     const isAuthenticated = !!authToken || !!sessionToken;
 
-    // If authenticated and trying to access login, redirect to home
-    if (isAuthenticated) {
+    // Authenticated users do not need the login or signup entry points.
+    if (isAuthenticated && (pathname === '/login' || pathname === '/signup')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 

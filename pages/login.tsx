@@ -4,6 +4,9 @@ import { useAuth } from '@/lib/auth';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
+import Link from 'next/link';
+import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
+import { googleSignIn } from '@/services/SelfServiceService';
 
 /**
  * Smartdok.ai Login Page
@@ -64,7 +67,18 @@ function LoginPage() {
   };
 
   const handleForgotPassword = () => {
-    alert('Forgot password functionality will be implemented soon. Please contact support for assistance.');
+    void router.push('/forgot-password');
+  };
+
+  const handleGoogleCredential = async (credential: string) => {
+    setError(''); setIsLoading(true);
+    try {
+      const result = await googleSignIn(credential);
+      await router.replace(result.onboarding.completed ? '/' : '/onboarding');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -451,6 +465,9 @@ function LoginPage() {
               </div>
             )}
 
+            <GoogleSignInButton onCredential={handleGoogleCredential} disabled={isLoading} />
+            <p style={{ textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 13, margin: '16px 0' }}>or sign in with email</p>
+
             {/* Login Form */}
             <form onSubmit={handleSubmit} className="login-form">
               <div className="form-group">
@@ -512,6 +529,9 @@ function LoginPage() {
                 </span>
               </button>
             </form>
+            <p style={{ textAlign: 'center', color: 'var(--muted-foreground)', marginTop: 20 }}>
+              New to Smartdok.ai? <Link href="/signup" style={{ color: 'var(--primary)', fontWeight: 600 }}>Create an account</Link>
+            </p>
           </div>
         </div>
       </div>

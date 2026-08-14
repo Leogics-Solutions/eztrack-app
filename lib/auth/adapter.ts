@@ -1,5 +1,5 @@
 import { AuthAdapter, User } from './types';
-import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/services/AuthService';
+import { login as apiLogin, logout as apiLogout } from '@/services/AuthService';
 import { getCurrentUser as getUserProfile } from '@/services/UserService';
 import { redirectToLogin } from './authHelpers';
 
@@ -368,7 +368,7 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
     const token = localStorage.getItem('access_token');
     if (!token) {
       // No token - redirect to login if not already on login page
-      if (window.location.pathname !== '/login') {
+      if (!['/login', '/signup', '/forgot-password', '/support'].includes(window.location.pathname)) {
         redirectToLogin(window.location.pathname);
       }
       return null;
@@ -392,13 +392,13 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
         return user;
       }
       // Failed to get user - token might be invalid
-      if (window.location.pathname !== '/login') {
+      if (!['/login', '/signup', '/forgot-password', '/support'].includes(window.location.pathname)) {
         redirectToLogin(window.location.pathname);
       }
       return null;
     } catch (error) {
       // Error getting user - token invalid or expired
-      if (window.location.pathname !== '/login') {
+      if (!['/login', '/signup', '/forgot-password', '/support'].includes(window.location.pathname)) {
         redirectToLogin(window.location.pathname);
       }
       return null;
@@ -450,22 +450,8 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
   }
 
   async signUp(email: string, password: string, userData?: Partial<User>): Promise<User> {
-    try {
-      const response = await apiRegister({
-        email,
-        password,
-        full_name: userData?.name || '',
-        industry: userData?.industry || '',
-      });
-      
-      if (response.success && response.data) {
-        // After registration, automatically sign in
-        return await this.signIn(email, password);
-      }
-      throw new Error('Registration failed');
-    } catch (error) {
-      throw error instanceof Error ? error : new Error('Registration failed');
-    }
+    void email; void password; void userData;
+    throw new Error('Use the verified self-service signup flow at /signup');
   }
 
   async signOut(): Promise<void> {

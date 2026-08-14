@@ -70,7 +70,7 @@ export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
 }
 
 export function getSettingsNavigation(t: Translations): AppNavigationItem {
-  return { href: '/settings', label: t.nav.settings, icon: Settings };
+  return { href: '/settings', label: t.nav.settings, icon: Settings, relatedRoutes: ['/billing'] };
 }
 
 export function isNavigationItemActive(pathname: string, item: AppNavigationItem) {

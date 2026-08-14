@@ -399,6 +399,10 @@ export default function SettingsPage() {
 
         {!loading && !authLoading && tab === 'billing' && (
           <div className="space-y-6">
+            <section className={`${cardClass} flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between`}>
+              <div><h2 className="font-bold text-[var(--foreground)]">Subscription management</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">Choose a plan or open Stripe's secure billing portal.</p></div>
+              <Link href="/billing" className="inline-flex items-center justify-center rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-cyan-700">Plans &amp; billing</Link>
+            </section>
             <section className={`${cardClass} p-6`}>
               <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                 <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Current processing allowance</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">{effectiveQuota?.remaining_quota?.toLocaleString() || 0}<span className="ml-2 text-base font-medium text-[var(--muted-foreground)]">pages remaining</span></p><p className="mt-2 text-sm text-[var(--muted-foreground)]">Billed to {effectiveQuota?.type === 'organization' ? selectedOrganization?.name || 'your company' : 'your personal account'}.</p></div>
