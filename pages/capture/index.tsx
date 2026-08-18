@@ -77,6 +77,14 @@ function primaryDescription(item: CaptureWorkItem) {
   return [item.sender, item.preview].filter(Boolean).join(' · ') || 'File received for processing';
 }
 
+function formatMalaysiaDateTime(value: string) {
+  return new Intl.DateTimeFormat('en-MY', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(new Date(value));
+}
+
 export default function CaptureInboxPage() {
   const { selectedOrganizationId } = useOrganization();
   const [response, setResponse] = useState<CaptureWorkInboxResponse>(EMPTY_RESPONSE);
@@ -359,7 +367,14 @@ export default function CaptureInboxPage() {
             </div>
           ) : (
             <div className="divide-y divide-[var(--border)]">
-              {response.items.map((item) => (
+              {response.items.map((item) => {
+                // Older Inbox records predate review_run_ids.  Their result_id is
+                // still the review task ID, so surface it in exactly the same way.
+                const reviewRunIds = item.review_run_ids?.length
+                  ? item.review_run_ids
+                  : item.result_id ? [item.result_id] : [];
+
+                return (
                 <article
                   key={item.id}
                   className="grid gap-3 p-4 transition hover:bg-[var(--muted)]/40 lg:grid-cols-[24px_42px_minmax(0,1fr)_190px_160px] lg:items-center"
@@ -400,6 +415,16 @@ export default function CaptureInboxPage() {
                         )}
                       </div>
                     )}
+                    {reviewRunIds.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-[var(--muted-foreground)]">Open this review:</span>
+                        {reviewRunIds.map((runId) => (
+                          <Link key={runId} href={`/review/${runId}`} className="rounded-md bg-cyan-700 px-3 py-1.5 font-bold text-white shadow-sm ring-2 ring-cyan-200 hover:bg-cyan-800 dark:ring-cyan-900">
+                            Review #{runId}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                     {item.reason && (
                       <p className={`mt-2 line-clamp-2 text-xs ${item.status === 'FAILED' ? 'text-red-700 dark:text-red-300' : 'text-[var(--muted-foreground)]'}`}>
                         {item.reason}
@@ -410,17 +435,26 @@ export default function CaptureInboxPage() {
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STAGE_STYLES[item.stage]}`}>
                       {item.status_label}
                     </span>
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    <p className="hidden">
                       {humanize(item.source_type)} · {new Date(item.received_at).toLocaleString()}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      {humanize(item.source_type)} · {formatMalaysiaDateTime(item.received_at)} GMT+8
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
-                    {item.review_url && (
+                    {reviewRunIds.length > 0 ? (
+                      reviewRunIds.map((runId) => (
+                        <Link key={runId} href={`/review/${runId}`} className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-cyan-800">
+                          Open Review #{runId}
+                        </Link>
+                      ))
+                    ) : item.review_url && (
                       <Link
                         href={item.review_url}
-                        className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--card)]"
+                        className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-cyan-800"
                       >
-                        {item.result_id ? 'Review result' : 'View details'}
+                        {item.result_id ? `Open Review #${item.result_id}` : 'Open review'}
                       </Link>
                     )}
                     {item.capture_event_id && item.stage !== 'COMPLETED' && (
@@ -445,7 +479,8 @@ export default function CaptureInboxPage() {
                     )}
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
 

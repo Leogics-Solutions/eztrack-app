@@ -4,6 +4,7 @@
  */
 
 import { BASE_URL } from './config';
+import { getScopedHeaders } from './apiHelpers';
 
 // Types
 export interface QuotaAllocation {
@@ -54,6 +55,7 @@ export interface UpdateUserResponse {
 }
 
 export interface PersonalQuota {
+  unlimited?: boolean;
   total_quota: number;
   used_quota: number;
   remaining_quota: number;
@@ -63,6 +65,7 @@ export interface PersonalQuota {
 }
 
 export interface OrganizationQuota {
+  unlimited?: boolean;
   organization_id: number;
   organization_name: string;
   total_quota: number;
@@ -74,6 +77,7 @@ export interface OrganizationQuota {
 
 export interface EffectiveQuota {
   type: 'personal' | 'organization';
+  unlimited?: boolean;
   total_quota: number;
   used_quota: number;
   remaining_quota: number;
@@ -81,12 +85,27 @@ export interface EffectiveQuota {
 }
 
 export interface QuotaData {
+  quota_enforcement_enabled?: boolean;
   quota_mode: 'personal' | 'organization';
   use_organization_quota: boolean;
   primary_organization_id: number | null;
   personal_quota: PersonalQuota;
   organization_quota?: OrganizationQuota;
   effective_quota: EffectiveQuota;
+}
+
+export interface OpenAIBillingSummary {
+  status: 'available' | 'not_configured' | 'unavailable';
+  period_start: string;
+  period_end: string;
+  currency: 'usd' | string;
+  month_to_date_cost_usd: number | null;
+  configured_budget_usd: number | null;
+  configured_budget_remaining_usd: number | null;
+  credit_balance_available: false;
+  credit_balance_note: string;
+  billing_dashboard_url: string;
+  message: string;
 }
 
 export interface GetUserQuotaResponse {
@@ -214,6 +233,20 @@ export async function getUserQuota(): Promise<GetUserQuotaResponse> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to get quota information');
+  }
+
+  return response.json();
+}
+
+export async function getOpenAIBillingSummary(): Promise<{ success: boolean; data: OpenAIBillingSummary; message: string }> {
+  const response = await fetch(`${BASE_URL}/users/me/openai-billing`, {
+    method: 'GET',
+    headers: getScopedHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || error.message || 'Failed to get OpenAI billing information');
   }
 
   return response.json();

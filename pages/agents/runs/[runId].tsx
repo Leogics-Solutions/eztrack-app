@@ -31,8 +31,12 @@ const normalizeRunLine = (value: unknown): AgentRunLine => {
   return {
     ...line,
     name: String(line.name ?? line.source_description ?? line.description ?? ''),
+    more_description: (line.more_description ?? null) as string | null,
     model: String(line.model ?? line.model_or_part_number ?? line.item_code ?? ''),
     unit: (line.unit ?? line.uom ?? undefined) as string | undefined,
+    source_unit: (line.source_unit ?? null) as string | null,
+    color: (line.color ?? line.colour ?? null) as string | null,
+    source_color: (line.source_color ?? line.source_colour ?? null) as string | null,
     qty: (line.qty ?? line.quantity ?? null) as number | null,
     category: (line.category ?? line.line_category ?? null) as string | null,
     unit_price_foreign: (line.unit_price_foreign ?? null) as number | null,
@@ -63,9 +67,11 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   const [run, setRun] = useState<AgentRun | null>(null);
   const [lines, setLines] = useState<AgentRunLine[]>([]);
   const [forexDraft, setForexDraft] = useState<AgentRunForex | null>(null);
+  const [noConversion, setNoConversion] = useState(false);
   const [customerDraft, setCustomerDraft] = useState('');
   const [customerCodeDraft, setCustomerCodeDraft] = useState('');
   const [documentCodeDraft, setDocumentCodeDraft] = useState('');
+  const [sourceReferenceDraft, setSourceReferenceDraft] = useState('');
   const [invoiceDateDraft, setInvoiceDateDraft] = useState('');
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [sourceMime, setSourceMime] = useState('');
@@ -90,9 +96,11 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
     setGenericDraft({ ...((reviewed || {}) as Record<string, unknown>) });
     setLines(canonicalRunLines(reviewed));
     setForexDraft(reviewed?.forex ? { ...reviewed.forex } : null);
+    setNoConversion(Boolean(reviewed?.no_conversion) || String(reviewed?.currency || '').toUpperCase() === 'MYR');
     setCustomerDraft(reviewed?.customer || '');
     setCustomerCodeDraft(reviewed?.customer_code || '');
     setDocumentCodeDraft(reviewed?.code || '');
+    setSourceReferenceDraft(reviewed?.source_reference || '');
     setInvoiceDateDraft(reviewed?.inv_date || '');
     setIssuingEntityKey(reviewed?.issuing_entity?.entity_key || reviewed?.issuing_entity?.key || '');
     const proposal = (r.output_refs as { sql_account?: { customer_proposal?: SqlAccountCustomerProposal } } | undefined)?.sql_account?.customer_proposal;
@@ -104,18 +112,15 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
     if (!runId) return;
     setLoading(true);
     try {
-      let loaded = await getRun(runId);
+      const loaded = await getRun(runId);
+      hydrate(loaded);
       const paymentData = loaded.corrected_data || loaded.extracted_data;
       const hasPaymentMethods = Array.isArray(paymentData?.payment_methods) && paymentData.payment_methods.length > 0;
       if (loaded.review_schema?.template_key === 'payment_knock_off' && !hasPaymentMethods) {
-        try {
-          loaded = await refreshPaymentPreview(runId);
-          setError(null);
-        } catch (refreshError) {
-          setError((refreshError as Error)?.message || 'Could not refresh SQL payment methods');
-        }
+        void refreshPaymentPreview(runId)
+          .then((refreshed) => { hydrate(refreshed); setError(null); })
+          .catch((refreshError) => setError((refreshError as Error)?.message || 'Could not refresh SQL payment methods'));
       }
-      hydrate(loaded);
       if (loaded.review_schema?.template_key !== 'payment_knock_off') setError(null);
     } catch (e) {
       setError((e as Error)?.message || 'Failed to load run');
@@ -126,7 +131,11 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
 
   useEffect(() => { load(); }, [load]);
 
+  const loadedRunId = run?.id;
+  const loadedTemplateKey = run?.review_schema?.template_key;
+
   useEffect(() => {
+    if (!loadedRunId || loadedTemplateKey === 'payment_knock_off') return undefined;
     let active = true;
     listKnowledgeSources().then((response) => {
       if (!active) return;
@@ -138,10 +147,10 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
       setEntityProfiles(Array.from(new Map(profiles.map((profile) => [profile.entity_key, profile])).values()));
     }).catch(() => active && setEntityProfiles([]));
     return () => { active = false; };
-  }, []);
+  }, [loadedRunId, loadedTemplateKey]);
 
   useEffect(() => {
-    if (!run?.agent_id) return;
+    if (!run?.agent_id || run.review_schema?.template_key === 'payment_knock_off') return;
     let active = true;
     listRuns({ agentId: run.agent_id, pageSize: 100 })
       .then((response) => {
@@ -152,12 +161,12 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
       })
       .catch(() => active && setPackageCandidates([]));
     return () => { active = false; };
-  }, [run?.agent_id, run?.id]);
+  }, [run?.agent_id, run?.id, run?.review_schema?.template_key]);
 
   useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
-    if (!runId || !run?.source_file_s3_key) {
+    if (!runId || !run?.source_file_s3_key || run.review_schema?.template_key === 'payment_knock_off') {
       setSourceUrl(null);
       return undefined;
     }
@@ -176,7 +185,7 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [runId, run?.source_file_s3_key]);
+  }, [runId, run?.source_file_s3_key, run?.review_schema?.template_key]);
 
   const data: AgentRunData | undefined = run?.corrected_data || run?.extracted_data || undefined;
   const forex = forexDraft;
@@ -184,8 +193,13 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   const conversion = data?.conversion;
   const whatsappDelivery = (run?.output_refs as { notify?: { status?: string; detail?: string; note?: string } } | undefined)?.notify;
   const sqlAccountDelivery = (run?.output_refs as { sql_account?: SqlAccountDelivery } | undefined)?.sql_account;
+  const accountingRequest = (run?.output_refs as { accounting_request?: { delivery_order_no?: string | null; invoice_no?: string | null } } | undefined)?.accounting_request;
+  const deliveryOrderNumber = sqlAccountDelivery?.delivery_order?.document_no || accountingRequest?.delivery_order_no;
+  const invoiceNumber = sqlAccountDelivery?.invoice?.document_no || accountingRequest?.invoice_no;
+  const sqlDocumentsCreated = sqlAccountDelivery?.status === 'created';
   const agentExecution = (run?.output_refs as { agent_execution?: { status?: string; detail?: string; plan?: { summary?: string; authority?: string; steps?: Array<{ sequence: number; tool: string; purpose: string; requires_approval?: boolean }>; warnings?: string[] }; tool_results?: Array<{ tool: string; status: string; detail: string }> } } | undefined)?.agent_execution;
   const outsourcedEmail = (run?.output_refs as { outsourced_email?: OutsourcedEmailDelivery } | undefined)?.outsourced_email;
+  const outsourcedWhatsApp = (run?.output_refs as { outsourced_whatsapp?: OutsourcedWhatsAppDelivery } | undefined)?.outsourced_whatsapp;
   const externalDocuments = (run?.output_refs as { external_documents?: ExternalDocument[] } | undefined)?.external_documents || [];
   const sourceWarnings = (data?.source?.warnings as string[] | undefined) || [];
   const reconciliation = data?.reconciliation;
@@ -193,15 +207,18 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   const selectedIssuingEntity = entityProfiles.find((profile) => profile.entity_key === issuingEntityKey);
   const fulfilmentRoute = String(selectedIssuingEntity?.route || selectedIssuingEntity?.fulfilment_mode || data?.fulfilment_route || data?.issuing_entity?.fulfilment_mode || 'INTERNAL').toUpperCase();
   const isOutsourced = fulfilmentRoute === 'OUTSOURCED';
+  const outsourcedChannel = String(data?.issuing_entity?.outbound_channel || '').toUpperCase();
   const orderLines = lines.filter((line) => !['header', 'included_component'].includes(line.category || ''));
   const headingCount = lines.filter((line) => line.category === 'header').length;
   const contextCount = lines.length - orderLines.length - headingCount;
+  const hasAllSourceAmounts = orderLines.length > 0 && orderLines.every((line) => line.amount_foreign != null);
   const hasAllMyrAmounts = orderLines.length > 0 && orderLines.every((line) => line.amount_myr != null);
+  const hasEffectiveMyrAmounts = hasAllMyrAmounts || (noConversion && hasAllSourceAmounts);
   const waitingForDocuments = workPackage?.status === 'WAITING_FOR_DOCUMENTS';
-  const canGenerateDocuments = (isOutsourced || hasAllMyrAmounts) && !waitingForDocuments;
+  const canGenerateDocuments = (isOutsourced || hasEffectiveMyrAmounts) && !waitingForDocuments;
   const preparationBlocker = waitingForDocuments
     ? `Cannot prepare this transaction yet: the source message expects ${workPackage?.expected_set_count || 'more'} document sets, but only ${workPackage?.received_primary_document_count || 1} has been received. ${workPackage?.remaining_foreign_total != null ? `${data?.currency || ''} ${fmt(workPackage.remaining_foreign_total)} is still missing. ` : ''}Add the related review item above, or correct the expected source total if the message was wrong.`
-    : !isOutsourced && !hasAllMyrAmounts
+    : !isOutsourced && !hasEffectiveMyrAmounts
       ? 'Cannot prepare this transaction yet: one or more order lines has no MYR amount. Add or correct the exchange-rate conversion first.'
       : null;
   const sourceName = run?.source_filename || 'received document';
@@ -216,10 +233,13 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
     customer: customerDraft.trim() || null,
     customer_code: customerCodeDraft.trim() || null,
     code: documentCodeDraft.trim() || null,
+    source_reference: sourceReferenceDraft.trim() || null,
     inv_date: invoiceDateDraft.trim() || null,
     issuing_entity: selectedIssuingEntity ? { ...selectedIssuingEntity, key: selectedIssuingEntity.entity_key, fulfilment_mode: selectedIssuingEntity.route || selectedIssuingEntity.fulfilment_mode || 'INTERNAL', status: 'RESOLVED' } : data?.issuing_entity,
     fulfilment_route: selectedIssuingEntity?.route || data?.fulfilment_route || null,
-    forex,
+    currency: noConversion ? 'MYR' : data?.currency,
+    no_conversion: noConversion,
+    forex: noConversion ? null : forex,
     lines,
   });
 
@@ -251,6 +271,7 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   };
 
   const updateForex = (patch: Partial<AgentRunForex>) => {
+    setNoConversion(false);
     setForexDraft((previous) => ({
       currency: data?.currency || 'RMB',
       operator: '/',
@@ -298,7 +319,14 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
 
   const status = run?.status;
   const canReview = status === 'PENDING_REVIEW' || status === 'DRAFT_GENERATED';
-  const needsSqlCustomer = !isOutsourced && status === 'DRAFT_GENERATED' && ['needs_customer_approval', 'failed'].includes(sqlAccountDelivery?.status || '');
+  const hasSqlCustomerProposal = !isOutsourced
+    && status === 'DRAFT_GENERATED'
+    && sqlAccountDelivery?.status === 'needs_customer_approval'
+    && Boolean(customerProposal);
+  const needsSqlCustomer = !isOutsourced
+    && status === 'DRAFT_GENERATED'
+    && ['needs_customer_approval', 'failed'].includes(sqlAccountDelivery?.status || '')
+    && !hasSqlCustomerProposal;
   const isOrderWorkflow = run?.review_schema?.template_key === 'order_to_invoice'
     || run?.record_type === 'purchase_order'
     || Boolean(data?.forex && data?.lines);
@@ -333,11 +361,11 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
     ...totals,
     qty_total: orderLines.reduce((sum, line) => sum + Number(line.qty || 0), 0),
     amount_foreign_total: lines.reduce((sum, line) => sum + Number(line.amount_foreign || 0), 0),
-    amount_myr_total: hasAllMyrAmounts
-      ? orderLines.reduce((sum, line) => sum + Number(line.amount_myr || 0), 0)
+    amount_myr_total: hasEffectiveMyrAmounts
+      ? orderLines.reduce((sum, line) => sum + Number(noConversion ? line.amount_foreign : line.amount_myr || 0), 0)
       : null,
-    grand_total_myr: hasAllMyrAmounts
-      ? orderLines.reduce((sum, line) => sum + Number(line.amount_myr || 0), 0)
+    grand_total_myr: hasEffectiveMyrAmounts
+      ? orderLines.reduce((sum, line) => sum + Number(noConversion ? line.amount_foreign : line.amount_myr || 0), 0)
       : null,
   } : totals;
 
@@ -392,6 +420,28 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
               )}
             </div>
 
+            {(deliveryOrderNumber || invoiceNumber) && (
+              <div className={`mt-4 rounded-lg border p-4 ${sqlDocumentsCreated ? 'border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100' : 'border-cyan-300 bg-cyan-50 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100'}`}>
+                <div className="flex items-center gap-2">
+                  {sqlDocumentsCreated ? <CheckCircle2 className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}
+                  <p className="font-semibold">SQL Accounting document numbers</p>
+                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold dark:bg-slate-950/40">
+                    {sqlDocumentsCreated ? 'Created' : 'Reserved'}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-md bg-white/70 p-3 dark:bg-slate-950/40">
+                    <p className="text-xs opacity-70">Delivery Order</p>
+                    <p className="mt-1 font-mono text-lg font-bold">{deliveryOrderNumber || 'Not allocated'}</p>
+                  </div>
+                  <div className="rounded-md bg-white/70 p-3 dark:bg-slate-950/40">
+                    <p className="text-xs opacity-70">Sales Invoice</p>
+                    <p className="mt-1 font-mono text-lg font-bold">{invoiceNumber || 'Not allocated'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {forex && (
               <div className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${forex.matches === false ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
                 {forex.matches === false ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -411,7 +461,12 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             )}
             {run.error_message && <p className="mt-3 text-sm text-red-600">{run.error_message}</p>}
             {agentExecution && <div className="mt-4 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-slate-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-50"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold">Agent execution plan</p><p className="mt-1 text-xs leading-5 text-slate-700 dark:text-cyan-100">{agentExecution.plan?.summary || agentExecution.detail || 'The bounded runtime is preparing a safe tool plan.'}</p></div><span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-900 dark:text-slate-100">{(agentExecution.status || 'planning').replaceAll('_', ' ').toLowerCase()}</span></div>{agentExecution.plan?.steps && agentExecution.plan.steps.length > 0 && <div className="mt-3 space-y-2">{[...agentExecution.plan.steps].sort((a, b) => a.sequence - b.sequence).map((step) => { const result = agentExecution.tool_results?.find((item) => item.tool === step.tool); return <div key={`${step.sequence}-${step.tool}`} className="flex gap-3 rounded-lg border border-cyan-200 bg-white p-3 text-xs dark:border-cyan-900 dark:bg-slate-950"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-100 font-semibold text-cyan-900 dark:bg-cyan-900 dark:text-cyan-100">{step.sequence}</span><span className="min-w-0 flex-1"><strong className="block text-slate-950 dark:text-white">{step.tool.replaceAll('_', ' ').toLowerCase()}</strong><span className="mt-1 block text-slate-700 dark:text-slate-300">{result?.detail || step.purpose}</span></span><span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">{result ? result.status.replaceAll('_', ' ').toLowerCase() : step.requires_approval ? 'awaiting approval' : 'planned'}</span></div>; })}</div>}{agentExecution.plan?.warnings?.map((warning) => <p key={warning} className="mt-2 text-xs text-amber-900 dark:text-amber-200">Warning: {warning}</p>)}</div>}
-            {status === 'DRAFT_GENERATED' && !sqlAccountDelivery && <div className="mt-3 rounded-md border border-violet-300 bg-violet-50 p-3 text-sm text-violet-950 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-100"><b>Approval destination:</b> {isOutsourced ? 'approving sends the source PO to the external fulfilment provider configured for this issuing company. Smartdok tracks the email thread, collects the returned DO and invoice, then makes them ready to return to WhatsApp.' : 'approving creates the Delivery Order and Sales Invoice through the resolved company accounting connection. Smartdok then prepares customer PDFs and returns them to the source channel.'}</div>}
+            {status === 'DRAFT_GENERATED' && !sqlAccountDelivery && <div className="mt-3 rounded-md border border-violet-300 bg-violet-50 p-3 text-sm text-violet-950 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-100"><b>Approval destination:</b> {isOutsourced ? outsourcedChannel === 'WHATSAPP' ? 'approving sends the request to the external provider WhatsApp group configured for this issuing company. A source attachment is included when available; otherwise Smartdok sends the extracted order details as a message.' : 'approving emails the external fulfilment provider configured for this issuing company, tracks the email thread, and collects the returned DO and invoice.' : 'approving creates the Delivery Order and Sales Invoice through the resolved company accounting connection. Smartdok then prepares customer PDFs and returns them to the source channel.'}</div>}
+            {outsourcedWhatsApp && status === 'WAITING_EXTERNAL_DOCUMENTS' && (
+              <div className="mt-3 rounded-lg border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100">
+                <div className="flex items-start gap-3"><Clock3 className="mt-0.5 h-5 w-5 shrink-0" /><div className="min-w-0"><p className="font-semibold">Waiting for the external provider</p><p className="mt-1 break-words">WhatsApp group: <b>{outsourcedWhatsApp.group_name || 'Configured provider group'}</b></p><p className="mt-1 text-xs opacity-80">{outsourcedWhatsApp.test_mode ? 'Test delivery only; the production group was not contacted.' : 'Request sent to the provider group.'}{outsourcedWhatsApp.source_attached === false ? ' No source attachment was available, so the extracted order details were sent as a message.' : ''}</p></div></div>
+              </div>
+            )}
             {outsourcedEmail && ['WAITING_EXTERNAL_DOCUMENTS', 'EXTERNAL_DOCUMENTS_RECEIVED'].includes(status || '') && (
               <div className={`mt-3 rounded-lg border p-4 text-sm ${status === 'EXTERNAL_DOCUMENTS_RECEIVED' ? 'border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100' : 'border-cyan-300 bg-cyan-50 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100'}`}>
                 <div className="flex items-start gap-3">
@@ -484,12 +539,13 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
           {canReview && (
             <section className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-5">
               <h2 className="font-semibold">Document and customer details</h2>
-              <p className="mt-1 text-sm text-[var(--muted-foreground)]">Confirm the buyer details before generating. An SQL Account customer code is optional until you post to SQL Account.</p>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">Confirm the buyer details before generating. An SQL Account customer code is optional until you post to SQL Account. A PO Ref is sent to SQL Account&apos;s Ref field.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Field label="Issuing company"><select value={issuingEntityKey} onChange={(event) => setIssuingEntityKey(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-white px-2 py-1.5 text-sm text-slate-950 dark:bg-slate-950 dark:text-white"><option value="">Select from Knowledge Base</option>{entityProfiles.map((profile) => <option key={profile.entity_key} value={profile.entity_key}>{profile.legal_name} · {(profile.route || 'INTERNAL').toLowerCase()}{profile.role && profile.role !== 'ISSUER' ? ` · ${profile.role.toLowerCase()}` : ''}</option>)}</select></Field>
                 <Field label="Customer / company name"><input value={customerDraft} onChange={(event) => setCustomerDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="SQL Account customer code"><input maxLength={10} value={customerCodeDraft} onChange={(event) => setCustomerCodeDraft(event.target.value.toUpperCase())} placeholder="Optional" className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="Reference code"><input value={documentCodeDraft} onChange={(event) => setDocumentCodeDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="PO Ref (SQL Account Ref)"><input value={sourceReferenceDraft} onChange={(event) => setSourceReferenceDraft(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="Invoice date"><input type="date" value={invoiceDateDraft} onChange={(event) => setInvoiceDateDraft(event.target.value)} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
               </div>
             </section>
@@ -518,9 +574,18 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
                   <h2 className="font-semibold">Conversion details</h2>
                   <p className="text-sm text-[var(--muted-foreground)]">Review the rate extracted from the WhatsApp message. Saving recalculates every MYR line value.</p>
                 </div>
-                {!forex && <button type="button" onClick={() => updateForex({})} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--hover-bg)]">Add conversion rate</button>}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => { setNoConversion(true); setForexDraft(null); }} className={`rounded-md border px-3 py-2 text-sm font-medium ${noConversion ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-[var(--border)] hover:bg-[var(--hover-bg)]'}`}>
+                    {noConversion ? '✓ Prices are already MYR' : 'Prices are already MYR'}
+                  </button>
+                  {(!forex || noConversion) && <button type="button" onClick={() => updateForex({})} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--hover-bg)]">Use conversion rate</button>}
+                </div>
               </div>
-              {forex ? (
+              {noConversion ? (
+                <div className="mt-4 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">
+                  Source prices will be copied directly to MYR. No exchange rate will be applied.
+                </div>
+              ) : forex ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <Field label="Original currency"><input value={forex.currency || ''} onChange={(e) => updateForex({ currency: e.target.value })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
                   <Field label="Formula amount"><input type="number" value={forex.amount ?? ''} onChange={(e) => updateForex({ amount: numeric(e.target.value) })} className="mt-1 w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm text-[var(--foreground)]" /></Field>
@@ -537,21 +602,24 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-[var(--muted-foreground)]">
-                  <th className="px-3 py-2">Product (source)</th><th className="px-3 py-2">Internal SKU <span className="font-normal">(optional)</span></th><th className="px-3 py-2">English description</th>
-                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Amount ({originalCurrency})</th>
+                  <th className="px-3 py-2">Product (source)</th><th className="px-3 py-2">More description</th><th className="px-3 py-2">Internal SKU <span className="font-normal">(optional)</span></th><th className="px-3 py-2">English description</th>
+                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2">Colour</th><th className="px-3 py-2 text-right">Unit price ({originalCurrency})</th><th className="px-3 py-2 text-right">Amount ({originalCurrency})</th>
                   <th className="px-3 py-2 text-right">Unit (MYR)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="w-14 px-3 py-2"><span className="sr-only">Actions</span></th>
                 </tr></thead>
                 <tbody>{lines.map((line, index) => {
                   const descriptiveOnly = ['header', 'included_component'].includes(line.category || '');
                   return (
-                  <tr key={index} className={`border-t border-[var(--border)] align-top ${line.category === 'included_component' ? 'bg-[var(--muted)]/45 text-[var(--muted-foreground)]' : ''}`}>
+                  <tr key={index} className={`border-t border-[var(--border)] align-top ${line.category === 'header' ? 'bg-cyan-500/10 font-medium' : line.category === 'included_component' ? 'bg-[var(--muted)]/45 text-[var(--muted-foreground)]' : ''}`}>
                     <td className="px-3 py-2"><div className={line.category === 'included_component' ? 'pl-4' : ''}>{line.category === 'included_component' ? '↳ ' : ''}{line.name}</div><div className="text-xs text-[var(--muted-foreground)]">{line.model}{line.category && <> · {humanLabel(line.category)}</>}</div></td>
+                    <td className="px-3 py-2"><textarea disabled={!canReview} value={line.more_description || ''} onChange={(e) => updateLine(index, { more_description: e.target.value || null })} rows={4} placeholder="Continuation details" aria-label={`More description for ${line.name || `row ${index + 1}`}`} className="w-72 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" /></td>
                     <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.match?.sku_code || ''} aria-label={`Internal SKU for ${line.name || `row ${index + 1}`}`} onChange={(e) => updateMatch(index, { sku_code: e.target.value })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" /></td>
                     <td className="px-3 py-2"><input disabled={!canReview} value={line.match?.en_description || ''} onChange={(e) => updateMatch(index, { en_description: e.target.value })} className="w-56 rounded border border-[var(--border)] bg-transparent px-2 py-1" /></td>
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" value={line.qty ?? ''} onChange={(e) => updateLine(index, { qty: numeric(e.target.value) })} className="w-20 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
+                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.sql_account_uom || line.unit || ''} onChange={(e) => updateLine(index, { unit: e.target.value.toUpperCase(), sql_account_uom: null })} placeholder="Blank" aria-label={`UOM for ${line.name || `row ${index + 1}`}`} className="w-20 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
+                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.color || ''} onChange={(e) => updateLine(index, { color: e.target.value.toUpperCase() })} placeholder="Blank" aria-label={`Colour for ${line.name || `row ${index + 1}`}`} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.unit_price_foreign ?? ''} onChange={(e) => updateLine(index, { unit_price_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.amount_foreign ?? ''} onChange={(e) => updateLine(index, { amount_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
-                    <td className="px-3 py-2 text-right">{fmt(line.unit_price_myr)}</td><td className="px-3 py-2 text-right">{fmt(line.amount_myr)}</td>
+                    <td className="px-3 py-2 text-right">{fmt(noConversion ? line.unit_price_foreign : line.unit_price_myr)}</td><td className="px-3 py-2 text-right">{fmt(noConversion ? line.amount_foreign : line.amount_myr)}</td>
                     <td className="px-3 py-2 text-right">{canReview && <button type="button" onClick={() => removeLine(index)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40" title={`Remove ${line.category === 'header' ? 'section heading' : 'order line'}`} aria-label={`Remove ${line.name || `row ${index + 1}`}`}><Trash2 className="h-4 w-4" /></button>}</td>
                   </tr>
                 );})}</tbody>
@@ -560,7 +628,7 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             <div className="p-4 border-t border-[var(--border)] text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{originalCurrency} {fmt(displayedTotals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(displayedTotals.qty_total)}</b></span>{forex && <span>Flat fee: <b>RM {fmt(displayedTotals.flat_fee)}</b></span>}<span>Grand total: <b>{displayedTotals.grand_total_myr == null ? 'Pending conversion' : `RM ${fmt(displayedTotals.grand_total_myr)}`}</b></span></div>
           </div>
 
-          {status === 'DRAFT_GENERATED' && sqlAccountDelivery?.status === 'needs_customer_approval' && customerProposal && (
+          {hasSqlCustomerProposal && customerProposal && (
             <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5">
               <h2 className="font-semibold">Suggested SQL Account customer</h2>
               <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">No high-confidence customer match was found. Review this proposal, then create it in SQL Account and retry this run. This action does not create stock items.</p>
@@ -587,7 +655,19 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             </section>
           )}
           {status === 'DRAFT_GENERATED' && sqlAccountDelivery?.status === 'needs_item_approval' && itemProposals.length > 0 && (
-            <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5"><h2 className="font-semibold">Suggested SQL Account stock items</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">These products were not found in SQL Account. Review the proposed master records before creating them.</p><div className="mt-4 space-y-3">{itemProposals.map((item, index) => <div key={item.source_index} className="grid gap-3 rounded border border-[var(--border)] p-3 sm:grid-cols-[160px_1fr_100px]"><input value={item.code} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, code: event.target.value.toUpperCase() } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.description} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, description: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /><input value={item.uom || 'UNIT'} onChange={(event) => setItemProposals((items) => items.map((value, current) => current === index ? { ...value, uom: event.target.value } : value))} className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm" /></div>)}</div><button disabled={busy} onClick={() => act(() => createSqlAccountItemsAndRepush(runId, itemProposals))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create items & re-push</button></section>
+            <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5">
+              <h2 className="font-semibold">Products are not in the SQL item master</h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">Maincell allows these DO and invoice lines to use a blank item code. A source or matched UOM such as PKT or TUB is kept; when no UOM was supplied, UOM is also left blank. Description, quantity and price will still be posted.</p>
+              <div className="mt-4 space-y-2">{itemProposals.map((item) => {
+                const sourceLine = lines[item.source_index];
+                const sourceUom = sourceLine?.sql_account_uom || sourceLine?.unit || '';
+                return <div key={item.source_index} className="rounded border border-[var(--border)] p-3 text-sm"><span className="font-medium">{item.description}</span><span className="ml-2 text-[var(--muted-foreground)]">· UOM: {sourceUom || 'blank'} · item code: blank</span></div>;
+              })}</div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button disabled={busy} onClick={() => act(() => repushRunToSqlAccount(runId), 'Posting with blank item codes…')} className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Continue without item codes</button>
+                <button disabled={busy} onClick={() => act(() => createSqlAccountItemsAndRepush(runId, itemProposals))} className="inline-flex items-center gap-2 rounded-md border border-violet-500/50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300">Create master items instead</button>
+              </div>
+            </section>
           )}
 
           <div className="flex flex-wrap gap-3">
@@ -599,14 +679,14 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             {status === 'DRAFT_GENERATED' && <>
               <button disabled={busy || !canGenerateDocuments} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Update prepared data</button>
               {isOutsourced
-                ? <button disabled={busy} onClick={() => act(() => approveRun(runId, buildCorrected()), 'Sending request to the external provider...')} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Sending request') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Sending request') ? 'Sending email...' : 'Approve & email external provider'}</button>
+                ? <button disabled={busy} onClick={() => act(() => approveRun(runId, buildCorrected()), 'Sending request to the external provider...')} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Sending request') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Sending request') ? `Sending ${outsourcedChannel === 'WHATSAPP' ? 'WhatsApp request' : 'email'}...` : `Approve & ${outsourcedChannel === 'WHATSAPP' ? 'send WhatsApp request' : 'email external provider'}`}</button>
                 : (!sqlAccountDelivery || sqlAccountDelivery.status === 'failed' ? <button disabled={busy} onClick={() => act(() => approveRun(runId, buildCorrected()), 'Creating DO and invoice in the accounting system...')} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Creating DO') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Creating DO') ? 'Creating in accounting...' : 'Approve & create in accounting'}</button> : null)}
             </>}
             {(status === 'PENDING_REVIEW' || status === 'DRAFT_GENERATED') && <button disabled={busy} onClick={() => act(() => rejectRun(runId, 'Rejected by reviewer'))} className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50">Reject</button>}
             {status === 'EXTERNAL_DOCUMENTS_RECEIVED' && (
               <button disabled={busy || externalDocuments.length === 0} onClick={() => act(() => sendRunToWhatsApp(runId), 'Returning external documents to WhatsApp...')} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"><Send className="h-4 w-4" /> Send returned documents to WhatsApp</button>
             )}
-            {status === 'WAITING_EXTERNAL_DOCUMENTS' && <span className="flex items-center gap-2 text-cyan-800 dark:text-cyan-200"><Clock3 className="h-4 w-4" /> Request sent; Smartdok will collect replies from the same email thread.</span>}
+            {status === 'WAITING_EXTERNAL_DOCUMENTS' && <span className="flex items-center gap-2 text-cyan-800 dark:text-cyan-200"><Clock3 className="h-4 w-4" /> Request sent; {outsourcedWhatsApp ? 'await the external provider response.' : 'Smartdok will collect replies from the same email thread.'}</span>}
             {status === 'COMPLETED' && (
               whatsappDelivery?.status === 'sent'
                 ? <span className="text-green-700 flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Completed — {isOutsourced ? 'the external DO and invoice were returned to WhatsApp.' : 'the accounting documents were created and customer PDFs were sent to WhatsApp.'}</span>
@@ -757,7 +837,7 @@ function GenericWorkflowReview({
   );
 }
 
-type PaymentSlip = { source_index?: number; payment_date?: string | null; bank_reference?: string | null; payer?: string | null; amount?: number | null; currency?: string | null; payment_method_code?: string | null; confidence?: number | null; evidence_file?: string | null; unapplied_amount?: number | null };
+type PaymentSlip = { source_index?: number; payment_date?: string | null; bank_reference?: string | null; payer?: string | null; amount?: number | null; currency?: string | null; destination_bank_name?: string | null; destination_account?: string | null; payment_method_code?: string | null; payment_method_match?: { status?: string; reason?: string; method_label?: string; confidence?: number }; confidence?: number | null; evidence_file?: string | null; unapplied_amount?: number | null };
 type PaymentInvoice = { invoice_number?: string | null; stated_amount?: number | null; requested_amount?: number | null; open_balance?: number | null; status?: string | null };
 type PaymentAllocation = { or_index?: number; slip_index?: number; invoice_number?: string | null; amount_to_allocate?: number | null; remaining_invoice_balance?: number | null };
 type PaymentMethod = { code?: string; label?: string; bank_account?: string; is_default?: boolean };
@@ -771,6 +851,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   const methods = (Array.isArray(draft.payment_methods) ? draft.payment_methods : []) as PaymentMethod[];
   const warnings = (Array.isArray(draft.warnings) ? draft.warnings : []) as string[];
   const source = (draft.source && typeof draft.source === 'object' ? draft.source : {}) as { files?: ExternalDocument[]; message?: string };
+  const paymentCompany = (draft.payment_company && typeof draft.payment_company === 'object' ? draft.payment_company : {}) as { company_name?: string; company_key?: string; sql_connection_id?: number; group_name?: string; group_id?: string };
   const refs = (run.output_refs || {}) as { sql_account_payment?: { status?: string; detail?: string; note?: string; receipts?: Array<{ or_no?: string; receipt?: { or_no?: string }; status?: string; allocations?: Array<Record<string, unknown>>; invoice_allocations?: Array<Record<string, unknown>>; detail?: string }> }; sql_official_receipts?: ExternalDocument[]; notify?: { status?: string; detail?: string; note?: string; documents?: string[] } };
   const editable = ['PENDING_REVIEW', 'DRAFT_GENERATED'].includes(run.status);
   const canApprove = run.status === 'DRAFT_GENERATED';
@@ -779,6 +860,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   const displayedInvoiceTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.requested_amount ?? invoice.stated_amount ?? 0), 0);
   const displayedAllocatedTotal = allocations.reduce((sum, allocation) => sum + Number(allocation.amount_to_allocate || 0), 0);
   const displayedUnappliedTotal = displayedSlipTotal - displayedAllocatedTotal;
+  const missingInvoiceNumbers = invoices.length === 0;
   const updateSlips = (next: PaymentSlip[]) => setDraft({ ...draft, payment_slips: next });
   const updateInvoices = (next: PaymentInvoice[]) => setDraft({ ...draft, requested_invoices: next });
   const updateAllocations = (next: PaymentAllocation[]) => setDraft({ ...draft, allocations: next, allocation_override: next });
@@ -798,11 +880,15 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     {error && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">{error}</div>}
     {busy && <div role="status" className="flex items-center gap-3 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm font-semibold text-cyan-950"><LoaderCircle className="h-5 w-5 animate-spin" /> Smartdok is checking live SQL Accounting data. Posting can take up to a minute.</div>}
 
-    <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><StatusPill status={run.status} /><span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Payment knock-off</span></div><h1 className="mt-3 text-2xl font-bold">{draft.customer ? String(draft.customer) : 'Customer payment'}</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">{draft.customer_code ? `SQL customer ${String(draft.customer_code)}` : 'Customer still needs a live SQL match'} · {slips.length} payment slip{slips.length === 1 ? '' : 's'}</p></div><div className="text-right text-xs text-[var(--muted-foreground)]"><p>Run #{run.id}</p><p>{formatDateTime(run.received_at)}</p></div></div>{source.message && <div className="mt-4 rounded-xl bg-[var(--muted)] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">SLIP UPDATE instruction</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.message}</p></div>}</header>
+    <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><StatusPill status={run.status} /><span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Payment knock-off</span></div><h1 className="mt-3 text-2xl font-bold">{draft.customer ? String(draft.customer) : 'Customer payment'}</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">{draft.customer_code ? `SQL customer ${String(draft.customer_code)}` : 'Customer still needs a live SQL match'} · {slips.length} payment slip{slips.length === 1 ? '' : 's'}</p></div><div className="text-right text-xs text-[var(--muted-foreground)]"><p>Run #{run.id}</p><p>{formatDateTime(run.received_at)}</p></div></div>{paymentCompany.sql_connection_id && <div className="mt-4 grid gap-2 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-950 sm:grid-cols-3"><div><span className="block text-xs font-semibold uppercase opacity-70">Payment company</span><b>{paymentCompany.company_name || paymentCompany.company_key}</b></div><div><span className="block text-xs font-semibold uppercase opacity-70">SQL connection</span><b>Connection #{paymentCompany.sql_connection_id}</b></div><div><span className="block text-xs font-semibold uppercase opacity-70">Source group</span><b>{paymentCompany.group_name || paymentCompany.group_id}</b></div></div>}{source.message && <div className="mt-4 rounded-xl bg-[var(--muted)] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">SLIP UPDATE instruction</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.message}</p></div>}</header>
 
     <section className="grid gap-3 sm:grid-cols-4"><Metric label="Slip total" value={moneyText(displayedSlipTotal)} /><Metric label="Requested invoices" value={moneyText(displayedInvoiceTotal)} /><Metric label="Allocated" value={moneyText(displayedAllocatedTotal)} /><Metric label="Unapplied / variance" value={moneyText(displayedUnappliedTotal)} warning={Math.abs(displayedUnappliedTotal) > 0.005} /></section>
 
     {(warnings.length > 0 || run.error_message) && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950"><div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><h2 className="font-semibold">Review required</h2>{[run.error_message, ...warnings].filter(Boolean).map((warning, index) => <p key={index} className="mt-1 text-sm">{warning}</p>)}</div></div></section>}
+
+    {missingInvoiceNumbers && <section className="rounded-xl border-2 border-amber-400 bg-amber-50 p-5 text-amber-950"><div className="flex gap-3"><AlertTriangle className="mt-0.5 h-6 w-6 shrink-0" /><div><h2 className="font-semibold">No invoice number provided</h2><p className="mt-1 text-sm leading-6">You may still approve the OR as unapplied customer credit. After SQL Accounting creates the OR, Smartdok will automatically message this WeChat group and ask them to provide the invoice document or invoice number for the later knock-off.</p></div></div></section>}
+
+    {slips.some((slip) => slip.destination_bank_name || slip.destination_account || slip.payment_method_match) && <section className="rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-cyan-950"><h2 className="font-semibold">Receiving-bank to SQL method mapping</h2><div className="mt-3 grid gap-2 sm:grid-cols-2">{slips.map((slip, index) => <div key={index} className="rounded-lg bg-white/80 p-3 text-sm"><p className="font-semibold">Slip {index + 1}: {[slip.destination_bank_name, slip.destination_account].filter(Boolean).join(' · ') || 'receiving account not readable'}</p><p className="mt-1 text-xs"><span className={slip.payment_method_match?.status === 'AUTO_MATCHED' ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>{slip.payment_method_match?.status ? humanLabel(slip.payment_method_match.status) : 'Not matched'}</span>{slip.payment_method_code ? ` · SQL code ${slip.payment_method_code}` : ''}{slip.payment_method_match?.reason ? ` · ${slip.payment_method_match.reason}` : ''}</p></div>)}</div></section>}
 
     {source.files && source.files.length > 0 && <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5"><h2 className="font-semibold">Payment-slip evidence</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">Each slip remains attached to this audit record.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{source.files.map((file) => <PaymentEvidence key={file.file_key} runId={run.id} file={file} />)}</div></section>}
 
@@ -815,7 +901,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     {refs.sql_account_payment && <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">Posting results</h2><StatusPill status={refs.sql_account_payment.status || 'pending'} /></div>{refs.sql_account_payment.status !== 'created' && <p className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-900">{refs.sql_account_payment.detail || refs.sql_account_payment.note || 'SQL Accounting did not create the receipt.'}</p>}<div className="mt-3 space-y-2">{(refs.sql_account_payment.receipts || []).map((receipt, index) => { const orNo = receipt.receipt?.or_no || receipt.or_no; const allocationCount = receipt.allocations?.length || receipt.invoice_allocations?.length || 0; return <div key={orNo || index} className="flex items-center justify-between rounded-lg bg-[var(--muted)] p-3 text-sm"><span><b>{orNo || `OR ${index + 1}`}</b><span className="ml-2 text-[var(--muted-foreground)]">{receipt.detail || `${allocationCount} invoice allocation(s)`}</span></span><span className="font-semibold">{receipt.status || 'created'}</span></div>; })}</div>{refs.sql_official_receipts && refs.sql_official_receipts.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{refs.sql_official_receipts.map((file) => <PaymentEvidence key={file.file_key} runId={run.id} file={file} />)}</div>}{refs.notify && <p className={`mt-3 rounded-lg p-3 text-sm ${refs.notify.status === 'sent' ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-950'}`}>{refs.notify.status === 'sent' ? 'Official SQL OR PDFs were returned to the originating WeChat group.' : `Delivery pending: ${refs.notify.detail || refs.notify.note || 'official PDF is not available yet'}`}</p>}</section>}
 
     <section className="sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-4 shadow-lg backdrop-blur">{run.status === 'PENDING_REVIEW' && <><button disabled={busy} onClick={() => void act(() => reviewRun(run.id, draft as AgentRunData))} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold disabled:opacity-50">Save corrections</button><button disabled={busy} onClick={requestPrepare} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Validate payment knock-off</button></>}{canApprove && <button disabled={busy} onClick={() => void act(() => approveRun(run.id, draft as AgentRunData), 'Posting the approved receipt to SQL Accounting...')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {busy ? 'Posting receipt...' : `Approve & post ${slips.length} receipt${slips.length === 1 ? '' : 's'}`}</button>}{run.status === 'DELIVERY_PENDING' && <button disabled={busy} onClick={() => void act(() => retryRunDelivery(run.id))} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Send className="h-4 w-4" /> Retry PDF delivery</button>}{editable && <button disabled={busy} onClick={() => void act(() => rejectRun(run.id, 'Rejected by payment reviewer'))} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Reject</button>}{run.status === 'COMPLETED' && <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Posted and returned to WeChat</span>}</section>
-  </div>{varianceModal && <ReviewConfirmationModal title="Accept unapplied customer credit?" confirmLabel="Accept variance & prepare" tone="warning" busy={busy} onCancel={() => setVarianceModal(false)} onConfirm={acceptVariance}><p>The slips exceed the selected invoice allocations by <b>{moneyText(displayedUnappliedTotal)}</b>. Continuing records an explicit reviewer override and allows SQL Accounting to retain this amount as unapplied customer credit. It will never be accepted silently.</p></ReviewConfirmationModal>}</AppLayout>;
+  </div>{varianceModal && <ReviewConfirmationModal title={missingInvoiceNumbers ? "Create OR without an invoice number?" : "Accept unapplied customer credit?"} confirmLabel={missingInvoiceNumbers ? "Accept unapplied OR & prepare" : "Accept variance & prepare"} tone="warning" busy={busy} onCancel={() => setVarianceModal(false)} onConfirm={acceptVariance}><p>{missingInvoiceNumbers ? <>The full payment of <b>{moneyText(displayedUnappliedTotal)}</b> will remain unapplied. After the OR is created, Smartdok will send a WeChat reminder asking for the missing invoice document or number.</> : <>The slips exceed the selected invoice allocations by <b>{moneyText(displayedUnappliedTotal)}</b>. Continuing records an explicit reviewer override and allows SQL Accounting to retain this amount as unapplied customer credit. It will never be accepted silently.</>}</p></ReviewConfirmationModal>}</AppLayout>;
 }
 
 function Metric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) { return <div className={`rounded-xl border p-4 ${warning ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-[var(--border)] bg-[var(--card)]'}`}><p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>; }
@@ -823,8 +909,18 @@ function Metric({ label, value, warning = false }: { label: string; value: strin
 function PaymentEvidence({ runId, file }: { runId: number; file: ExternalDocument }) {
   const [url, setUrl] = useState<string | null>(null);
   const [mime, setMime] = useState(file.content_type || '');
-  useEffect(() => { let active = true; let objectUrl: string | null = null; getRunFile(runId, file.file_key).then((blob) => { if (!active) return; objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); setMime(blob.type || file.content_type || ''); }).catch(() => undefined); return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); }; }, [runId, file.file_key, file.content_type]);
-  return <article className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]/40">{url && mime.startsWith('image/') ? <img src={url} alt={file.filename} className="h-56 w-full object-contain bg-white" /> : <div className="flex h-40 items-center justify-center bg-[var(--muted)]"><FileText className="h-10 w-10 text-[var(--muted-foreground)]" /></div>}<div className="flex items-center justify-between gap-3 p-3"><span className="truncate text-sm font-semibold">{file.filename}</span>{url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-700"><Download className="h-3.5 w-3.5" /> Open</a>}</div></article>;
+  const [loading, setLoading] = useState(false);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  const loadEvidence = async () => {
+    if (url || loading) return;
+    setLoading(true);
+    try {
+      const blob = await getRunFile(runId, file.file_key);
+      setUrl(URL.createObjectURL(blob));
+      setMime(blob.type || file.content_type || '');
+    } finally { setLoading(false); }
+  };
+  return <article className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]/40">{url && mime.startsWith('image/') ? <img src={url} alt={file.filename} className="h-56 w-full object-contain bg-white" /> : <button type="button" onClick={() => void loadEvidence()} className="flex h-40 w-full items-center justify-center gap-2 bg-[var(--muted)] text-sm font-semibold"><FileText className="h-10 w-10 text-[var(--muted-foreground)]" />{loading ? 'Loading evidence…' : 'Load preview'}</button>}<div className="flex items-center justify-between gap-3 p-3"><span className="truncate text-sm font-semibold">{file.filename}</span>{url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-700"><Download className="h-3.5 w-3.5" /> Open</a>}</div></article>;
 }
 
 function SchemaField({ field, value, editable, onChange }: { field: ReviewFieldDefinition; value: unknown; editable: boolean; onChange: (value: unknown) => void }) {
@@ -881,6 +977,14 @@ interface OutsourcedEmailDelivery {
   sent_at?: string | null;
   reply_received_at?: string | null;
   expected_attachments?: Array<{ type?: string; required?: boolean }>;
+}
+
+interface OutsourcedWhatsAppDelivery {
+  status?: string;
+  group_name?: string | null;
+  test_mode?: boolean;
+  source_attached?: boolean;
+  message_id?: string | null;
 }
 
 interface ExternalDocument {

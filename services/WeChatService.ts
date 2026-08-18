@@ -14,7 +14,16 @@ export interface WeChatConnection {
 }
 
 export interface WeChatGroup { id: string; name: string; member_count: number }
-export interface WeChatBinding { connection_id: number; group_id: string; group_name?: string | null }
+export interface WeChatBinding {
+  connection_id: number;
+  group_id: string;
+  group_name?: string | null;
+  sql_connection_id?: number | null;
+  sql_connection_ids?: number[];
+  sql_routes?: Array<{ sql_connection_id: number; company_name?: string | null; company_key?: string | null; match_terms?: string[] }>;
+  company_name?: string | null;
+  company_key?: string | null;
+}
 
 async function handle<T>(response: Response): Promise<T> {
   if (!response.ok) {

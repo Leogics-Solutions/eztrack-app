@@ -66,8 +66,8 @@ export interface AutomationConfig {
   source: {
     sources: string[];
     whatsapp_mode?: string;
-    whatsapp_bindings?: Array<{ connection_id: number; group_jid: string; group_name?: string | null }>;
-    wechat_bindings?: Array<{ connection_id: number; group_id: string; group_name?: string | null }>;
+    whatsapp_bindings?: Array<{ connection_id: number; group_jid: string; group_name?: string | null; sql_connection_id?: number | null; sql_connection_ids?: number[]; sql_routes?: Array<{ sql_connection_id: number; company_name?: string | null; company_key?: string | null; match_terms?: string[] }>; company_name?: string | null; company_key?: string | null }>;
+    wechat_bindings?: Array<{ connection_id: number; group_id: string; group_name?: string | null; sql_connection_id?: number | null; sql_connection_ids?: number[]; sql_routes?: Array<{ sql_connection_id: number; company_name?: string | null; company_key?: string | null; match_terms?: string[] }>; company_name?: string | null; company_key?: string | null }>;
     bundle_trigger?: string;
     bundle_expiry_minutes?: number;
   };

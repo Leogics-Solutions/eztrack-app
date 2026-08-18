@@ -1,0 +1,10 @@
+
+> eztrack-app@0.1.0 start
+> next start --hostname 0.0.0.0 --port 3008
+
+   ▲ Next.js 16.0.8
+   - Local:         http://localhost:3008
+   - Network:       http://0.0.0.0:3008
+
+ ✓ Starting...
+ ✓ Ready in 379ms

@@ -19,6 +19,21 @@ import {
 
 const inputClass = 'w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-600/15';
 type PaymentMethodMapping = { code: string; label: string; bank_account: string; is_default: boolean };
+const companyOptions = [
+  ['flexero', 'FLEXERO SDN BHD — ACC-0001.FDB'],
+  ['jovan', 'JOVAN HOLDING SDN BHD — ACC-0002.FDB'],
+  ['kimonco', 'KIMONCO SDN BHD — ACC-0003.FDB'],
+  ['meta', 'METASPHERE SDN BHD — ACC-0006.FDB'],
+  ['vista', 'VISTA SEMANGAT TRADING SDN BHD — ACC-0008.FDB'],
+  ['yde', 'YDE MARKETING SDN BHD — ACC-0009.FDB'],
+  ['greenpoint', 'GREENPOINT TRADING SDN BHD — ACC-0010.FDB'],
+  ['maincell_2023', 'MAINCELL SDN BHD (2023 onwards) — ACC-0011.FDB'],
+  ['precis', 'PRECIS SDN BHD — ACC-0012.FDB'],
+  ['novotrade', 'NOVOTRADE SDN BHD — ACC-0013.FDB'],
+  ['mayang_muhibah', 'MAYANG MUHIBAH SDN BHD — ACC-0014.FDB'],
+  ['summer_alpine', 'SUMMER ALPINE SDN BHD — ACC-0015.FDB'],
+  ['murniraya', 'MURNIRAYA SDN BHD — ACC-0016.FDB'],
+] as const;
 
 export default function SqlAccountIntegrationPage() {
   const { selectedOrganizationId } = useOrganization();
@@ -33,6 +48,7 @@ export default function SqlAccountIntegrationPage() {
   const [apiUrl, setApiUrl] = useState('http://localhost:8787');
   const [apiKey, setApiKey] = useState('');
   const [company, setCompany] = useState('');
+  const [companyKey, setCompanyKey] = useState('maincell_2023');
   const [doPrefix, setDoPrefix] = useState('DO-');
   const [doNextNumber, setDoNextNumber] = useState(1);
   const [doPadding, setDoPadding] = useState(5);
@@ -61,6 +77,7 @@ export default function SqlAccountIntegrationPage() {
     setApiUrl('http://localhost:8787');
     setApiKey('');
     setCompany('');
+    setCompanyKey('maincell_2023');
     setDoPrefix('DO-');
     setDoNextNumber(1);
     setDoPadding(5);
@@ -84,6 +101,7 @@ export default function SqlAccountIntegrationPage() {
     setApiUrl(item.api_url);
     setApiKey('');
     setCompany(item.company || '');
+    setCompanyKey(String(item.config?.company_key || 'maincell_2023'));
     setDoPrefix('DO-');
     setDoNextNumber(1);
     setDoPadding(5);
@@ -125,14 +143,14 @@ export default function SqlAccountIntegrationPage() {
           api_url: apiUrl.trim(),
           api_key: apiKey.trim(),
           company: company.trim() || undefined,
-          config: { payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
+          config: { company_key: companyKey, payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
         });
       } else {
         const changes: { name: string; api_url: string; company: string; api_key?: string; config: Record<string, unknown> } = {
           name: name.trim(),
           api_url: apiUrl.trim(),
           company: company.trim(),
-          config: { ...((items.find((item) => item.id === editingId)?.config || {})), payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
+          config: { ...((items.find((item) => item.id === editingId)?.config || {})), company_key: companyKey, payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
         };
         if (apiKey.trim()) changes.api_key = apiKey.trim();
         savedConnection = await updateSqlAccountConnection(editingId, changes);
@@ -212,6 +230,7 @@ export default function SqlAccountIntegrationPage() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-semibold">Connection name<input required minLength={2} value={name} onChange={(event) => setName(event.target.value)} className={`${inputClass} mt-1`} /></label>
           <label className="text-xs font-semibold">Company database / company<input value={company} onChange={(event) => setCompany(event.target.value)} placeholder="Optional" className={`${inputClass} mt-1`} /></label>
+          <label className="text-xs font-semibold">Connector company<select required value={companyKey} onChange={(event) => setCompanyKey(event.target.value)} className={`${inputClass} mt-1`}><option value="">Select SQL company</option>{companyOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><span className="mt-1 block font-normal text-[var(--muted-foreground)]">This selects the company database inside the shared connector.</span></label>
           <label className="text-xs font-semibold">Bridge API URL<input required type="url" value={apiUrl} onChange={(event) => setApiUrl(event.target.value)} className={`${inputClass} mt-1`} /></label>
           <label className="text-xs font-semibold">Bridge API key {editingId !== null && <span className="font-normal text-[var(--muted-foreground)]">(leave blank to keep current key)</span>}<input required={editingId === null} minLength={apiKey ? 8 : undefined} type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editingId === null ? '' : 'Current key is saved securely'} className={`${inputClass} mt-1`} /></label>
         </div>

@@ -119,6 +119,7 @@ export interface CaptureWorkItem {
   job_id?: string | null;
   result_type?: string | null;
   result_id?: number | null;
+  review_run_ids?: number[];
   review_url?: string | null;
   requires_attention: boolean;
   received_at: string;

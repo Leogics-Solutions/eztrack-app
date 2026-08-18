@@ -33,7 +33,7 @@ import {
   type OrganizationMember,
   type OrganizationRole,
 } from '@/services/OrganizationService';
-import { getUserQuota, updateCurrentUser, type QuotaData } from '@/services/UserService';
+import { getOpenAIBillingSummary, getUserQuota, updateCurrentUser, type OpenAIBillingSummary, type QuotaData } from '@/services/UserService';
 
 type Tab = 'company' | 'team' | 'billing' | 'account';
 type Notice = { type: 'success' | 'error'; message: string } | null;
@@ -71,6 +71,7 @@ export default function SettingsPage() {
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
   const [quota, setQuota] = useState<QuotaData | null>(null);
+  const [openaiBilling, setOpenaiBilling] = useState<OpenAIBillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -108,6 +109,17 @@ export default function SettingsPage() {
       ]);
       setMembers(memberResponse.data || []);
       setQuota(quotaResponse.data);
+      const signedInMember = (memberResponse.data || []).find((member) => String(member.user_id) === String(user?.id));
+      if (signedInMember?.role === 'admin') {
+        try {
+          const billingResponse = await getOpenAIBillingSummary();
+          setOpenaiBilling(billingResponse.data);
+        } catch {
+          setOpenaiBilling(null);
+        }
+      } else {
+        setOpenaiBilling(null);
+      }
       try {
         const invitationResponse = await listOrganizationInvitations(selectedOrganizationId);
         setInvitations(invitationResponse.data || []);
@@ -120,7 +132,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrganizationId]);
+  }, [selectedOrganizationId, user?.id]);
 
   useEffect(() => {
     void loadData();
@@ -401,17 +413,24 @@ export default function SettingsPage() {
           <div className="space-y-6">
             <section className={`${cardClass} p-6`}>
               <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Current processing allowance</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">{effectiveQuota?.remaining_quota?.toLocaleString() || 0}<span className="ml-2 text-base font-medium text-[var(--muted-foreground)]">pages remaining</span></p><p className="mt-2 text-sm text-[var(--muted-foreground)]">Billed to {effectiveQuota?.type === 'organization' ? selectedOrganization?.name || 'your company' : 'your personal account'}.</p></div>
-                <div className="w-full max-w-sm"><div className="mb-2 flex justify-between text-xs font-semibold text-[var(--muted-foreground)]"><span>{effectiveQuota?.used_quota?.toLocaleString() || 0} used</span><span>{effectiveQuota?.total_quota?.toLocaleString() || 0} total</span></div><div className="h-3 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full rounded-full bg-cyan-600 transition-all" style={{ width: `${usagePercent}%` }} /></div><p className="mt-2 text-right text-xs text-[var(--muted-foreground)]">{usagePercent}% used</p></div>
+                {effectiveQuota?.unlimited ? <><div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Processing access</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">Unlimited</p><p className="mt-2 text-sm text-[var(--muted-foreground)]">No Smartdok page or credit cap is enforced for this dedicated deployment.</p></div><div className="w-full max-w-sm rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><p className="font-bold">Usage tracking remains active</p><p className="mt-1">{effectiveQuota.used_quota.toLocaleString()} pages recorded for audit; processing is not blocked by this count.</p></div></> : <><div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Current processing allowance</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">{effectiveQuota?.remaining_quota?.toLocaleString() || 0}<span className="ml-2 text-base font-medium text-[var(--muted-foreground)]">pages remaining</span></p><p className="mt-2 text-sm text-[var(--muted-foreground)]">Billed to {effectiveQuota?.type === 'organization' ? selectedOrganization?.name || 'your company' : 'your personal account'}.</p></div><div className="w-full max-w-sm"><div className="mb-2 flex justify-between text-xs font-semibold text-[var(--muted-foreground)]"><span>{effectiveQuota?.used_quota?.toLocaleString() || 0} used</span><span>{effectiveQuota?.total_quota?.toLocaleString() || 0} total</span></div><div className="h-3 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full rounded-full bg-cyan-600 transition-all" style={{ width: `${usagePercent}%` }} /></div><p className="mt-2 text-right text-xs text-[var(--muted-foreground)]">{usagePercent}% used</p></div></>}
               </div>
             </section>
-            <section className={`${cardClass} overflow-hidden`}>
+            {!effectiveQuota?.unlimited && <section className={`${cardClass} overflow-hidden`}>
               <div className="border-b border-[var(--border)] p-5"><h2 className="font-bold text-[var(--foreground)]">Quota allocations</h2><p className="text-sm text-[var(--muted-foreground)]">Allowance periods currently attached to this account.</p></div>
               <div className="divide-y divide-[var(--border)]">
                 {(effectiveQuota?.allocations || []).map((allocation) => <div key={allocation.allocation_id} className="grid gap-3 p-5 sm:grid-cols-4 sm:items-center"><div><p className="text-xs text-[var(--muted-foreground)]">Allowance</p><p className="font-bold text-[var(--foreground)]">{allocation.quota_pages.toLocaleString()} pages</p></div><div><p className="text-xs text-[var(--muted-foreground)]">Remaining</p><p className="font-semibold text-[var(--foreground)]">{allocation.remaining_quota.toLocaleString()}</p></div><div><p className="text-xs text-[var(--muted-foreground)]">Valid until</p><p className="font-semibold text-[var(--foreground)]">{formatDate(allocation.valid_until)}</p></div><span className="justify-self-start rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold capitalize text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 sm:justify-self-end">{allocation.status.toLowerCase()}</span></div>)}
                 {!effectiveQuota?.allocations?.length && <p className="p-8 text-center text-sm text-[var(--muted-foreground)]">No active quota allocations.</p>}
               </div>
-            </section>
+            </section>}
+            {isAdmin && <section className={`${cardClass} p-6`}>
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">OpenAI API billing</p><p className="mt-2 text-3xl font-bold text-[var(--foreground)]">{openaiBilling?.month_to_date_cost_usd != null ? `US$${openaiBilling.month_to_date_cost_usd.toFixed(2)}` : 'Not connected'}</p><p className="mt-1 text-sm text-[var(--muted-foreground)]">{openaiBilling?.month_to_date_cost_usd != null ? 'Actual organization cost this month' : 'Live spend requires an OpenAI Admin API key.'}</p></div>
+                {openaiBilling?.configured_budget_remaining_usd != null && <div className="rounded-xl bg-cyan-50 px-5 py-4 text-cyan-950 dark:bg-cyan-950 dark:text-cyan-100"><p className="text-xs font-bold uppercase tracking-wide">Configured budget remaining</p><p className="mt-1 text-2xl font-bold">US${openaiBilling.configured_budget_remaining_usd.toFixed(2)}</p></div>}
+              </div>
+              <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"><p className="font-bold">OpenAI account balance</p><p className="mt-1">OpenAI's supported API provides costs, but not the live prepaid-credit balance. Use the OpenAI Billing dashboard for the authoritative remaining balance.</p></div>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-[var(--muted-foreground)]">{openaiBilling?.message || 'Configure OPENAI_ADMIN_API_KEY on the backend to show live month-to-date spend here.'}</p><a href={openaiBilling?.billing_dashboard_url || 'https://platform.openai.com/settings/organization/billing/overview'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-bold text-[var(--foreground)] hover:border-cyan-500"><Link2 className="h-4 w-4" /> Open OpenAI Billing</a></div>
+            </section>}
           </div>
         )}
 

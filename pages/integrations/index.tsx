@@ -9,11 +9,8 @@ import { listSqlAccountConnections } from '@/services/SqlAccountService';
 import { listEmailConnections } from '@/services/EmailConnectionService';
 import {
   ArrowRight,
-  Building2,
   CheckCircle2,
   Database,
-  Download,
-  FileSpreadsheet,
   FolderOpen,
   Link2,
   LoaderCircle,
@@ -71,7 +68,6 @@ export default function IntegrationsPage() {
 
   const gmailCount = settings?.integrations.gmail?.connection_count || 0;
   const driveCount = settings?.integrations.drive?.connection_count || 0;
-  const bcCount = settings?.integrations.business_central?.connection_count || 0;
 
   return (
     <AppLayout pageName="Integrations">
@@ -106,9 +102,6 @@ export default function IntegrationsPage() {
 
             <IntegrationSection title="Accounting & ERP outputs" description="Destinations used after Smartdok completes checks and obtains the required approval.">
               <IntegrationCard icon={Database} title="SQL Accounting" description="Give approved agents narrow tools for customers, items, delivery orders, invoices and official PDFs." status={sqlAccountCount ? `${sqlAccountCount} connected` : 'Available'} statusTone={sqlAccountCount ? 'connected' : 'available'} href="/integrations/sql-account" action="Manage connections" />
-              <IntegrationCard icon={Building2} title="Microsoft Business Central" description="Push approved purchase invoices to a connected Business Central company." status={bcCount ? `${bcCount} connected` : 'Available'} statusTone={bcCount ? 'connected' : 'available'} href="/settings" action="Manage connection" />
-              <IntegrationCard icon={FileSpreadsheet} title="Xero & AutoCount exchange" description="Export processed invoices and statements in supported import formats." status="Available in Records" statusTone="available" href="/records" action="Open Records" />
-              <IntegrationCard icon={Download} title="Bukku ledger exchange" description="Upload Bukku general-ledger exports for bank-ledger completeness checks." status="File exchange" statusTone="available" href="/bank-statements" action="Open reconciliation" />
             </IntegrationSection>
           </>
         )}

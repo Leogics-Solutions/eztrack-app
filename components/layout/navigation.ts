@@ -4,6 +4,7 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
+  ScrollText,
   Plug,
   Settings,
   Workflow,
@@ -46,6 +47,7 @@ export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
     { href: '/capture', label: t.nav.capture, icon: Inbox },
     { href: '/automations', label: t.nav.automations, icon: Workflow },
     { href: '/review', label: t.nav.review, icon: ListChecks },
+    { href: '/audit-trail', label: 'Audit Trail', icon: ScrollText },
     {
       href: '/records',
       label: t.nav.records,

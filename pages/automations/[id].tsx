@@ -128,6 +128,9 @@ const AUTOMATION_INSTRUCTION_MAX_LENGTH = 20_000;
 const toggle = (values: string[], value: string) => values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 const makeId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const newField = (): AutomationDataField => ({ key: makeId('field'), label: 'New field', type: 'TEXT', required: false, description: '', structure: 'SCALAR', source_hint: '', confidence_threshold: 0.85, children: [] });
+const bindingSqlIds = (binding?: { sql_connection_id?: number | null; sql_connection_ids?: number[] }) => (
+  binding?.sql_connection_ids?.length ? binding.sql_connection_ids : binding?.sql_connection_id ? [binding.sql_connection_id] : []
+);
 
 export default function AutomationSetupPage() {
   const router = useRouter();
@@ -191,11 +194,11 @@ export default function AutomationSetupPage() {
   }, [automationId, selectedOrganizationId]);
 
   useEffect(() => {
-    if (!config?.source.sources.includes('WHATSAPP')) return;
+    if (!selectedOrganizationId) return;
     listWhatsAppConnections()
       .then((items) => setConnections(items.filter((item) => item.status === 'connected')))
       .catch(() => setConnections([]));
-  }, [config?.source.sources, selectedOrganizationId]);
+  }, [selectedOrganizationId]);
 
   useEffect(() => {
     if (!config?.source.sources.includes('WECHAT')) return;
@@ -215,10 +218,10 @@ export default function AutomationSetupPage() {
   }, [selectedOrganizationId]);
 
   useEffect(() => {
-    if (!selectedOrganizationId) return;
+    if (!selectedOrganizationId || config?.template_key !== 'order_to_invoice') return;
     listEmailConnections().then(setEmailConnections).catch(() => setEmailConnections([]));
     getGmailConnections().then((result) => setGmailConnections(result.connections)).catch(() => setGmailConnections([]));
-  }, [selectedOrganizationId]);
+  }, [config?.template_key, selectedOrganizationId]);
 
   useEffect(() => {
     if (!selectedOrganizationId) return;
@@ -249,8 +252,12 @@ export default function AutomationSetupPage() {
       config: {
         test_mode: false,
         test_recipient: '',
-        subject_template: '[Smartdok {{thread_token}}] DO & Invoice request - {{issuing_entity.legal_name}} - {{po_number}}',
-        body_template: 'Hi Team,\n\nPlease prepare the Delivery Order and Sales Invoice for the attached purchase order.\n\nIssuing company: {{issuing_entity.legal_name}}\nCustomer: {{customer}}\nPO/reference: {{po_number}}\nDocument date: {{document_date}}\n\nPlease reply to this same email thread and attach the completed documents.\n\nProvider instructions:\n{{provider_instructions}}\n\nThank you.',
+        whatsapp_test_mode: false,
+        whatsapp_test_connection_id: 0,
+        whatsapp_test_group_jid: '',
+        whatsapp_test_group_name: '',
+        subject_template: '{{issuing_entity.legal_name}} TO {{customer}} - {{set_count}} SETS',
+        body_template: 'Hi Team,\n\nPlease prepare the Delivery Order and Sales Invoice for the attached purchase order.\n\nIssuing company: {{issuing_entity.legal_name}}\nCustomer: {{customer}}\nDocument date: {{document_date}}\n\nPlease reply to this same email thread and attach the completed documents.\n\nProvider instructions:\n{{provider_instructions}}\n\nThank you.',
         expected_attachments: [
           { type: 'DELIVERY_ORDER', label: 'Delivery Order', required: true, keywords: ['delivery order', 'do'] },
           { type: 'INVOICE', label: 'Invoice', required: true, keywords: ['invoice', 'inv', 'iv'] },
@@ -343,6 +350,23 @@ export default function AutomationSetupPage() {
     finally { setBusy(false); }
   };
 
+  const setWhatsAppBindingCompanies = async (binding: WhatsAppBinding, sqlConnectionIds: number[]) => {
+    const current = config.source.whatsapp_bindings || [];
+    const others = current.filter((item) => item.connection_id !== binding.connection_id || item.group_jid !== binding.group_jid);
+    const ids = Array.from(new Set(sqlConnectionIds));
+    const sqlConnection = ids.length === 1 ? sqlConnections.find((item) => item.id === ids[0]) : undefined;
+    const next = ids.length
+      ? [...others, { ...binding, sql_connection_id: ids.length === 1 ? ids[0] : null, sql_connection_ids: ids, sql_routes: undefined, company_name: sqlConnection?.company || sqlConnection?.name || null, company_key: sqlConnection ? String(sqlConnection.config?.company_key || '') || null : null }]
+      : others;
+    setBusy(true);
+    try {
+      await setAutomationWhatsAppBindings(automation.id, next);
+      setConfig({ ...config, source: { ...config.source, sources: next.length ? Array.from(new Set([...config.source.sources, 'WHATSAPP'])) : config.source.sources.filter((item) => item !== 'WHATSAPP'), whatsapp_bindings: next, bundle_trigger: 'SLIP UPDATE', bundle_expiry_minutes: 30 } });
+      setNotice(ids.length > 1 ? 'WhatsApp group can now route to the selected SQL companies from its SLIP UPDATE message.' : 'WhatsApp payment group updated.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update WhatsApp payment groups.'); }
+    finally { setBusy(false); }
+  };
+
   const loadWeChatGroups = async (connectionId: number) => {
     setBusy(true);
     try { const items = await listWeChatGroups(connectionId); setWechatGroups((current) => ({ ...current, [connectionId]: items })); }
@@ -350,15 +374,19 @@ export default function AutomationSetupPage() {
     finally { setBusy(false); }
   };
 
-  const toggleWeChatBinding = async (binding: WeChatBinding) => {
+  const setWeChatBindingCompanies = async (binding: WeChatBinding, sqlConnectionIds: number[]) => {
     const current = config.source.wechat_bindings || [];
-    const exists = current.some((item) => item.connection_id === binding.connection_id && item.group_id === binding.group_id);
-    const next = exists ? current.filter((item) => item.connection_id !== binding.connection_id || item.group_id !== binding.group_id) : [...current, binding];
+    const others = current.filter((item) => item.connection_id !== binding.connection_id || item.group_id !== binding.group_id);
+    const ids = Array.from(new Set(sqlConnectionIds));
+    const sqlConnection = ids.length === 1 ? sqlConnections.find((item) => item.id === ids[0]) : undefined;
+    const next = ids.length
+      ? [...others, { ...binding, sql_connection_id: ids.length === 1 ? ids[0] : null, sql_connection_ids: ids, sql_routes: undefined, company_name: sqlConnection?.company || sqlConnection?.name || null, company_key: sqlConnection ? String(sqlConnection.config?.company_key || '') || null : null }]
+      : others;
     setBusy(true);
     try {
       await setAutomationWeChatBindings(automation.id, next);
       setConfig({ ...config, source: { ...config.source, sources: next.length ? Array.from(new Set([...config.source.sources, 'WECHAT'])) : config.source.sources.filter((item) => item !== 'WECHAT'), wechat_bindings: next, bundle_trigger: 'SLIP UPDATE', bundle_expiry_minutes: 30 } });
-      setNotice('WeChat groups updated. A same-sender SLIP UPDATE message will close each bundle.');
+      setNotice(ids.length > 1 ? 'WeChat group can now route to the selected SQL companies from its SLIP UPDATE message.' : 'WeChat payment group updated.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update WeChat groups.'); }
     finally { setBusy(false); }
   };
@@ -520,18 +548,36 @@ export default function AutomationSetupPage() {
               const visible = (groups[connection.id] || []).filter((group) => !query || group.name.toLowerCase().includes(query) || group.jid.includes(query));
               return <div key={connection.id} className="rounded-lg border border-cyan-200 bg-white/80 p-3 text-slate-950 dark:border-cyan-800 dark:bg-slate-950 dark:text-white">
                 <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">{connection.name}</p><p className="text-xs opacity-70">{connection.phone_number ? `+${connection.phone_number}` : `Connection #${connection.id}`}</p></div><button type="button" onClick={() => void loadGroups(connection.id)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs"><Users className="h-3.5 w-3.5" /> Load groups</button></div>
-                {groups[connection.id] && <><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label><div className="mt-2 max-h-64 overflow-y-auto"><div className="grid gap-2 sm:grid-cols-2">{visible.map((group) => { const selected = (config.source.whatsapp_bindings || []).some((item) => item.connection_id === connection.id && item.group_jid === group.jid); return <button key={group.jid} type="button" onClick={() => void toggleBinding({ connection_id: connection.id, group_jid: group.jid, group_name: group.name })} className={`flex items-center justify-between rounded-lg border p-2.5 text-left text-xs ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span>{group.name}<span className="block opacity-60">{group.participant_count} members</span></span>{selected && <Check className="h-4 w-4" />}</button>; })}</div></div></>}
+                {groups[connection.id] && <>
+                  <label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label>
+                  <div className="mt-2 max-h-80 overflow-y-auto">
+                    <div className={`grid gap-2 ${config.template_key === 'payment_knock_off' ? '' : 'sm:grid-cols-2'}`}>
+                      {visible.map((group) => {
+                        const selected = (config.source.whatsapp_bindings || []).find((item) => item.connection_id === connection.id && item.group_jid === group.jid);
+                        if (config.template_key === 'payment_knock_off') {
+                          return <div key={group.jid} className={`grid gap-2 rounded-lg border p-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(240px,0.9fr)] sm:items-center ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}>
+                            <span className="font-semibold">{group.name}<span className="block font-normal opacity-60">{group.participant_count} members · {group.jid}</span></span>
+                            <SqlCompanyPicker companies={sqlConnections} selectedIds={bindingSqlIds(selected)} disabled={busy} onChange={(ids) => void setWhatsAppBindingCompanies({ connection_id: connection.id, group_jid: group.jid, group_name: group.name }, ids)} />
+                          </div>;
+                        }
+                        return <button key={group.jid} type="button" onClick={() => void toggleBinding({ connection_id: connection.id, group_jid: group.jid, group_name: group.name })} className={`flex items-center justify-between rounded-lg border p-2.5 text-left text-xs ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span>{group.name}<span className="block opacity-60">{group.participant_count} members</span></span>{selected && <Check className="h-4 w-4" />}</button>;
+                      })}
+                    </div>
+                  </div>
+                  {config.template_key === 'payment_knock_off' && <p className="mt-2 text-xs font-semibold">Select every SQL company this group may handle. If more than one is selected, the SLIP UPDATE message must name exactly one company (for example PRECIS, NOVO, SUMMER, or MAYANG).</p>}
+                </>}
               </div>;
             })}{!connections.length && <Link href="/integrations/whatsapp" className="block rounded-lg border border-dashed border-cyan-400 p-3 text-sm font-semibold">Connect WhatsApp under Integrations →</Link>}</div>
           </div>}
           {config.source.sources.includes('WECHAT') && <div className="mt-5 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-50">
             <div className="flex gap-3"><MessageCircle className="h-5 w-5" /><div><p className="text-sm font-semibold">Connected WeChat groups</p><p className="text-xs">Slip files collect by sender. A following <b>SLIP UPDATE</b> message closes the bundle; incomplete bundles expire after 30 minutes.</p></div></div>
+            {(config.source.wechat_bindings || []).length > 0 && <div className="mt-3 rounded-lg border border-cyan-300 bg-white/80 p-3 text-slate-950 dark:border-cyan-800 dark:bg-slate-950 dark:text-white"><p className="text-xs font-semibold uppercase tracking-wide text-cyan-800 dark:text-cyan-200">Configured group-to-company routes</p><div className="mt-2 space-y-2">{(config.source.wechat_bindings || []).map((binding) => <div key={`${binding.connection_id}-${binding.group_id}`} className="grid gap-2 rounded-md border border-[var(--border)] p-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)] sm:items-center"><span><b>{binding.group_name || binding.group_id}</b><span className="block text-[var(--muted-foreground)]">Stable ID: {binding.group_id}</span></span><SqlCompanyPicker companies={sqlConnections} selectedIds={bindingSqlIds(binding)} disabled={busy} onChange={(ids) => void setWeChatBindingCompanies(binding, ids)} /></div>)}</div></div>}
             <div className="mt-3 space-y-3">{wechatConnections.map((connection) => {
               const query = (groupSearch[-connection.id] || '').toLowerCase();
               const visible = (wechatGroups[connection.id] || []).filter((group) => !query || group.name.toLowerCase().includes(query) || group.id.toLowerCase().includes(query));
               return <div key={connection.id} className="rounded-lg border border-cyan-200 bg-white/80 p-3 text-slate-950 dark:border-cyan-800 dark:bg-slate-950 dark:text-white">
                 <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">{connection.name}</p><p className="text-xs opacity-70">{connection.display_name || connection.account_id || `Connection #${connection.id}`}</p></div><button type="button" onClick={() => void loadWeChatGroups(connection.id)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs"><Users className="h-3.5 w-3.5" /> Load groups</button></div>
-                {wechatGroups[connection.id] && <><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[-connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [-connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label><div className="mt-2 max-h-64 overflow-y-auto"><div className="grid gap-2 sm:grid-cols-2">{visible.map((group) => { const selected = (config.source.wechat_bindings || []).some((item) => item.connection_id === connection.id && item.group_id === group.id); return <button key={group.id} type="button" onClick={() => void toggleWeChatBinding({ connection_id: connection.id, group_id: group.id, group_name: group.name })} className={`flex items-center justify-between rounded-lg border p-2.5 text-left text-xs ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span>{group.name}<span className="block opacity-60">{group.member_count} members</span></span>{selected && <Check className="h-4 w-4" />}</button>; })}</div></div></>}
+                {wechatGroups[connection.id] && <><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[-connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [-connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label><div className="mt-2 max-h-80 overflow-y-auto"><div className="grid gap-2">{visible.map((group) => { const selected = (config.source.wechat_bindings || []).find((item) => item.connection_id === connection.id && item.group_id === group.id); return <div key={group.id} className={`grid gap-2 rounded-lg border p-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(240px,0.9fr)] sm:items-center ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span className="font-semibold">{group.name}<span className="block font-normal opacity-60">{group.member_count} members · {group.id}</span></span><SqlCompanyPicker companies={sqlConnections} selectedIds={bindingSqlIds(selected)} disabled={busy} onChange={(ids) => void setWeChatBindingCompanies({ connection_id: connection.id, group_id: group.id, group_name: group.name }, ids)} /></div>; })}</div></div><p className="mt-2 text-xs font-semibold">Select every SQL company this group may handle. Shared groups are routed from the unique company named in SLIP UPDATE; the stable group ID remains the source boundary.</p></>}
               </div>;
             })}{!wechatConnections.length && <Link href="/integrations/wechat" className="block rounded-lg border border-dashed border-cyan-400 p-3 text-sm font-semibold">Connect WeChat under Integrations →</Link>}</div>
           </div>}
@@ -610,12 +656,20 @@ export default function AutomationSetupPage() {
             <label className="block text-sm font-semibold">Outcome instruction<textarea value={config.agent_output.outcome_instruction} onChange={(event) => setConfig({ ...config, agent_output: { ...config.agent_output, outcome_instruction: event.target.value } })} rows={7} className="mt-2 w-full rounded-xl border border-cyan-300 bg-cyan-50/40 p-3 text-sm font-normal leading-6 outline-none focus:ring-2 focus:ring-cyan-600 dark:border-cyan-800 dark:bg-cyan-950/30" placeholder="After approval, resolve the issuing company from the selected knowledge registry, create the DO and Invoice in that company's connected accounting system, prepare customer PDFs using its selected templates, and return them to the source WhatsApp group. Never create duplicates or guess an unresolved company." /></label>
             <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold">Authority level<select value={config.agent_output.authority} onChange={(event) => setConfig({ ...config, agent_output: { ...config.agent_output, authority: event.target.value as AutomationConfig['agent_output']['authority'] } })} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm"><option value="PREPARE_ONLY">Prepare actions only</option><option value="AFTER_APPROVAL">Execute after human approval</option><option value="AUTO_WITHIN_POLICY">Automatic within approval policy</option></select></label><label className="text-xs font-semibold">SQL Accounting connection<select value={config.agent_output.connection_ids.sql_account || ''} onChange={(event) => setConfig({ ...config, agent_output: { ...config.agent_output, connection_ids: { ...config.agent_output.connection_ids, sql_account: Number(event.target.value) || 0 } } })} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm"><option value="">Select a connection</option>{sqlConnections.map((item) => <option key={item.id} value={item.id}>{item.name}{item.last_test_status === 'success' ? ' — connected' : ' — not tested'}</option>)}</select>{sqlConnections.length === 0 && <Link href="/integrations/sql-account" className="mt-2 inline-block text-xs text-cyan-700 underline dark:text-cyan-300">Add SQL Accounting connection</Link>}</label></div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-              <label className="flex items-start justify-between gap-4"><span><span className="block text-sm font-semibold">Outsourced fulfilment by email</span><span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">When company knowledge resolves OUTSOURCED, send the original PO to the registry-defined provider, wait for a same-thread reply, and attach the returned documents to this run.</span></span><input type="checkbox" checked={Boolean(outsourceOutput?.enabled)} onChange={(event) => setOutsourceEnabled(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-cyan-700" /></label>
+              <label className="flex items-start justify-between gap-4"><span><span className="block text-sm font-semibold">Outsourced fulfilment</span><span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">Send the original PO through the email or WhatsApp route resolved from company knowledge, then collect the returned documents.</span></span><input type="checkbox" checked={Boolean(outsourceOutput?.enabled)} onChange={(event) => setOutsourceEnabled(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-cyan-700" /></label>
               {outsourceOutput?.enabled && <div className="mt-5 space-y-4 border-t border-[var(--border)] pt-5">
                 <label className="block text-xs font-semibold">Sending mailbox<select value={outsourceOutput.config.connection_id ? `${String(outsourceOutput.config.connection_type || 'EMAIL')}:${String(outsourceOutput.config.connection_id)}` : config.agent_output.connection_ids.email ? `EMAIL:${config.agent_output.connection_ids.email}` : ''} onChange={(event) => { const [connection_type, id] = event.target.value.split(':'); updateOutsourceConfig({ connection_type: connection_type || 'EMAIL', connection_id: Number(id) || 0 }); }} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm"><option value="">Select a connected mailbox</option>{gmailConnections.map((item) => <option key={`gmail-${item.id}`} value={`GMAIL:${item.id}`} disabled={!item.can_send}>{item.email} · Gmail OAuth{item.can_send ? ' — ready to send' : ' — reconnect to allow sending'}</option>)}{emailConnections.map((item) => <option key={`email-${item.id}`} value={`EMAIL:${item.id}`}>{item.name} · {item.email_address}{item.last_test_status === 'success' ? ' — connected' : ' — not tested'}</option>)}</select><span className="mt-1 block font-normal text-[var(--muted-foreground)]">The same Gmail OAuth account used for capture can send after one-time permission approval.</span>{gmailConnections.some((item) => !item.can_send) && <Link href="/capture/channels" className="mt-2 inline-block text-xs font-semibold text-amber-700 underline dark:text-amber-300">Reconnect Gmail once to allow sending</Link>}{gmailConnections.length === 0 && emailConnections.length === 0 && <Link href="/capture/channels" className="mt-2 inline-block text-xs font-semibold text-cyan-700 underline dark:text-cyan-300">Connect Gmail</Link>}</label>
                 <div className={`rounded-xl border p-4 ${outsourceOutput.config.test_mode ? 'border-amber-400 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100' : 'border-[var(--border)]'}`}>
                   <label className="flex items-start justify-between gap-4"><span><span className="block text-sm font-semibold">Test delivery mode</span><span className="mt-1 block text-xs leading-5 opacity-80">Send every outsourced request only to the test address. Real company and provider recipients, including CC addresses, are completely suppressed.</span></span><input type="checkbox" checked={Boolean(outsourceOutput.config.test_mode)} onChange={(event) => updateOutsourceConfig({ test_mode: event.target.checked })} className="mt-1 h-5 w-5 shrink-0 accent-amber-600" /></label>
                   {Boolean(outsourceOutput.config.test_mode) && <label className="mt-4 block text-xs font-semibold">Test recipient<input type="email" value={String(outsourceOutput.config.test_recipient || '')} onChange={(event) => updateOutsourceConfig({ test_recipient: event.target.value })} placeholder="test@example.com" className="mt-1 w-full rounded-lg border border-amber-400 bg-white px-3 py-2.5 font-normal text-slate-950 dark:bg-slate-950 dark:text-white" /><span className="mt-1 block font-normal opacity-75">The subject and body will be marked TEST and will list the intended production recipients for verification.</span></label>}
+                </div>
+                <div className={`rounded-xl border p-4 ${outsourceOutput.config.whatsapp_test_mode ? 'border-amber-400 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100' : 'border-[var(--border)]'}`}>
+                  <label className="flex items-start justify-between gap-4"><span><span className="block text-sm font-semibold">WhatsApp test delivery mode</span><span className="mt-1 block text-xs leading-5 opacity-80">Send every outsourced WhatsApp request only to one testing group. The intended production group is retained for audit but never contacted.</span></span><input type="checkbox" checked={Boolean(outsourceOutput.config.whatsapp_test_mode)} onChange={(event) => updateOutsourceConfig({ whatsapp_test_mode: event.target.checked })} className="mt-1 h-5 w-5 shrink-0 accent-amber-600" /></label>
+                  {Boolean(outsourceOutput.config.whatsapp_test_mode) && <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-semibold">Testing account<select value={Number(outsourceOutput.config.whatsapp_test_connection_id || 0) || ''} onChange={(event) => { const connectionId = Number(event.target.value) || 0; updateOutsourceConfig({ whatsapp_test_connection_id: connectionId, whatsapp_test_group_jid: '', whatsapp_test_group_name: '' }); if (connectionId) void loadGroups(connectionId); }} className="mt-1 w-full rounded-lg border border-amber-400 bg-white px-3 py-2.5 font-normal text-slate-950 dark:bg-slate-950 dark:text-white"><option value="">Select connected account</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                    <label className="block text-xs font-semibold">Testing group<select value={String(outsourceOutput.config.whatsapp_test_group_jid || '')} disabled={!Number(outsourceOutput.config.whatsapp_test_connection_id || 0)} onFocus={() => { const connectionId = Number(outsourceOutput.config.whatsapp_test_connection_id || 0); if (connectionId && !groups[connectionId]) void loadGroups(connectionId); }} onChange={(event) => { const connectionId = Number(outsourceOutput.config.whatsapp_test_connection_id || 0); const group = (groups[connectionId] || []).find((item) => item.jid === event.target.value); updateOutsourceConfig({ whatsapp_test_group_jid: group?.jid || '', whatsapp_test_group_name: group?.name || '' }); }} className="mt-1 w-full rounded-lg border border-amber-400 bg-white px-3 py-2.5 font-normal text-slate-950 disabled:opacity-50 dark:bg-slate-950 dark:text-white"><option value="">Select testing group</option>{(groups[Number(outsourceOutput.config.whatsapp_test_connection_id || 0)] || []).map((group) => <option key={group.jid} value={group.jid}>{group.name}</option>)}</select></label>
+                    <p className="sm:col-span-2 text-xs font-normal opacity-75">Test messages are prefixed with [TEST]. Disable this mode before production.</p>
+                  </div>}
                 </div>
                 <label className="block text-xs font-semibold">Email subject template<input value={String(outsourceOutput.config.subject_template || '')} onChange={(event) => updateOutsourceConfig({ subject_template: event.target.value })} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2.5 font-normal" /></label>
                 <label className="block text-xs font-semibold">Email body template<textarea value={String(outsourceOutput.config.body_template || '')} onChange={(event) => updateOutsourceConfig({ body_template: event.target.value })} rows={9} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-transparent p-3 font-normal leading-6" /></label>
@@ -638,6 +692,21 @@ export default function AutomationSetupPage() {
       <aside className="h-fit rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"><h2 className="font-semibold">Setup readiness</h2><div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full bg-cyan-600 transition-all" style={{ width: `${(readiness.complete / readiness.total) * 100}%` }} /></div><p className="mt-2 text-xs text-[var(--muted-foreground)]">{readiness.complete} of {readiness.total} steps complete</p><div className="mt-5 space-y-2 text-xs">{[['Sources', config.source.sources.length], ['Instruction', config.data_contract.instructions.trim() ? 1 : 0], ['Workflow items', config.data_contract.fields.length + config.capabilities.filter((item) => item.enabled).length + config.validations.filter((item) => item.enabled).length], ['Approvals', config.approval.mode === 'AUTO_PROCESS' ? 1 : config.approval.gates.filter((item) => item.enabled).length], ['Outputs', config.outputs.filter((item) => item.enabled).length]].map(([label, count]) => <div key={String(label)} className="flex justify-between gap-3"><span className="text-[var(--muted-foreground)]">{label}</span><strong>{count}</strong></div>)}</div></aside>
     </div>
   </div></AppLayout>;
+}
+
+function SqlCompanyPicker({ companies, selectedIds, disabled, onChange }: { companies: SqlAccountConnection[]; selectedIds: number[]; disabled: boolean; onChange: (ids: number[]) => void }) {
+  const active = companies.filter((item) => item.is_active);
+  const names = active.filter((item) => selectedIds.includes(item.id)).map((item) => item.company || item.name);
+  return <details className="relative min-w-0 rounded-md border bg-white text-xs text-slate-950">
+    <summary className="cursor-pointer list-none px-3 py-2 font-semibold">{names.length ? `${names.length} SQL ${names.length === 1 ? 'company' : 'companies'}: ${names.join(', ')}` : 'Not monitored'}</summary>
+    <div className="max-h-64 min-w-full overflow-y-auto border-t bg-white p-2">
+      {active.map((item) => <label key={item.id} className="flex cursor-pointer items-start gap-2 rounded px-2 py-2 hover:bg-slate-100">
+        <input type="checkbox" checked={selectedIds.includes(item.id)} disabled={disabled} onChange={(event) => onChange(event.target.checked ? [...selectedIds, item.id] : selectedIds.filter((id) => id !== item.id))} className="mt-0.5 h-4 w-4" />
+        <span><b>{item.company || item.name}</b>{item.company && item.name !== item.company && <span className="block text-slate-500">{item.name}</span>}</span>
+      </label>)}
+      {!active.length && <p className="px-2 py-2 text-slate-500">No active SQL connections.</p>}
+    </div>
+  </details>;
 }
 
 function Panel({ title, description, children }: { title: string; description: string; children: React.ReactNode }) { return <section><h2 className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{description}</p><div className="mt-5">{children}</div></section>; }

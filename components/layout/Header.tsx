@@ -69,7 +69,7 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
 
   return (
     <header
-      className="flex h-16 items-center justify-between px-6 gap-4"
+      className="flex h-16 shrink-0 items-center justify-between px-6 gap-4"
       style={{
         background: 'var(--card)',
         borderBottom: '1px solid var(--border)',

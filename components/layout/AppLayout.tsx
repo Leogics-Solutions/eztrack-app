@@ -50,14 +50,14 @@ export function AppLayout({ children, pageName }: AppLayoutProps) {
   // Desktop layout
   return (
     // <ProtectedRoute>
-      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--background)' }}>
+      <div className="fixed inset-0 flex min-h-0 overflow-hidden" style={{ background: 'var(--background)' }}>
         {/* Sidebar */}
         <Sidebar
           isCollapsed={isSidebarCollapsed}
         />
 
         {/* Main Content Area */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Header */}
           <Header
             pageName={pageName}
@@ -66,12 +66,12 @@ export function AppLayout({ children, pageName }: AppLayoutProps) {
           />
 
           {/* Page Content */}
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-6">
             {children}
           </main>
 
           {/* Footer */}
-          <footer className="border-t border-gray-200 dark:border-gray-800 py-4 px-6">
+          <footer className="shrink-0 border-t border-gray-200 dark:border-gray-800 py-4 px-6">
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">
               Powered By{' '}
               <a

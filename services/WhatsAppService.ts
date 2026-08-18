@@ -9,6 +9,8 @@ export interface WhatsAppConnection {
   phone_number?: string | null;
   last_error?: string | null;
   is_active: boolean;
+  in_use: boolean;
+  automation_names: string[];
   created_at?: string | null;
 }
 
@@ -22,6 +24,11 @@ export interface WhatsAppBinding {
   connection_id: number;
   group_jid: string;
   group_name?: string | null;
+  sql_connection_id?: number | null;
+  sql_connection_ids?: number[];
+  sql_routes?: Array<{ sql_connection_id: number; company_name?: string | null; company_key?: string | null; match_terms?: string[] }>;
+  company_name?: string | null;
+  company_key?: string | null;
 }
 
 async function handle<T>(response: Response): Promise<T> {
@@ -53,6 +60,13 @@ export async function connectWhatsApp(id: number): Promise<WhatsAppConnection> {
 
 export async function disconnectWhatsApp(id: number): Promise<WhatsAppConnection> {
   return handle(await fetch(`${BASE_URL}/whatsapp/connections/${id}/disconnect`, { method: 'POST', headers: getScopedHeaders() }));
+}
+
+export async function deleteWhatsAppConnection(id: number): Promise<void> {
+  const response = await fetch(`${BASE_URL}/whatsapp/connections/${id}`, {
+    method: 'DELETE', headers: getScopedHeaders(),
+  });
+  if (!response.ok) await handle(response);
 }
 
 export async function listWhatsAppGroups(id: number): Promise<WhatsAppGroup[]> {

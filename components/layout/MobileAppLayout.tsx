@@ -25,7 +25,7 @@ export function MobileAppLayout({ children, pageName }: MobileAppLayoutProps) {
 
   return (
     // <ProtectedRoute>
-      <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--background)' }}>
+      <div className="fixed inset-0 flex min-h-0 flex-col overflow-hidden" style={{ background: 'var(--background)' }}>
         {/* Header */}
         <MobileHeader
           pageName={pageName}
@@ -39,7 +39,7 @@ export function MobileAppLayout({ children, pageName }: MobileAppLayoutProps) {
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 pb-20">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-20">
           {children}
         </main>
 

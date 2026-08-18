@@ -77,8 +77,13 @@ export interface WhatsAppConnection {
 
 export interface AgentRunLine {
   name?: string;
+  more_description?: string | null;
   model?: string;
   unit?: string;
+  source_unit?: string | null;
+  color?: string | null;
+  source_color?: string | null;
+  sql_account_uom?: string | null;
   qty?: number | null;
   category?: string | null;
   parent_group?: string | null;
@@ -114,8 +119,10 @@ export interface AgentRunData {
   customer?: string | null;
   customer_code?: string | null;
   code?: string | null;
+  source_reference?: string | null;
   inv_date?: string | null;
   currency?: string | null;
+  no_conversion?: boolean;
   issuing_entity?: {
     status?: 'RESOLVED' | 'AMBIGUOUS' | 'UNRESOLVED' | 'NOT_CONFIGURED' | string;
     entity_key?: string | null;
@@ -236,14 +243,40 @@ export interface AgentRunListItem {
   source_channel?: string | null;
   source_filename?: string | null;
   source_caption?: string | null;
+  error_message?: string | null;
   po_label?: string | null;
   agent_name?: string | null;
+  issuing_company?: string | null;
+  source_bundle_index?: number | null;
+  source_bundle_count?: number | null;
   received_at?: string | null;
   completed_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface AgentRunListResponse {
   runs: AgentRunListItem[];
+  total: number;
+}
+
+export interface AgentAuditEvent {
+  id: number;
+  run_id: number;
+  agent_id: number;
+  agent_name?: string | null;
+  event_type: string;
+  status?: string | null;
+  message?: string | null;
+  data?: Record<string, unknown> | null;
+  source_channel?: string | null;
+  source_filename?: string | null;
+  source_caption?: string | null;
+  po_label?: string | null;
+  created_at?: string | null;
+}
+
+export interface AgentAuditEventListResponse {
+  events: AgentAuditEvent[];
   total: number;
 }
 
@@ -376,6 +409,16 @@ export async function listRuns(params: { agentId?: number; status?: string; page
   if (params.pageSize) q.set('page_size', String(params.pageSize));
   const res = await fetch(`${BASE_URL}/agents/runs?${q.toString()}`, { headers: getScopedHeaders() });
   return handle<AgentRunListResponse>(res);
+}
+
+export async function listAuditTrail(params: { eventType?: string; search?: string; page?: number; pageSize?: number } = {}): Promise<AgentAuditEventListResponse> {
+  const q = new URLSearchParams();
+  if (params.eventType) q.set('event_type', params.eventType);
+  if (params.search?.trim()) q.set('search', params.search.trim());
+  if (params.page) q.set('page', String(params.page));
+  if (params.pageSize) q.set('page_size', String(params.pageSize));
+  const res = await fetch(`${BASE_URL}/agents/audit-trail?${q.toString()}`, { headers: getScopedHeaders() });
+  return handle<AgentAuditEventListResponse>(res);
 }
 
 export async function getRun(runId: number): Promise<AgentRun> {

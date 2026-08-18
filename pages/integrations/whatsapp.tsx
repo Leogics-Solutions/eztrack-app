@@ -5,6 +5,7 @@ import { useOrganization } from '@/lib/OrganizationContext';
 import {
   connectWhatsApp,
   createWhatsAppConnection,
+  deleteWhatsAppConnection,
   disconnectWhatsApp,
   getWhatsAppConnection,
   listWhatsAppConnections,
@@ -12,7 +13,7 @@ import {
   type WhatsAppConnection,
   type WhatsAppGroup,
 } from '@/services/WhatsAppService';
-import { ArrowLeft, CheckCircle2, LoaderCircle, MessageCircle, Plus, RefreshCw, Search, Unplug, Users } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, LoaderCircle, MessageCircle, Plus, RefreshCw, Search, Trash2, Unplug, Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
@@ -73,6 +74,22 @@ export default function WhatsAppIntegrationsPage() {
     finally { setBusy(null); }
   };
 
+  const remove = async (connection: WhatsAppConnection) => {
+    if (connection.in_use) return;
+    if (!window.confirm(`Remove ${connection.name}? The saved WhatsApp session will remain on the private runner.`)) return;
+    setBusy(connection.id); setError(null);
+    try {
+      await deleteWhatsAppConnection(connection.id);
+      setConnections((current) => current.filter((item) => item.id !== connection.id));
+      setGroups((current) => {
+        const next = { ...current };
+        delete next[connection.id];
+        return next;
+      });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not remove WhatsApp connection.'); }
+    finally { setBusy(null); }
+  };
+
   return <AppLayout pageName="WhatsApp connections">
     <div className="mx-auto max-w-5xl space-y-6">
       <header>
@@ -98,12 +115,14 @@ export default function WhatsAppIntegrationsPage() {
             <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-semibold ${connection.status === 'connected' ? 'border-emerald-300 bg-emerald-100 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100' : 'border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100'}`}>{connection.status.replaceAll('_', ' ')}</span>
           </div>
           {connection.last_error && <p className="mt-3 rounded-lg bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-200">{connection.last_error}</p>}
+          {connection.in_use && <p className="mt-3 rounded-lg bg-cyan-500/10 p-3 text-xs text-cyan-900 dark:text-cyan-100">Assigned to: {connection.automation_names.join(', ')}. Remove its automation channel binding before deleting this connection.</p>}
           {connection.qr_data_url && <div className="mt-4 rounded-xl border border-[var(--border)] bg-white p-4 text-center text-slate-950"><Image src={connection.qr_data_url} alt="WhatsApp pairing QR code" width={256} height={256} unoptimized className="mx-auto" /><p className="mt-2 text-sm font-semibold">Scan from WhatsApp → Linked devices</p></div>}
           <div className="mt-4 flex flex-wrap gap-2">
             {connection.status !== 'connected' && <button type="button" onClick={() => void act(connection.id, () => connectWhatsApp(connection.id))} disabled={busy === connection.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><MessageCircle className="h-4 w-4" /> Connect account</button>}
             <button type="button" onClick={() => void act(connection.id, () => getWhatsAppConnection(connection.id))} disabled={busy === connection.id} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold"><RefreshCw className={`h-4 w-4 ${busy === connection.id ? 'animate-spin' : ''}`} /> Refresh</button>
             {connection.status === 'connected' && <button type="button" onClick={() => void loadGroups(connection.id)} disabled={busy === connection.id} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold"><Users className="h-4 w-4" /> View groups</button>}
             {connection.status === 'connected' && <button type="button" onClick={() => void act(connection.id, () => disconnectWhatsApp(connection.id))} disabled={busy === connection.id} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 dark:text-red-300"><Unplug className="h-4 w-4" /> Disconnect</button>}
+            <button type="button" onClick={() => void remove(connection)} disabled={busy === connection.id || connection.in_use} title={connection.in_use ? `Used by ${connection.automation_names.join(', ')}` : 'Remove connection'} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300"><Trash2 className="h-4 w-4" /> {connection.in_use ? 'Used by automation' : 'Remove'}</button>
           </div>
           {groups[connection.id] && (() => {
             const query = (groupSearch[connection.id] || '').trim().toLowerCase();
