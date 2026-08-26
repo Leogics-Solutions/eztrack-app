@@ -2197,7 +2197,7 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="missing_custom_form"
-                              className="inline-flex items-center gap-1.5 rounded-md border border-amber-400 bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950 shadow-sm dark:border-amber-600 dark:bg-amber-950/70 dark:text-amber-100"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-amber-700 bg-amber-400 px-2 py-1 text-xs font-bold text-amber-950 shadow-sm ring-1 ring-inset ring-amber-700/40 dark:border-amber-300 dark:bg-amber-400 dark:text-amber-950"
                               title="A required Custom Form document is not linked"
                             >
                               <FileWarning className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
