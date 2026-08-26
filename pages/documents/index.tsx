@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Check, ChevronDown, Edit2, FileWarning, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Edit2, FileWarning, Plus, Ship, X } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -2209,9 +2209,10 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="missing_bill_of_lading"
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-orange-700 bg-orange-400 px-2 py-1 text-xs font-bold text-orange-950 shadow-sm ring-1 ring-inset ring-orange-700/40 dark:border-orange-300 dark:bg-orange-400 dark:text-orange-950"
                               title="Missing linked bill of lading"
                             >
+                              <Ship className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                               Missing Bill of Lading
                             </span>
                           );
