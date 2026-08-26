@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Check, ChevronDown, Edit2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Edit2, FileWarning, Plus, X } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -2197,9 +2197,10 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="missing_custom_form"
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400"
-                              title="Missing custom form"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-amber-400 bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-950 shadow-sm dark:border-amber-600 dark:bg-amber-950/70 dark:text-amber-100"
+                              title="A required Custom Form document is not linked"
                             >
+                              <FileWarning className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                               Missing Custom Form
                             </span>
                           );
