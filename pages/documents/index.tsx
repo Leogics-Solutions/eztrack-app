@@ -66,6 +66,7 @@ interface Invoice extends ApiInvoice {
   missing_do?: boolean;
   missing_po?: boolean;
   missing_custom_form?: boolean;
+  missing_bill_of_lading?: boolean;
   is_bank_reconciled?: boolean;
   finance_record_id?: number | null;
   compliance_check_id?: number | null;
@@ -185,9 +186,9 @@ export const DocumentsListing = ({
     missing_do: false,
     missing_po: false,
     missing_custom_form: false,
+    missing_bill_of_lading: false,
     not_bank_reconciled: false,
     requires_wht_review: false,
-    requires_k1_review: false,
     requires_sst_review: false,
     requires_einvoice_review: false,
     page: 1,
@@ -331,9 +332,9 @@ export const DocumentsListing = ({
         missing_do: filters.missing_do || undefined,
         missing_po: filters.missing_po || undefined,
         missing_custom_form: filters.missing_custom_form || undefined,
+        missing_bill_of_lading: filters.missing_bill_of_lading || undefined,
         not_bank_reconciled: filters.not_bank_reconciled || undefined,
         requires_wht_review: filters.requires_wht_review || undefined,
-        requires_k1_review: filters.requires_k1_review || undefined,
         requires_sst_review: filters.requires_sst_review || undefined,
         requires_einvoice_review: filters.requires_einvoice_review || undefined,
       });
@@ -471,9 +472,9 @@ export const DocumentsListing = ({
       missing_do: false,
       missing_po: false,
       missing_custom_form: false,
+      missing_bill_of_lading: false,
       not_bank_reconciled: false,
       requires_wht_review: false,
-      requires_k1_review: false,
       requires_sst_review: false,
       requires_einvoice_review: false,
       page: 1,
@@ -852,7 +853,6 @@ export const DocumentsListing = ({
   const getComplianceReviewChips = (invoice: Invoice) => {
     const chips: string[] = [];
     if (invoice.requires_wht_review) chips.push('WHT');
-    if (invoice.requires_k1_review) chips.push('K1');
     if (invoice.requires_sst_review) chips.push('SST');
     if (invoice.requires_einvoice_review) chips.push('e-Invoice');
     return chips;
@@ -1564,7 +1564,16 @@ export const DocumentsListing = ({
                             onChange={(e) => handleFilterChange('missing_custom_form', e.target.checked)}
                             className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                           />
-                          <span className="text-sm">Missing Form</span>
+                          <span className="text-sm">Missing Custom Form</span>
+                        </label>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={filters.missing_bill_of_lading}
+                            onChange={(e) => handleFilterChange('missing_bill_of_lading', e.target.checked)}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+                          />
+                          <span className="text-sm">Missing Bill of Lading</span>
                         </label>
                         <label className="flex items-center space-x-2">
                           <input
@@ -1590,15 +1599,6 @@ export const DocumentsListing = ({
                             className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                           />
                           <span className="text-sm">WHT Review</span>
-                        </label>
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={filters.requires_k1_review}
-                            onChange={(e) => handleFilterChange('requires_k1_review', e.target.checked)}
-                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
-                          />
-                          <span className="text-sm">K1 Review</span>
                         </label>
                         <label className="flex items-center space-x-2">
                           <input
@@ -2167,7 +2167,7 @@ export const DocumentsListing = ({
                       <div className="flex flex-col gap-1">
                       {(() => {
                         // Check for status check indicators first
-                        const hasStatusChecks = invoice.missing_do || invoice.missing_po || invoice.missing_custom_form || invoice.is_bank_reconciled === false;
+                        const hasStatusChecks = invoice.missing_do || invoice.missing_po || invoice.missing_custom_form || invoice.missing_bill_of_lading || invoice.is_bank_reconciled === false;
                         
                         // Show status check indicators
                         const statusChecks = [];
@@ -2200,7 +2200,18 @@ export const DocumentsListing = ({
                               className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400"
                               title="Missing custom form"
                             >
-                              📄 Missing Form
+                              Missing Custom Form
+                            </span>
+                          );
+                        }
+                        if (invoice.missing_bill_of_lading) {
+                          statusChecks.push(
+                            <span
+                              key="missing_bill_of_lading"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                              title="Missing linked bill of lading"
+                            >
+                              Missing Bill of Lading
                             </span>
                           );
                         }

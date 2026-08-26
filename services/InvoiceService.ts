@@ -122,6 +122,7 @@ export interface Invoice {
   // Status tracking fields
   missing_do?: boolean;
   missing_custom_form?: boolean;
+  missing_bill_of_lading?: boolean;
   is_bank_reconciled?: boolean;
   // Finance record / Malaysia compliance summary fields
   finance_record_id?: number | null;
@@ -238,6 +239,7 @@ export interface ListInvoicesParams {
   missing_do?: boolean;
   missing_po?: boolean;
   missing_custom_form?: boolean;
+  missing_bill_of_lading?: boolean;
   not_bank_reconciled?: boolean;
   // Compliance-review filters (mirror the requires_*_review response flags)
   requires_wht_review?: boolean;
@@ -1050,6 +1052,9 @@ export async function listInvoices(
   }
   if (params?.missing_custom_form !== undefined) {
     queryParams.append('missing_custom_form', params.missing_custom_form.toString());
+  }
+  if (params?.missing_bill_of_lading !== undefined) {
+    queryParams.append('missing_bill_of_lading', params.missing_bill_of_lading.toString());
   }
   if (params?.not_bank_reconciled !== undefined) {
     queryParams.append('not_bank_reconciled', params.not_bank_reconciled.toString());
