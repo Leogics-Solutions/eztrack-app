@@ -80,6 +80,7 @@ const turnoverBands = [
 
 function labelize(value?: string | null) {
   if (!value) return '-';
+  if (value === 'needs_review') return 'Review Required';
   return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -405,7 +406,7 @@ export function FinanceOperationsWorkspace({
             <div className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>{summary.recordCount}</div>
           </div>
           <div className="rounded-md border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-            <div className="text-xs font-medium uppercase" style={{ color: 'var(--muted-foreground)' }}>Needs Review</div>
+            <div className="text-xs font-medium uppercase" style={{ color: 'var(--muted-foreground)' }}>Review Required</div>
             <div className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>{summary.reviewCount}</div>
           </div>
           <div className="rounded-md border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>

@@ -127,9 +127,7 @@ const SupportingDocumentsListing = () => {
     setError(null);
 
     try {
-      const response = await listDocuments({
-        page: filters.page,
-        page_size: filters.per_page,
+      const commonParams = {
         search: filters.search || undefined,
         direction: filters.direction || undefined,
         category: filters.category || undefined,
@@ -139,6 +137,18 @@ const SupportingDocumentsListing = () => {
         upload_status: filters.upload_status || undefined,
         start_date: filters.start_date || undefined,
         end_date: filters.end_date || undefined,
+      };
+
+      const response = await listDocuments({
+        ...commonParams,
+        page: filters.page,
+        page_size: filters.per_page,
+        is_linked:
+          filters.linked_status === 'linked'
+            ? true
+            : filters.linked_status === 'unlinked'
+              ? false
+              : undefined,
       });
 
       if (!response.success) {
@@ -147,16 +157,18 @@ const SupportingDocumentsListing = () => {
 
       const rawData = response.data;
       const data: Document[] = rawData.documents || [];
+
       // Sort by ID in descending order (largest to smallest)
       const sortedData = [...data].sort((a, b) => b.id - a.id);
-      const filteredData = applyClientSideFilters(sortedData);
-      setDocuments(filteredData);
+      const filteredData = sortedData;
 
-      // Use backend pagination metadata
       const total = rawData.total || 0;
-      const page = rawData.page || filters.page;
-      const pageSize = rawData.page_size || filters.per_page;
-      const totalPages = rawData.total_pages || Math.max(1, Math.ceil(total / pageSize));
+      const pageSize = filters.per_page;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const page = Math.min(filters.page, totalPages);
+      const visibleDocuments = filteredData;
+
+      setDocuments(visibleDocuments);
 
       setTotalCount(total);
 
@@ -365,17 +377,6 @@ const SupportingDocumentsListing = () => {
     return Boolean(doc.is_linked || (doc.linked_invoice_count && doc.linked_invoice_count > 0) || (doc.linked_invoices && doc.linked_invoices.length > 0));
   };
 
-  const applyClientSideFilters = (docs: Document[]) => {
-    if (!filters.linked_status) return docs;
-
-    return docs.filter((doc) => {
-      const linked = isDocumentLinked(doc);
-      return filters.linked_status === 'linked' ? linked : !linked;
-    });
-  };
-
-  const isClientLinkedFilterActive = Boolean(filters.linked_status);
-
   return (
     <AppLayout pageName={t.supportingDocuments.title}>
       {/* Filter Panel */}
@@ -544,7 +545,7 @@ const SupportingDocumentsListing = () => {
                       <option value="unlinked">Not linked to invoice</option>
                     </select>
                     <div className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      Applied to the current result page until backend filtering is available.
+                      Filters all documents, including results on other pages.
                     </div>
                   </div>
 
@@ -604,19 +605,12 @@ const SupportingDocumentsListing = () => {
             <h2 className="text-2xl font-bold m-0">{t.supportingDocuments.title}</h2>
             {totalCount > 0 && (
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {isClientLinkedFilterActive
-                  ? `Showing ${documents.length} matching documents on this page of ${totalCount} server-filtered documents`
-                  : `Showing ${documents.length} of ${totalCount} documents`}
+                Showing {documents.length} of {totalCount} documents
               </p>
             )}
             {isLoading && (
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 Loading documents...
-              </p>
-            )}
-            {isClientLinkedFilterActive && (
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Linked invoice filtering is applied after this page is loaded because the API does not support an is_linked query filter yet.
               </p>
             )}
             {error && (

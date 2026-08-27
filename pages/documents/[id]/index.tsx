@@ -203,6 +203,7 @@ const getPaymentProofStatusClasses = (status?: string | null) => {
 
 const formatPaymentProofStatus = (status?: string | null) => {
   if (!status) return 'No proof';
+  if (status === 'needs_review') return 'Review Required';
   return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 };
 

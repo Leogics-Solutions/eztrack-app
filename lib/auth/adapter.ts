@@ -387,6 +387,7 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
           status: apiUser.status,
           phone: apiUser.phone,
           industry: apiUser.industry,
+          remark_party: apiUser.remark_party,
           invoice_quota_pages: apiUser.invoice_quota_pages,
         };
         return user;
@@ -430,6 +431,7 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
           status: apiUser.status,
           phone: apiUser.phone,
           industry: apiUser.industry,
+          remark_party: apiUser.remark_party,
           invoice_quota_pages: apiUser.invoice_quota_pages,
         };
         this.setUser(user);

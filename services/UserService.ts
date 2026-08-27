@@ -113,6 +113,7 @@ export interface GetUserProfileResponse {
     status: string;
     phone?: string;
     industry?: string;
+    remark_party?: 'samudra' | 'coey' | null;
     invoice_quota_pages?: number;
   };
   message: string;

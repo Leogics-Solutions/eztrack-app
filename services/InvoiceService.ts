@@ -77,6 +77,7 @@ export interface PaymentProofDetails {
 
 export interface Invoice {
   id: number;
+  document_id?: number | null;
   invoice_no: string;
   invoice_date: string;
   vendor_name: string;
@@ -84,6 +85,8 @@ export interface Invoice {
   vendor_company_reg_no?: string;
   vendor_phone?: string;
   customer_name?: string;
+  samudra_remarks?: string | null;
+  coey_remarks?: string | null;
   subtotal: number;
   tax: number;
   total: number;
@@ -416,6 +419,18 @@ export interface ManualCompliancePassResponse {
     findings?: unknown[];
   } | null;
   message?: string;
+}
+
+export type PartyRemarkOwner = 'samudra' | 'coey';
+
+export interface UpdatePartyRemarkResponse {
+  success: boolean;
+  data: {
+    invoice_id: number;
+    owner: PartyRemarkOwner;
+    remarks: string | null;
+  };
+  message: string;
 }
 
 // Payments
@@ -1221,6 +1236,26 @@ export async function updateInvoice(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to update invoice');
+  }
+
+  return response.json();
+}
+
+/** Update only the current party's protected remark column. */
+export async function updateInvoicePartyRemark(
+  invoiceId: number,
+  owner: PartyRemarkOwner,
+  remarks: string
+): Promise<UpdatePartyRemarkResponse> {
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/remarks/${owner}`, {
+    method: 'PUT',
+    headers: getScopedHeaders(),
+    body: JSON.stringify({ remarks }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.detail || error.error || 'Failed to update remark');
   }
 
   return response.json();

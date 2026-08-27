@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { Check, ChevronDown, Edit2, FileWarning, Plus, Ship, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, CircleHelp, Edit2, FileWarning, Landmark, Lock, Plus, Ship, X } from "lucide-react";
 import {
   listInvoices,
   deleteInvoice as deleteInvoiceApi,
@@ -14,7 +14,7 @@ import {
   downloadInvoicesZip,
   getSettings,
   pushInvoicesToBusinessCentral,
-  updateInvoice,
+  updateInvoicePartyRemark,
   markInvoiceCompliancePass,
   matchInvoicesAcrossStatements,
   createLink,
@@ -33,9 +33,11 @@ import {
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
+  type PartyRemarkOwner,
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { useOrganization } from "@/lib/OrganizationContext";
+import { useAuth } from "@/lib/auth";
 
 // Types
 interface Vendor {
@@ -113,7 +115,13 @@ export const DocumentsListing = ({
   const { t } = useLanguage();
   const { showToast } = useToast();
   const { selectedOrganizationId } = useOrganization();
+  const { user } = useAuth();
   const resolvedPageTitle = pageTitle || t.documents.title;
+  const isSalesView = lockDirection && initialDirectionTab === 'sales';
+  const currentRemarkOwner: PartyRemarkOwner | null =
+    user?.remark_party === 'coey' || user?.remark_party === 'samudra'
+      ? user.remark_party
+      : null;
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -131,6 +139,7 @@ export const DocumentsListing = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
+  const [editingRemarkOwner, setEditingRemarkOwner] = useState<PartyRemarkOwner | null>(null);
   const [remarkDraft, setRemarkDraft] = useState('');
   const [savingRemarkId, setSavingRemarkId] = useState<number | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
@@ -408,9 +417,9 @@ export const DocumentsListing = ({
           // @ts-expect-error vendor_id may not exist on type
           uniqueVendors[inv.vendor_id] = inv.vendor_name;
         }
-        if (inv.remarks) {
-          remarkSet.add(inv.remarks);
-        }
+        if (inv.samudra_remarks) remarkSet.add(inv.samudra_remarks);
+        if (inv.coey_remarks) remarkSet.add(inv.coey_remarks);
+        if (!inv.samudra_remarks && inv.remarks) remarkSet.add(inv.remarks);
       });
 
       setVendors(
@@ -482,19 +491,29 @@ export const DocumentsListing = ({
     });
   };
 
-  const startRemarkEdit = (invoice: Invoice) => {
+  const getPartyRemark = (invoice: Invoice, owner: PartyRemarkOwner) => {
+    if (owner === 'samudra') {
+      return invoice.samudra_remarks ?? invoice.remarks ?? '';
+    }
+    return invoice.coey_remarks ?? '';
+  };
+
+  const startRemarkEdit = (invoice: Invoice, owner: PartyRemarkOwner) => {
+    if (currentRemarkOwner !== owner) return;
     setEditingRemarkId(invoice.id);
-    setRemarkDraft(invoice.remarks || '');
+    setEditingRemarkOwner(owner);
+    setRemarkDraft(getPartyRemark(invoice, owner));
   };
 
   const cancelRemarkEdit = () => {
     setEditingRemarkId(null);
+    setEditingRemarkOwner(null);
     setRemarkDraft('');
   };
 
-  const saveRemarkEdit = async (invoice: Invoice) => {
+  const saveRemarkEdit = async (invoice: Invoice, owner: PartyRemarkOwner) => {
     const nextRemark = remarkDraft.trim();
-    const currentRemark = (invoice.remarks || '').trim();
+    const currentRemark = getPartyRemark(invoice, owner).trim();
 
     if (nextRemark === currentRemark) {
       cancelRemarkEdit();
@@ -504,12 +523,16 @@ export const DocumentsListing = ({
     setSavingRemarkId(invoice.id);
 
     try {
-      await updateInvoice(invoice.id, { remarks: nextRemark });
+      await updateInvoicePartyRemark(invoice.id, owner, nextRemark);
 
       setInvoices((currentInvoices) =>
         currentInvoices.map((currentInvoice) =>
           currentInvoice.id === invoice.id
-            ? { ...currentInvoice, remarks: nextRemark || undefined }
+            ? {
+                ...currentInvoice,
+                [owner === 'samudra' ? 'samudra_remarks' : 'coey_remarks']:
+                  nextRemark || null,
+              }
             : currentInvoice
         )
       );
@@ -529,12 +552,87 @@ export const DocumentsListing = ({
       });
 
       cancelRemarkEdit();
-      showToast('Remark updated', { type: 'success' });
+      showToast(`${owner === 'samudra' ? 'Samudra' : 'Coey'} remark updated`, { type: 'success' });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update remark', { type: 'error' });
     } finally {
       setSavingRemarkId(null);
     }
+  };
+
+  const renderPartyRemarkCell = (invoice: Invoice, owner: PartyRemarkOwner) => {
+    const label = owner === 'samudra' ? 'Samudra' : 'Coey';
+    const value = getPartyRemark(invoice, owner);
+    const isEditing = editingRemarkId === invoice.id && editingRemarkOwner === owner;
+    const canEdit = currentRemarkOwner === owner;
+
+    if (isEditing) {
+      return (
+        <div className="flex min-w-[260px] items-start gap-2">
+          <textarea
+            value={remarkDraft}
+            onChange={(event) => setRemarkDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') cancelRemarkEdit();
+            }}
+            disabled={savingRemarkId === invoice.id}
+            rows={3}
+            autoFocus
+            className="w-full min-w-[200px] rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
+            aria-label={`${label} remark`}
+          />
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => saveRemarkEdit(invoice, owner)}
+              disabled={savingRemarkId === invoice.id}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              title={`Save ${label} remark`}
+              aria-label={`Save ${label} remark`}
+            >
+              <Check className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={cancelRemarkEdit}
+              disabled={savingRemarkId === invoice.id}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
+              title="Cancel remark edit"
+              aria-label="Cancel remark edit"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex min-w-[210px] items-start gap-2">
+        {value ? (
+          <span className="inline-block max-w-[320px] whitespace-pre-wrap rounded-md bg-[var(--primary)] px-2 py-1 text-xs text-white">
+            {value}
+          </span>
+        ) : (
+          <span className="text-[var(--muted-foreground)]">-</span>
+        )}
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => startRemarkEdit(invoice, owner)}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
+            title={`Edit ${label} remark`}
+            aria-label={`Edit ${label} remark`}
+          >
+            <Edit2 className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span title={`Only ${label} users can edit this column`} className="mt-1 text-[var(--muted-foreground)]">
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+    );
   };
 
   const setDateRange = (preset: string) => {
@@ -847,7 +945,23 @@ export const DocumentsListing = ({
 
   const formatComplianceStatus = (status?: Invoice['compliance_status']) => {
     if (!status) return 'Not checked';
+    if (status === 'needs_review') return 'Review Required';
     return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const getComplianceStatusDescription = (status?: Invoice['compliance_status']) => {
+    switch (status) {
+      case 'pass':
+        return 'Automated compliance checks passed.';
+      case 'warning':
+        return 'The invoice can continue, but one or more warnings should be checked.';
+      case 'fail':
+        return 'One or more required compliance checks failed and need action.';
+      case 'needs_review':
+        return 'The automated checks could not make a final decision. A person must review the findings.';
+      default:
+        return 'No compliance check has been completed for this invoice.';
+    }
   };
 
   const getComplianceReviewChips = (invoice: Invoice) => {
@@ -1582,7 +1696,7 @@ export const DocumentsListing = ({
                             onChange={(e) => handleFilterChange('not_bank_reconciled', e.target.checked)}
                             className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
                           />
-                          <span className="text-sm">Not Reconciled</span>
+                          <span className="text-sm">No Bank Match</span>
                         </label>
                       </div>
                     </div>
@@ -1717,6 +1831,18 @@ export const DocumentsListing = ({
                 {error}
               </p>
             )}
+            <details className="group mt-2 text-xs text-[var(--muted-foreground)]">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-[var(--primary)] hover:underline">
+                <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+                Status guide
+              </summary>
+              <div className="mt-2 max-w-xl space-y-1 rounded-md border border-[var(--border)] bg-[var(--muted)] p-3 text-[var(--foreground)]">
+                <p><strong>Review Required:</strong> automated checks need a person to review the findings.</p>
+                <p><strong>Mark as reviewed:</strong> confirms that a person checked the findings and accepts the invoice.</p>
+                <p><strong>No Bank Match:</strong> the invoice is not linked to a matching bank transaction yet.</p>
+                <p><strong>Missing document:</strong> the named supporting document is required but is not linked.</p>
+              </div>
+            </details>
           </div>
           <div className="flex gap-3 flex-wrap">
             <button
@@ -1877,14 +2003,17 @@ export const DocumentsListing = ({
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] sticky left-[56px] z-10 bg-[var(--muted)] border-r border-[var(--border)]">{t.documents.table.actions}</th>
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.vendor}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">
+                  {isSalesView ? 'Customer' : t.documents.table.vendor}
+                </th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Project</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.documentDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.createdDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.remarkTag}</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Samudra Remark/Tag</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Coey Remark/Tag</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Handwriting</th>
                 {orgRole === 'admin' && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
@@ -1927,18 +2056,22 @@ export const DocumentsListing = ({
                   )}
                   <td className="px-4 py-3 text-sm">{invoice.id}</td>
                   <td className="px-4 py-3">
-                    <div>
-                      <div className="font-medium">{invoice.vendor_name || '-'}</div>
-                      {(invoice.vendor_tax_id || invoice.vendor_tin_number || invoice.vendor_reg_no || invoice.vendor_reg_no_new || invoice.vendor_reg_no_old) && (
-                        <div className="text-xs text-[var(--muted-foreground)] space-y-0.5 mt-1">
-                          {invoice.vendor_tax_id && <div>{t.documents.vendorInfo.sst}: {invoice.vendor_tax_id}</div>}
-                          {invoice.vendor_tin_number && <div>{t.documents.vendorInfo.tin}: {invoice.vendor_tin_number}</div>}
-                          {invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.regNew}: {invoice.vendor_reg_no_new}</div>}
-                          {invoice.vendor_reg_no && !invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.reg}: {invoice.vendor_reg_no}</div>}
-                          {invoice.vendor_reg_no_old && <div>{t.documents.vendorInfo.regOld}: {invoice.vendor_reg_no_old}</div>}
-                        </div>
-                      )}
-                    </div>
+                    {isSalesView ? (
+                      <div className="font-medium">{invoice.customer_name || '-'}</div>
+                    ) : (
+                      <div>
+                        <div className="font-medium">{invoice.vendor_name || '-'}</div>
+                        {(invoice.vendor_tax_id || invoice.vendor_tin_number || invoice.vendor_reg_no || invoice.vendor_reg_no_new || invoice.vendor_reg_no_old) && (
+                          <div className="text-xs text-[var(--muted-foreground)] space-y-0.5 mt-1">
+                            {invoice.vendor_tax_id && <div>{t.documents.vendorInfo.sst}: {invoice.vendor_tax_id}</div>}
+                            {invoice.vendor_tin_number && <div>{t.documents.vendorInfo.tin}: {invoice.vendor_tin_number}</div>}
+                            {invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.regNew}: {invoice.vendor_reg_no_new}</div>}
+                            {invoice.vendor_reg_no && !invoice.vendor_reg_no_new && <div>{t.documents.vendorInfo.reg}: {invoice.vendor_reg_no}</div>}
+                            {invoice.vendor_reg_no_old && <div>{t.documents.vendorInfo.regOld}: {invoice.vendor_reg_no_old}</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm">{invoice.invoice_no || '-'}</td>
                   <td className="px-4 py-3 text-sm">
@@ -1958,64 +2091,10 @@ export const DocumentsListing = ({
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>
                   <td className="px-4 py-3 text-sm">{(invoice.total || 0).toFixed(2)}</td>
                   <td className="px-4 py-3">
-                    {editingRemarkId === invoice.id ? (
-                      <div className="flex min-w-[260px] items-start gap-2">
-                        <textarea
-                          value={remarkDraft}
-                          onChange={(e) => setRemarkDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              cancelRemarkEdit();
-                            }
-                          }}
-                          disabled={savingRemarkId === invoice.id}
-                          rows={3}
-                          autoFocus
-                          className="w-full min-w-[200px] rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
-                        />
-                        <div className="flex shrink-0 gap-1">
-                          <button
-                            type="button"
-                            onClick={() => saveRemarkEdit(invoice)}
-                            disabled={savingRemarkId === invoice.id}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                            title="Save remark"
-                            aria-label="Save remark"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelRemarkEdit}
-                            disabled={savingRemarkId === invoice.id}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
-                            title="Cancel remark edit"
-                            aria-label="Cancel remark edit"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex min-w-[220px] items-start gap-2">
-                        {invoice.remarks ? (
-                          <span className="inline-block max-w-[360px] whitespace-pre-wrap rounded-md bg-[var(--primary)] px-2 py-1 text-xs text-white">
-                            {invoice.remarks}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--muted-foreground)]">-</span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => startRemarkEdit(invoice)}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
-                          title="Edit remark"
-                          aria-label="Edit remark"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
+                    {renderPartyRemarkCell(invoice, 'samudra')}
+                  </td>
+                  <td className="px-4 py-3">
+                    {renderPartyRemarkCell(invoice, 'coey')}
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
@@ -2114,10 +2193,10 @@ export const DocumentsListing = ({
                           className={`inline-flex w-fit items-center px-2 py-1 text-xs rounded-md font-semibold ${getComplianceBadgeClass(invoice.compliance_status)}`}
                           title={
                             invoice.compliance_check_id
-                              ? `Compliance check #${invoice.compliance_check_id}`
+                              ? `${getComplianceStatusDescription(invoice.compliance_status)} Compliance check #${invoice.compliance_check_id}.`
                               : invoice.finance_record_id
-                              ? `Finance record #${invoice.finance_record_id}`
-                              : 'No compliance check found'
+                              ? `${getComplianceStatusDescription(invoice.compliance_status)} Finance record #${invoice.finance_record_id}.`
+                              : getComplianceStatusDescription(invoice.compliance_status)
                           }
                         >
                           {formatComplianceStatus(invoice.compliance_status)}
@@ -2157,10 +2236,10 @@ export const DocumentsListing = ({
                             onClick={() => handleManualCompliancePass(invoice)}
                             disabled={markingComplianceInvoiceId === invoice.id}
                             className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-[var(--hover-bg)]"
-                            title="Mark compliance as passed after manual review"
+                            title="Confirm that you reviewed the findings and accept this invoice"
                           >
                             <Check className="h-3 w-3" />
-                            {markingComplianceInvoiceId === invoice.id ? 'Approving...' : 'Approve manually'}
+                            {markingComplianceInvoiceId === invoice.id ? 'Saving review...' : 'Mark as reviewed'}
                           </button>
                         )}
                       </div>
@@ -2175,10 +2254,11 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="missing_do"
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-                              title="Missing DO number"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-red-700 bg-red-400 px-2 py-1 text-xs font-bold text-red-950 shadow-sm ring-1 ring-inset ring-red-700/40 dark:border-red-300 dark:bg-red-400 dark:text-red-950"
+                              title="A required Delivery Order document is not linked to this invoice"
                             >
-                              ⚠️ Missing DO
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              Missing DO
                             </span>
                           );
                         }
@@ -2186,10 +2266,11 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="missing_po"
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"
-                              title="Missing PO number"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-orange-600 bg-orange-200 px-2 py-1 text-xs font-semibold text-orange-950 dark:border-orange-400 dark:bg-orange-300 dark:text-orange-950"
+                              title="A required Purchase Order document is not linked to this sales invoice"
                             >
-                              ⚠️ Missing PO
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              Missing PO
                             </span>
                           );
                         }
@@ -2221,10 +2302,11 @@ export const DocumentsListing = ({
                           statusChecks.push(
                             <span
                               key="not_reconciled"
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
-                              title="Not bank reconciled"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-blue-600 bg-blue-200 px-2 py-1 text-xs font-semibold text-blue-950 dark:border-blue-300 dark:bg-blue-300 dark:text-blue-950"
+                              title="No matching bank transaction has been linked to this invoice yet"
                             >
-                              💰 Not Reconciled
+                              <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              No Bank Match
                             </span>
                           );
                         }

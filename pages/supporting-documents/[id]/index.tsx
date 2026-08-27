@@ -3,7 +3,18 @@
 import { AppLayout } from "@/components/layout";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import { getDocument, updateDocument, type Document, type StructuredFields, type UpdateDocumentRequest } from "@/services";
+import { Link2, Search, Trash2, X } from "lucide-react";
+import {
+  createDocumentLink,
+  deleteDocumentLink,
+  getDocument,
+  listInvoices,
+  updateDocument,
+  type Document,
+  type Invoice as InvoiceRecord,
+  type StructuredFields,
+  type UpdateDocumentRequest,
+} from "@/services";
 import { useToast } from "@/lib/toast";
 
 const DocumentDetail = () => {
@@ -16,6 +27,12 @@ const DocumentDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isLinkEditorOpen, setIsLinkEditorOpen] = useState(false);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceCandidates, setInvoiceCandidates] = useState<InvoiceRecord[]>([]);
+  const [isSearchingInvoices, setIsSearchingInvoices] = useState(false);
+  const [linkActionInvoiceId, setLinkActionInvoiceId] = useState<number | null>(null);
+  const [replacementLinkId, setReplacementLinkId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     reference_number: '',
     document_date: '',
@@ -124,6 +141,96 @@ const DocumentDetail = () => {
       showToast('Document updated successfully', { type: 'success' });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update document', { type: 'error' });
+    }
+  };
+
+  const searchInvoices = async (searchText = invoiceSearch) => {
+    setIsSearchingInvoices(true);
+    try {
+      const response = await listInvoices({
+        page: 1,
+        page_size: 20,
+        search: searchText.trim() || undefined,
+        direction:
+          document?.direction === 'AP' || document?.direction === 'AR'
+            ? [document.direction]
+            : undefined,
+      });
+      const rawData = response.data;
+      const candidates = Array.isArray(rawData)
+        ? rawData
+        : rawData?.invoices || [];
+      setInvoiceCandidates(candidates);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to search invoices', { type: 'error' });
+      setInvoiceCandidates([]);
+    } finally {
+      setIsSearchingInvoices(false);
+    }
+  };
+
+  const openLinkEditor = (linkIdToReplace?: number) => {
+    setReplacementLinkId(linkIdToReplace ?? null);
+    setIsLinkEditorOpen(true);
+    void searchInvoices('');
+  };
+
+  const closeLinkEditor = () => {
+    setIsLinkEditorOpen(false);
+    setReplacementLinkId(null);
+    setInvoiceSearch('');
+    setInvoiceCandidates([]);
+  };
+
+  const handleUnlink = async (linkId: number, invoiceLabel: string) => {
+    if (!window.confirm(`Unlink this document from ${invoiceLabel}? The document and invoice will not be deleted.`)) {
+      return;
+    }
+
+    setLinkActionInvoiceId(linkId);
+    try {
+      await deleteDocumentLink(linkId);
+      await loadDocumentData();
+      showToast(`Unlinked from ${invoiceLabel}`, { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to unlink document', { type: 'error' });
+    } finally {
+      setLinkActionInvoiceId(null);
+    }
+  };
+
+  const handleLinkToInvoice = async (invoice: InvoiceRecord) => {
+    if (!document || !invoice.document_id) {
+      showToast('This invoice is not ready for supporting-document links yet', { type: 'error' });
+      return;
+    }
+
+    setLinkActionInvoiceId(invoice.id);
+    try {
+      await createDocumentLink({
+        parent_document_id: invoice.document_id,
+        child_document_id: document.id,
+        link_type: 'SUPPORTING',
+        direction:
+          document.direction === 'AP' || document.direction === 'AR'
+            ? document.direction
+            : undefined,
+        notes: replacementLinkId
+          ? 'Manually relinked from supporting document detail'
+          : 'Manually linked from supporting document detail',
+      });
+
+      if (replacementLinkId) {
+        await deleteDocumentLink(replacementLinkId);
+      }
+
+      await loadDocumentData();
+      closeLinkEditor();
+      showToast(`Linked to ${invoice.invoice_no || `Invoice #${invoice.id}`}`, { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to link document', { type: 'error' });
+    } finally {
+      setLinkActionInvoiceId(null);
     }
   };
 
@@ -600,14 +707,39 @@ const DocumentDetail = () => {
             )}
 
             {/* Linked Invoices */}
-            {linkedInvoices.length > 0 && (
+            {(
               <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-                <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>
-                  Linked Invoices
-                </h3>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+                      Linked Invoices
+                    </h3>
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      Review AI-created links and correct them without deleting either document.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openLinkEditor()}
+                    className="inline-flex items-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--primary-hover)]"
+                  >
+                    <Link2 className="h-4 w-4" aria-hidden="true" />
+                    Link invoice
+                  </button>
+                </div>
+                {linkedInvoices.length === 0 && (
+                  <div className="rounded-md border border-dashed border-[var(--border)] p-5 text-center text-sm text-[var(--muted-foreground)]">
+                    This supporting document is not linked to an invoice.
+                  </div>
+                )}
                 <div className="space-y-3">
                   {linkedInvoices.map((invoice) => {
                     const invoiceLabel = invoice.invoice_no || `Invoice #${invoice.id}`;
+                    const supportingLink = document.child_links?.find(
+                      (link) =>
+                        link.parent_document_id === invoice.document_id &&
+                        link.link_type?.toUpperCase() === 'SUPPORTING'
+                    );
 
                     return (
                       <div
@@ -635,17 +767,129 @@ const DocumentDetail = () => {
                             <div>Total: {formatAmount(invoice.total, invoice.currency)}</div>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/documents/${invoice.id}`)}
-                          className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors text-sm font-medium whitespace-nowrap"
-                        >
-                          View Invoice
-                        </button>
+                        <div className="flex flex-wrap gap-2 sm:justify-end">
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/documents/${invoice.id}`)}
+                            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)]"
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => supportingLink && openLinkEditor(supportingLink.id)}
+                            disabled={!supportingLink || linkActionInvoiceId === supportingLink.id}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--primary)] px-3 py-2 text-sm font-medium text-[var(--primary)] transition-colors hover:bg-[var(--primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            title={supportingLink ? 'Replace this incorrect link with another invoice' : 'Link information is unavailable'}
+                          >
+                            <Link2 className="h-4 w-4" aria-hidden="true" />
+                            Change link
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => supportingLink && handleUnlink(supportingLink.id, invoiceLabel)}
+                            disabled={!supportingLink || linkActionInvoiceId === supportingLink.id}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-red-600 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                            title={supportingLink ? 'Remove this link only' : 'Link information is unavailable'}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            {linkActionInvoiceId === supportingLink?.id ? 'Unlinking...' : 'Unlink'}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {isLinkEditorOpen && (
+                  <div className="mt-5 rounded-lg border border-[var(--primary)] bg-[var(--muted)] p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold text-[var(--foreground)]">
+                          {replacementLinkId ? 'Choose the correct invoice' : 'Link to an invoice'}
+                        </h4>
+                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                          Search by invoice number or company name. The old link is removed only after the new link succeeds.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeLinkEditor}
+                        className="rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
+                        aria-label="Close invoice search"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <form
+                      className="flex gap-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void searchInvoices();
+                      }}
+                    >
+                      <input
+                        type="search"
+                        value={invoiceSearch}
+                        onChange={(event) => setInvoiceSearch(event.target.value)}
+                        placeholder="Invoice number or company name"
+                        className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] dark:bg-[var(--card)]"
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSearchingInvoices}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--primary-hover)] disabled:opacity-60"
+                      >
+                        <Search className="h-4 w-4" aria-hidden="true" />
+                        {isSearchingInvoices ? 'Searching...' : 'Search'}
+                      </button>
+                    </form>
+
+                    <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+                      {!isSearchingInvoices && invoiceCandidates.length === 0 && (
+                        <p className="py-4 text-center text-sm text-[var(--muted-foreground)]">No invoices found.</p>
+                      )}
+                      {invoiceCandidates.map((candidate) => {
+                        const isAlreadyLinked = linkedInvoices.some((invoice) => invoice.id === candidate.id);
+                        return (
+                          <div
+                            key={candidate.id}
+                            className="flex flex-col gap-3 rounded-md border border-[var(--border)] bg-white p-3 dark:bg-[var(--card)] sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="min-w-0 text-sm">
+                              <div className="font-semibold text-[var(--foreground)]">
+                                {candidate.invoice_no || `Invoice #${candidate.id}`}
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                                {candidate.vendor_name || candidate.customer_name || 'Company not available'}
+                                {' · '}
+                                {formatAmount(candidate.total, candidate.currency)}
+                                {candidate.invoice_date ? ` · ${new Date(candidate.invoice_date).toLocaleDateString()}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleLinkToInvoice(candidate)}
+                              disabled={!candidate.document_id || isAlreadyLinked || linkActionInvoiceId === candidate.id}
+                              className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                              title={!candidate.document_id ? 'Invoice linking data is not ready' : undefined}
+                            >
+                              {isAlreadyLinked
+                                ? 'Already linked'
+                                : linkActionInvoiceId === candidate.id
+                                ? 'Linking...'
+                                : replacementLinkId
+                                ? 'Use this invoice'
+                                : 'Link'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

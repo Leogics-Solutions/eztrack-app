@@ -74,6 +74,24 @@ export interface LinkedInvoice {
   original_filename?: string | null;
 }
 
+export type DocumentLinkType =
+  | 'SUPPORTING'
+  | 'QUANTITY_TO_FULFILMENT'
+  | 'FULFILMENT_TO_VALUE'
+  | 'VALUE_TO_PAYMENT'
+  | 'INTERNAL_TRANSFER'
+  | 'supporting';
+
+export interface DocumentLink {
+  id: number;
+  parent_document_id?: number;
+  child_document_id?: number;
+  link_type?: DocumentLinkType | string | null;
+  direction?: 'AP' | 'AR' | 'NEUTRAL' | null;
+  notes?: string | null;
+  created_at?: string | null;
+}
+
 export interface Document {
   id: number;
   document_type: DocumentTypeInfo;
@@ -98,8 +116,8 @@ export interface Document {
   is_linked?: boolean;
   linked_invoice_count?: number;
   linked_invoices?: LinkedInvoice[] | null;
-  parent_links?: unknown[] | null;
-  child_links?: unknown[] | null;
+  parent_links?: DocumentLink[] | null;
+  child_links?: DocumentLink[] | null;
   matches?: unknown[] | null;
   created_at?: string;
   updated_at?: string;
@@ -119,6 +137,7 @@ export interface ListDocumentsParams {
   min_amount?: number;
   max_amount?: number;
   upload_status?: string;
+  is_linked?: boolean;
 }
 
 export interface ListDocumentsData {
@@ -176,6 +195,9 @@ export async function listDocuments(
   }
   if (params?.upload_status) {
     queryParams.append('upload_status', params.upload_status);
+  }
+  if (params?.is_linked !== undefined) {
+    queryParams.append('is_linked', params.is_linked.toString());
   }
 
   const url = `${BASE_URL}/documents/records${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -329,4 +351,49 @@ export async function updateDocument(
   }
 
   return response.json();
+}
+
+export interface CreateDocumentLinkRequest {
+  parent_document_id: number;
+  child_document_id: number;
+  link_type: DocumentLinkType;
+  direction?: 'AP' | 'AR' | 'NEUTRAL';
+  notes?: string;
+}
+
+export interface DocumentLinkResponse {
+  success: boolean;
+  data: DocumentLink;
+  message: string;
+}
+
+/** Link a supporting document to an invoice's companion document. */
+export async function createDocumentLink(
+  data: CreateDocumentLinkRequest
+): Promise<DocumentLinkResponse> {
+  const response = await fetch(`${BASE_URL}/documents/links`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.detail || error.error || 'Failed to link document');
+  }
+
+  return response.json();
+}
+
+/** Remove a supporting-document link without deleting either document. */
+export async function deleteDocumentLink(linkId: number): Promise<void> {
+  const response = await fetch(`${BASE_URL}/documents/links/${linkId}`, {
+    method: 'DELETE',
+    headers: getScopedHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.detail || error.error || 'Failed to unlink document');
+  }
 }
