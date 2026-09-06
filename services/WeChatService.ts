@@ -9,6 +9,8 @@ export interface WeChatConnection {
   display_name?: string | null;
   client_version?: string | null;
   last_error?: string | null;
+  group_ids: string[];
+  message_listener_ready: boolean;
   is_active: boolean;
   created_at?: string | null;
 }

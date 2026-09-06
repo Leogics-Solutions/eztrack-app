@@ -55,6 +55,8 @@ export default function SqlAccountIntegrationPage() {
   const [invoicePrefix, setInvoicePrefix] = useState('IV-');
   const [invoiceNextNumber, setInvoiceNextNumber] = useState(1);
   const [invoicePadding, setInvoicePadding] = useState(5);
+  const [pairSource, setPairSource] = useState<'INDEPENDENT' | 'DO' | 'INVOICE'>('INDEPENDENT');
+  const [invoiceSource, setInvoiceSource] = useState<'SMARTDOK' | 'SQL_AUTO'>('SMARTDOK');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodMapping[]>([{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
 
   const load = useCallback(async () => {
@@ -84,6 +86,8 @@ export default function SqlAccountIntegrationPage() {
     setInvoicePrefix('IV-');
     setInvoiceNextNumber(1);
     setInvoicePadding(5);
+    setPairSource('INDEPENDENT');
+    setInvoiceSource('SMARTDOK');
     setPaymentMethods([{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
     setShowForm(false);
   }
@@ -108,6 +112,8 @@ export default function SqlAccountIntegrationPage() {
     setInvoicePrefix('IV-');
     setInvoiceNextNumber(1);
     setInvoicePadding(5);
+    setPairSource('INDEPENDENT');
+    setInvoiceSource('SMARTDOK');
     const configured = Array.isArray(item.config?.payment_methods) ? item.config.payment_methods as PaymentMethodMapping[] : [];
     setPaymentMethods(configured.length ? configured : [{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
     setShowForm(true);
@@ -122,6 +128,8 @@ export default function SqlAccountIntegrationPage() {
         setInvoicePrefix(numbering.invoice.prefix);
         setInvoiceNextNumber(numbering.invoice.next_number);
         setInvoicePadding(numbering.invoice.padding);
+        setPairSource(numbering.pair_source || 'INDEPENDENT');
+        setInvoiceSource(numbering.invoice_source || 'SMARTDOK');
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load document numbering.');
@@ -158,6 +166,8 @@ export default function SqlAccountIntegrationPage() {
       await saveSqlAccountNumberSeries(savedConnection.id, {
         delivery_order: { prefix: doPrefix.trim(), next_number: doNextNumber, padding: doPadding },
         invoice: { prefix: invoicePrefix.trim(), next_number: invoiceNextNumber, padding: invoicePadding },
+        pair_source: pairSource,
+        invoice_source: invoiceSource,
       });
       resetForm();
       await load();
@@ -245,6 +255,29 @@ export default function SqlAccountIntegrationPage() {
             <label className="text-xs font-semibold">Next invoice number<input required min={1} type="number" value={invoiceNextNumber} onChange={(event) => setInvoiceNextNumber(Math.max(1, Number(event.target.value) || 1))} className={`${inputClass} mt-1`} /></label>
             <label className="text-xs font-semibold">Invoice digits<input required min={1} max={12} type="number" value={invoicePadding} onChange={(event) => setInvoicePadding(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} className={`${inputClass} mt-1`} /></label>
           </div>
+          <label className="mt-4 block text-xs font-semibold">Keep DO and Invoice numbers linked
+            <select disabled={invoiceSource === 'SQL_AUTO'} value={pairSource} onChange={(event) => setPairSource(event.target.value as 'INDEPENDENT' | 'DO' | 'INVOICE')} className={`${inputClass} mt-1 disabled:opacity-60`}>
+              <option value="INDEPENDENT">No — use each SQL counter independently</option>
+              <option value="INVOICE">Invoice drives DO — copy the invoice counter to DO</option>
+              <option value="DO">DO drives Invoice — copy the DO counter to Invoice</option>
+            </select>
+            <span className="mt-1 block font-normal leading-5 text-[var(--muted-foreground)]">Choose a linked mode only when this SQL company requires both documents to share the same numeric reference.</span>
+          </label>
+          <label className="mt-4 block text-xs font-semibold">Invoice number authority
+            <select
+              value={invoiceSource}
+              onChange={(event) => {
+                const source = event.target.value as 'SMARTDOK' | 'SQL_AUTO';
+                setInvoiceSource(source);
+                if (source === 'SQL_AUTO') setPairSource('INDEPENDENT');
+              }}
+              className={`${inputClass} mt-1`}
+            >
+              <option value="SMARTDOK">Smartdok reserves a fixed invoice number</option>
+              <option value="SQL_AUTO">SQL Accounting assigns it from the invoice date</option>
+            </select>
+            <span className="mt-1 block font-normal leading-5 text-[var(--muted-foreground)]">SQL auto mode sends &lt;&lt;New&gt;&gt; during approval and records the actual number returned by SQL. The Delivery Order remains the retry-safe reference.</span>
+          </label>
         </div>
         <div className="mt-5 rounded-xl border border-[var(--border)] p-4">
           <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">Customer Payment bank mappings</h3><p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">Map a slip’s destination bank to an existing SQL Accounting payment-method code. At least one mapping is required before payment posting.</p></div><button type="button" onClick={() => setPaymentMethods((current) => [...current, { code: '', label: '', bank_account: '', is_default: false }])} className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold"><Plus className="h-3.5 w-3.5" /> Add</button></div>

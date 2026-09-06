@@ -39,6 +39,8 @@ export interface SqlAccountNumberSeries {
   configured: boolean;
   delivery_order: SqlAccountNumberSeriesItem;
   invoice: SqlAccountNumberSeriesItem;
+  pair_source: 'INDEPENDENT' | 'DO' | 'INVOICE';
+  invoice_source: 'SMARTDOK' | 'SQL_AUTO';
 }
 
 export async function listSqlAccountConnections(): Promise<SqlAccountConnectionListResponse> {
@@ -73,7 +75,7 @@ export async function getSqlAccountNumberSeries(id: number): Promise<SqlAccountN
 
 export async function saveSqlAccountNumberSeries(
   id: number,
-  input: Pick<SqlAccountNumberSeries, 'delivery_order' | 'invoice'>,
+  input: Pick<SqlAccountNumberSeries, 'delivery_order' | 'invoice' | 'pair_source' | 'invoice_source'>,
 ): Promise<SqlAccountNumberSeries> {
   return handle(await fetch(`${BASE_URL}/sql-account/connections/${id}/number-series`, {
     method: 'PUT', headers: getScopedHeaders(), body: JSON.stringify(input),

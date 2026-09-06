@@ -64,6 +64,7 @@ export interface CaptureAttachment {
   content_type?: string | null;
   size_bytes?: number | null;
   external_id?: string | null;
+  download_status?: string | null;
 }
 
 export interface CaptureAttachmentPreview {
@@ -79,6 +80,19 @@ export interface CaptureEvent {
   connection_id?: number | null;
   external_id: string;
   sender?: string | null;
+  sender_name?: string | null;
+  group_name?: string | null;
+  company_name?: string | null;
+  channel_message_id?: string | null;
+  quoted_message_id?: string | null;
+  quoted_channel_message_id?: string | null;
+  quoted_type?: string | null;
+  quoted_preview?: string | null;
+  quoted_sender_name?: string | null;
+  automation_run_id?: number | null;
+  review_url?: string | null;
+  run_status?: string | null;
+  can_create_payment_review?: boolean;
   recipients: string[];
   subject?: string | null;
   body_preview?: string | null;
@@ -111,10 +125,20 @@ export interface CaptureWorkItem {
   source_type: string;
   title: string;
   sender?: string | null;
+  sender_name?: string | null;
+  group_name?: string | null;
+  company_name?: string | null;
+  case_number?: string | null;
+  pic_note?: string | null;
+  quoted_message_id?: string | null;
+  quoted_type?: string | null;
+  quoted_preview?: string | null;
   preview?: string | null;
   filenames: string[];
   reason?: string | null;
   workflow_name: string;
+  workflow_key?: string;
+  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | null;
   capture_event_id?: number | null;
   job_id?: string | null;
   result_type?: string | null;
@@ -124,6 +148,12 @@ export interface CaptureWorkItem {
   requires_attention: boolean;
   received_at: string;
   updated_at: string;
+  /** A review is usually several messages: the slip, then the message saying
+   *  what to do with it. They are one piece of work and share one row. */
+  message_count?: number;
+  messages?: string[];
+  capture_event_ids?: number[];
+  missing_file_event_ids?: number[];
 }
 
 export interface CaptureWorkInboxResponse {
@@ -133,6 +163,12 @@ export interface CaptureWorkInboxResponse {
     to_review: number;
     in_progress: number;
     completed: number;
+  };
+  workflow_counts: {
+    all: number;
+    order_to_invoice: number;
+    payment_knock_off: number;
+    other: number;
   };
   total: number;
   page: number;
@@ -317,6 +353,7 @@ export async function listCaptureWorkInbox(params: {
   pageSize?: number;
   status?: string;
   sourceType?: string;
+  workflow?: string;
   search?: string;
   includeIgnored?: boolean;
 } = {}): Promise<CaptureWorkInboxResponse> {
@@ -326,6 +363,7 @@ export async function listCaptureWorkInbox(params: {
   query.set('page_size', String(params.pageSize || 30));
   if (params.status && params.status !== 'ALL') query.set('status', params.status);
   if (params.sourceType && params.sourceType !== 'ALL') query.set('source_type', params.sourceType);
+  if (params.workflow && params.workflow !== 'ALL') query.set('workflow', params.workflow);
   if (params.search) query.set('search', params.search);
   if (params.includeIgnored) query.set('include_ignored', 'true');
 
@@ -337,12 +375,13 @@ export async function listCaptureWorkInbox(params: {
 
 export async function updateCaptureEventsBulkDecision(
   eventIds: number[],
-  action: 'IGNORE' | 'RESTORE'
+  action: 'IGNORE' | 'RESTORE',
+  reason?: string,
 ): Promise<{ requested_count: number; updated_count: number; action: 'IGNORE' | 'RESTORE' }> {
   const response = await fetch(`${BASE_URL}/capture/inbox/bulk-decision`, {
     method: 'PATCH',
     headers: getScopedHeaders(),
-    body: JSON.stringify({ event_ids: eventIds, action }),
+    body: JSON.stringify({ event_ids: eventIds, action, reason }),
   });
   return handle(response);
 }
@@ -352,6 +391,32 @@ export async function getCaptureEvent(eventId: number): Promise<CaptureEvent> {
     headers: getScopedHeaders(),
   });
   return handle<CaptureEvent>(response);
+}
+
+export async function uploadMissingCaptureAttachment(
+  eventId: number,
+  file: File,
+): Promise<CaptureEvent> {
+  const form = new FormData();
+  form.set('file', file);
+  const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}/missing-attachment`, {
+    method: 'POST',
+    headers: getScopedHeadersForFormData(),
+    body: form,
+  });
+  return handle<CaptureEvent>(response);
+}
+
+export async function createCapturePaymentReview(eventId: number): Promise<{
+  run_id: number;
+  review_url: string;
+  status: string;
+}> {
+  const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}/payment-review`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+  });
+  return handle(response);
 }
 
 export async function getCaptureAttachmentPreview(
@@ -367,12 +432,13 @@ export async function getCaptureAttachmentPreview(
 
 export async function updateCaptureEventDecision(
   eventId: number,
-  action: 'IGNORE' | 'RESTORE'
+  action: 'IGNORE' | 'RESTORE',
+  reason?: string,
 ): Promise<CaptureEvent> {
   const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}`, {
     method: 'PATCH',
     headers: getScopedHeaders(),
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, reason }),
   });
   return handle<CaptureEvent>(response);
 }

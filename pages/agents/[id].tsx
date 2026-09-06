@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
+import { AutomationStatusBadge } from '@/components/automation/AutomationStatus';
 import { useLanguage } from '@/lib/i18n';
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,24 +11,6 @@ import {
   getAgent, listRuns, uploadRun,
   type Agent, type AgentRunListItem,
 } from '@/services/AgentsService';
-
-const STATUS_STYLES: Record<string, string> = {
-  RECEIVED: 'bg-slate-100 text-slate-700',
-  EXTRACTING: 'bg-amber-100 text-amber-800',
-  PENDING_REVIEW: 'bg-blue-100 text-blue-800',
-  DRAFT_GENERATED: 'bg-indigo-100 text-indigo-800',
-  COMPLETED: 'bg-green-100 text-green-800',
-  FAILED: 'bg-red-100 text-red-800',
-  REJECTED: 'bg-red-100 text-red-800',
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`text-xs rounded-full px-2 py-0.5 ${STATUS_STYLES[status] || 'bg-[var(--muted)] text-[var(--muted-foreground)]'}`}>
-      {status.replace('_', ' ').toLowerCase()}
-    </span>
-  );
-}
 
 export default function AgentDetailPage() {
   const { t } = useLanguage();
@@ -96,7 +79,7 @@ export default function AgentDetailPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => router.push(`/agents/${agent.id}/edit`)} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--hover-bg)]"><Pencil className="h-3.5 w-3.5" /> Edit configuration</button>
-                <StatusBadge status={agent.is_active ? 'COMPLETED' : 'RECEIVED'} />
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${agent.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{agent.is_active ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-3 text-sm">
@@ -175,7 +158,7 @@ export default function AgentDetailPage() {
                       <td className="px-4 py-2">{r.id}</td>
                       <td className="px-4 py-2">{r.source_channel}</td>
                       <td className="px-4 py-2">{r.source_filename || '—'}</td>
-                      <td className="px-4 py-2"><StatusBadge status={r.status} /></td>
+                      <td className="px-4 py-2"><AutomationStatusBadge status={r.status} destination={r.approval_destination || 'SQL'} /></td>
                       <td className="px-4 py-2">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
                     </tr>
                   ))}

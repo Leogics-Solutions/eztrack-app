@@ -2,7 +2,14 @@
 
 import { AppLayout } from '@/components/layout';
 import { CaptureShell } from '@/components/capture/CaptureShell';
+import { AutomationStatusBadge, resolveAutomationStatus } from '@/components/automation/AutomationStatus';
 import { useOrganization } from '@/lib/OrganizationContext';
+import {
+  normalizeWorkstreamKey,
+  WORKSTREAM_BADGE_STYLES,
+  WORKSTREAM_LABELS,
+} from '@/lib/workstreams';
+import { useStickyWorkstream } from '@/lib/useStickyWorkstream';
 import {
   listCaptureWorkInbox,
   updateCaptureEventDecision,
@@ -15,14 +22,17 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleDollarSign,
   Clock3,
   File,
   FolderOpen,
   Info,
   Inbox,
+  Layers3,
   Mail,
   MessageCircle,
   RefreshCw,
+  ReceiptText,
   Search,
   Settings2,
   Upload,
@@ -33,16 +43,25 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 const EMPTY_RESPONSE: CaptureWorkInboxResponse = {
   items: [],
   counts: { all: 0, to_review: 0, in_progress: 0, completed: 0 },
+  workflow_counts: { all: 0, order_to_invoice: 0, payment_knock_off: 0, other: 0 },
   total: 0,
   page: 1,
   page_size: 30,
 };
+
+const WORKSTREAM_TABS = [
+  { value: 'ALL' as const, icon: Layers3, countKey: 'all' as const },
+  { value: 'order_to_invoice' as const, icon: ReceiptText, countKey: 'order_to_invoice' as const },
+  { value: 'payment_knock_off' as const, icon: CircleDollarSign, countKey: 'payment_knock_off' as const },
+  { value: 'other' as const, icon: Inbox, countKey: 'other' as const },
+];
 
 const VIEW_TABS: Array<{
   value: CaptureInboxView;
@@ -55,16 +74,10 @@ const VIEW_TABS: Array<{
   { value: 'COMPLETED', label: 'Completed', countKey: 'completed', icon: CheckCircle2 },
 ];
 
-const STAGE_STYLES = {
-  TO_REVIEW: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  IN_PROGRESS: 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-100',
-  COMPLETED: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100',
-};
-
 function sourceIcon(source: string) {
   const props = { className: 'h-4 w-4' };
   if (source === 'GMAIL' || source === 'INBOUND_EMAIL') return <Mail {...props} />;
-  if (source === 'WHATSAPP') return <MessageCircle {...props} />;
+  if (source === 'WHATSAPP' || source === 'WECHAT') return <MessageCircle {...props} />;
   if (source === 'DRIVE') return <FolderOpen {...props} />;
   return <Upload {...props} />;
 }
@@ -74,7 +87,25 @@ function humanize(value: string) {
 }
 
 function primaryDescription(item: CaptureWorkItem) {
-  return [item.sender, item.preview].filter(Boolean).join(' · ') || 'File received for processing';
+  const companyAlreadyTitlesCard = Boolean(
+    item.company_name && item.title.trim().toLowerCase() === item.company_name.trim().toLowerCase(),
+  );
+  const identity = [
+    item.group_name,
+    companyAlreadyTitlesCard ? null : item.company_name,
+    item.sender_name || item.sender,
+  ].filter(Boolean).join(' · ');
+  return [identity, item.preview].filter(Boolean).join(' · ') || 'File received for processing';
+}
+
+function displayStatus(item: CaptureWorkItem) {
+  const raw = String(item.status || '').toUpperCase();
+  if (['FILTERED', 'IGNORED', 'INCOMPLETE'].includes(raw) || raw.includes('FAILED') || raw.includes('ERROR')) {
+    return raw;
+  }
+  if (item.stage === 'TO_REVIEW') return 'PENDING_REVIEW';
+  if (item.stage === 'COMPLETED') return 'COMPLETED';
+  return raw;
 }
 
 function formatMalaysiaDateTime(value: string) {
@@ -89,6 +120,7 @@ export default function CaptureInboxPage() {
   const { selectedOrganizationId } = useOrganization();
   const [response, setResponse] = useState<CaptureWorkInboxResponse>(EMPTY_RESPONSE);
   const [view, setView] = useState<CaptureInboxView>('ALL');
+  const [workstream, setWorkstream] = useStickyWorkstream('smartdok.inbox.workstream');
   const [sourceFilter, setSourceFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
@@ -100,8 +132,10 @@ export default function CaptureInboxPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [includeIgnored, setIncludeIgnored] = useState(false);
+  const requestSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     try {
       const next = await listCaptureWorkInbox({
@@ -109,17 +143,20 @@ export default function CaptureInboxPage() {
         page,
         pageSize,
         sourceType: sourceFilter,
+        workflow: workstream,
         search: deferredSearch,
         includeIgnored: view === 'COMPLETED' && includeIgnored,
       });
+      if (requestId !== requestSequence.current) return;
       setResponse(next);
       setError(null);
     } catch (reason) {
+      if (requestId !== requestSequence.current) return;
       setError(reason instanceof Error ? reason.message : 'Could not load the Inbox.');
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [deferredSearch, includeIgnored, page, pageSize, sourceFilter, view]);
+  }, [deferredSearch, includeIgnored, page, pageSize, sourceFilter, view, workstream]);
 
   useEffect(() => {
     void load();
@@ -127,23 +164,33 @@ export default function CaptureInboxPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [deferredSearch, pageSize, sourceFilter, view, selectedOrganizationId]);
+  }, [deferredSearch, pageSize, sourceFilter, view, workstream, selectedOrganizationId]);
 
   const totalPages = Math.max(1, Math.ceil(response.total / response.page_size));
   const firstItem = response.total === 0 ? 0 : (response.page - 1) * response.page_size + 1;
   const lastItem = Math.min(response.page * response.page_size, response.total);
 
   const emptyCopy = useMemo(() => {
-    if (view === 'IN_PROGRESS') return ['Nothing is processing', 'New uploads and channel items appear here while Smartdok is working.'];
+    const selectedWorkflow = workstream === 'ALL' ? '' : ` for ${WORKSTREAM_LABELS[workstream]}`;
+    if (view === 'IN_PROGRESS') return [`Nothing is processing${selectedWorkflow}`, 'New uploads and channel items appear here while Smartdok is working.'];
     if (view === 'COMPLETED') return ['No completed work yet', 'Filtered, ignored and completed items will appear here.'];
-    return ['Nothing has arrived yet', 'New uploads and connected-channel messages will appear here.'];
-  }, [view]);
+    return [`Nothing has arrived${selectedWorkflow}`, 'New uploads and connected-channel messages will appear here.'];
+  }, [view, workstream]);
+
+  const visibleItems = useMemo(
+    () => workstream === 'ALL'
+      ? response.items
+      : response.items.filter((item) => (
+        normalizeWorkstreamKey(item.workflow_key, item.workflow_name) === workstream
+      )),
+    [response.items, workstream],
+  );
 
   const selectableEventIds = useMemo(
-    () => response.items
+    () => visibleItems
       .filter((item) => view === 'ALL' && item.capture_event_id && item.stage !== 'COMPLETED')
       .map((item) => item.capture_event_id as number),
-    [response.items, view],
+    [visibleItems, view],
   );
   const allPageItemsSelected = selectableEventIds.length > 0
     && selectableEventIds.every((eventId) => selectedEventIds.has(eventId));
@@ -169,9 +216,11 @@ export default function CaptureInboxPage() {
   const ignoreSelected = async () => {
     const eventIds = Array.from(selectedEventIds);
     if (eventIds.length === 0) return;
+    const reason = window.prompt('Why are these messages being ignored? This note will be kept for the PIC audit trail.')?.trim();
+    if (!reason) return;
     setBulkUpdating(true);
     try {
-      await updateCaptureEventsBulkDecision(eventIds, 'IGNORE');
+      await updateCaptureEventsBulkDecision(eventIds, 'IGNORE', reason);
       setSelectedEventIds(new Set());
       await load();
     } catch (reason) {
@@ -182,9 +231,13 @@ export default function CaptureInboxPage() {
   };
 
   const decide = async (eventId: number, action: 'IGNORE' | 'RESTORE') => {
+    const reason = action === 'IGNORE'
+      ? window.prompt('Why is this message being ignored? This note will be kept for the PIC audit trail.')?.trim()
+      : undefined;
+    if (action === 'IGNORE' && !reason) return;
     setUpdatingId(eventId);
     try {
-      await updateCaptureEventDecision(eventId, action);
+      await updateCaptureEventDecision(eventId, action, reason);
       setSelectedEventIds((current) => {
         const next = new Set(current);
         next.delete(eventId);
@@ -221,6 +274,34 @@ export default function CaptureInboxPage() {
         )}
       >
         <div className="space-y-6">
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-[var(--foreground)]">Choose a workflow</p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">Keep purchase-order work separate from payment knock-off messages.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {WORKSTREAM_TABS.filter((tab) => tab.value !== 'other' || response.workflow_counts.other > 0 || workstream === 'other').map((tab) => {
+              const Icon = tab.icon;
+              const active = workstream === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => {
+                    setWorkstream(tab.value);
+                    setPage(1);
+                    setSelectedEventIds(new Set());
+                  }}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-3 text-left transition ${active ? 'border-cyan-500 bg-cyan-500/10 ring-1 ring-cyan-500/30' : 'border-[var(--border)] hover:bg-[var(--muted)]/50'}`}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4" />{WORKSTREAM_LABELS[tab.value]}</span>
+                  <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs font-bold">{response.workflow_counts[tab.countKey]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         <div className="grid gap-3 md:grid-cols-3">
           {VIEW_TABS.map((tab) => {
@@ -264,7 +345,7 @@ export default function CaptureInboxPage() {
                 </p>
               </div>
             </div>
-            <Link href="/review" className="inline-flex shrink-0 items-center justify-center rounded-lg bg-cyan-700 px-3 py-2 font-semibold text-white hover:bg-cyan-800">Open Review</Link>
+            <Link href={workstream === 'ALL' ? '/review' : `/review?workflow=${workstream}`} className="inline-flex shrink-0 items-center justify-center rounded-lg bg-cyan-700 px-3 py-2 font-semibold text-white hover:bg-cyan-800">Open Review</Link>
           </div>
         )}
 
@@ -297,6 +378,7 @@ export default function CaptureInboxPage() {
               <option value="INBOUND_EMAIL">Inbound email</option>
               <option value="GMAIL">Gmail</option>
               <option value="WHATSAPP">WhatsApp</option>
+              <option value="WECHAT">WeChat</option>
               <option value="DRIVE">Google Drive</option>
               <option value="TELEGRAM">Telegram</option>
             </select>
@@ -357,9 +439,9 @@ export default function CaptureInboxPage() {
             </div>
           )}
 
-          {loading && response.items.length === 0 ? (
+          {loading && visibleItems.length === 0 ? (
             <div className="p-12 text-center text-sm text-[var(--muted-foreground)]">Loading Inbox…</div>
-          ) : response.items.length === 0 ? (
+          ) : visibleItems.length === 0 ? (
             <div className="p-12 text-center">
               <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
               <h2 className="mt-3 font-semibold">{emptyCopy[0]}</h2>
@@ -367,12 +449,20 @@ export default function CaptureInboxPage() {
             </div>
           ) : (
             <div className="divide-y divide-[var(--border)]">
-              {response.items.map((item) => {
+              {visibleItems.map((item) => {
+                const itemWorkstream = normalizeWorkstreamKey(item.workflow_key, item.workflow_name);
+                const approvalDestination = item.approval_destination || 'SQL';
+                const effectiveStatus = displayStatus(item);
+                const statusDefinition = resolveAutomationStatus(effectiveStatus, approvalDestination);
                 // Older Inbox records predate review_run_ids.  Their result_id is
                 // still the review task ID, so surface it in exactly the same way.
+                const resultIsReview = ['agent_run', 'automation_run'].includes(
+                  String(item.result_type || '').toLowerCase(),
+                );
                 const reviewRunIds = item.review_run_ids?.length
                   ? item.review_run_ids
-                  : item.result_id ? [item.result_id] : [];
+                  : item.result_id && resultIsReview ? [item.result_id] : [];
+                const missingFileEventIds = item.missing_file_event_ids || [];
 
                 return (
                 <article
@@ -396,13 +486,41 @@ export default function CaptureInboxPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate font-medium">{item.title}</p>
-                      <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
-                        {item.workflow_name}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${WORKSTREAM_BADGE_STYLES[itemWorkstream]}`}>
+                        {WORKSTREAM_LABELS[itemWorkstream]}
                       </span>
+                      {reviewRunIds.map((runId) => (
+                        <span key={runId} className="rounded-full border border-cyan-300 bg-cyan-50 px-2 py-0.5 text-xs font-bold text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
+                          Review #{runId}
+                        </span>
+                      ))}
+                      {item.case_number && (
+                        <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                          Case {item.case_number}
+                        </span>
+                      )}
                     </div>
+                    {itemWorkstream === 'other' && item.workflow_name && item.workflow_name !== WORKSTREAM_LABELS[itemWorkstream] && (
+                      <p className="mt-1 truncate text-xs font-medium text-[var(--muted-foreground)]">{item.workflow_name}</p>
+                    )}
                     <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">
                       {primaryDescription(item)}
                     </p>
+                    {(item.message_count ?? 1) > 1 && (item.messages?.length ?? 0) > 0 && (
+                      <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                          {item.message_count} messages in this {item.result_type === 'intake_bundle' ? 'payment' : 'review'}
+                        </p>
+                        <ul className="mt-1 space-y-0.5">
+                          {item.messages!.map((line, index) => (
+                            <li key={index} className="truncate text-xs text-[var(--muted-foreground)]">
+                              <span className="mr-1.5 text-[var(--muted-foreground)]/60">{index + 1}.</span>
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {item.filenames.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {item.filenames.slice(0, 3).map((filename) => (
@@ -415,26 +533,23 @@ export default function CaptureInboxPage() {
                         )}
                       </div>
                     )}
-                    {reviewRunIds.length > 0 && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-semibold text-[var(--muted-foreground)]">Open this review:</span>
-                        {reviewRunIds.map((runId) => (
-                          <Link key={runId} href={`/review/${runId}`} className="rounded-md bg-cyan-700 px-3 py-1.5 font-bold text-white shadow-sm ring-2 ring-cyan-200 hover:bg-cyan-800 dark:ring-cyan-900">
-                            Review #{runId}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
                     {item.reason && (
-                      <p className={`mt-2 line-clamp-2 text-xs ${item.status === 'FAILED' ? 'text-red-700 dark:text-red-300' : 'text-[var(--muted-foreground)]'}`}>
+                      <p className={`mt-2 line-clamp-2 text-xs ${['FAILED', 'INCOMPLETE'].includes(item.status) ? 'text-red-700 dark:text-red-300' : 'text-[var(--muted-foreground)]'}`}>
                         {item.reason}
                       </p>
                     )}
                   </div>
                   <div>
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${STAGE_STYLES[item.stage]}`}>
-                      {item.status_label}
-                    </span>
+                    <AutomationStatusBadge status={effectiveStatus} destination={approvalDestination} />
+                    {item.status_label !== statusDefinition.label && (
+                      <p className="mt-1 text-xs font-semibold leading-5 text-[var(--foreground)]">{item.status_label}</p>
+                    )}
+                    {item.pic_note && (
+                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                        PIC note: {item.pic_note}
+                      </p>
+                    )}
+                    <p className="text-xs leading-5 text-[var(--muted-foreground)]">{statusDefinition.meaning}</p>
                     <p className="hidden">
                       {humanize(item.source_type)} · {new Date(item.received_at).toLocaleString()}
                     </p>
@@ -449,12 +564,24 @@ export default function CaptureInboxPage() {
                           Open Review #{runId}
                         </Link>
                       ))
+                    ) : missingFileEventIds.length > 0 ? (
+                      missingFileEventIds.map((eventId, index) => (
+                        <Link key={eventId} href={`/capture/messages/${eventId}`} className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-cyan-800">
+                          Upload missing file{missingFileEventIds.length > 1 ? ` ${index + 1}` : ''}
+                        </Link>
+                      ))
                     ) : item.review_url && (
                       <Link
                         href={item.review_url}
                         className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-cyan-800"
                       >
-                        {item.result_id ? `Open Review #${item.result_id}` : 'Open review'}
+                        {item.result_type === 'intake_bundle'
+                          ? 'Open payment context'
+                          : item.status === 'INCOMPLETE'
+                            ? 'Upload missing file'
+                            : item.result_id
+                              ? `Open Review #${item.result_id}`
+                              : 'Open review'}
                       </Link>
                     )}
                     {item.capture_event_id && item.stage !== 'COMPLETED' && (

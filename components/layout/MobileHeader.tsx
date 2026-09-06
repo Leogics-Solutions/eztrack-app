@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, Menu, Plus } from 'lucide-react';
+import { AttentionMenu } from './AttentionMenu';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { CompanySwitcher } from './CompanySwitcher';
@@ -91,6 +92,7 @@ export function MobileHeader({ pageName = 'Dashboard', onMenuClick }: MobileHead
 
       {/* Right side - Compact controls */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        <AttentionMenu />
         {/* Add Documents Button - Icon only */}
         <button
           className="flex items-center justify-center rounded-lg p-2 transition-colors"

@@ -113,6 +113,8 @@ export interface AgentRunForex {
   expected_total?: number | null;
   matches?: boolean | null;
   raw?: string | null;
+  inferred_from_declared_myr_total?: boolean;
+  target_source?: string | null;
 }
 
 export interface AgentRunData {
@@ -208,7 +210,18 @@ export interface AgentRunEvent {
   created_at?: string | null;
 }
 
+export interface AgentRunBundle {
+  total: number;
+  index: number | null;
+  run_ids: number[];
+  pending_run_ids: number[];
+  pending_count: number;
+  all_ready: boolean;
+  members: { id: number; label?: string | null; status: string; ready: boolean }[];
+}
+
 export interface AgentRun {
+  bundle?: AgentRunBundle | null;
   id: number;
   agent_id: number;
   user_id: number;
@@ -227,6 +240,7 @@ export interface AgentRun {
   extracted_data?: AgentRunData | null;
   corrected_data?: AgentRunData | null;
   output_refs?: Record<string, unknown> | null;
+  awaiting_instruction?: boolean;
   error_message?: string | null;
   received_at?: string | null;
   extracted_at?: string | null;
@@ -246,9 +260,12 @@ export interface AgentRunListItem {
   error_message?: string | null;
   po_label?: string | null;
   agent_name?: string | null;
+  template_key?: string | null;
   issuing_company?: string | null;
+  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | null;
   source_bundle_index?: number | null;
   source_bundle_count?: number | null;
+  awaiting_instruction?: boolean;
   received_at?: string | null;
   completed_at?: string | null;
   updated_at?: string | null;
@@ -456,10 +473,17 @@ export async function uploadRun(agentId: number, file: File, caption = ''): Prom
   return handle<AgentRun>(res);
 }
 
-export async function uploadPaymentBundle(agentId: number, files: File[], caption: string): Promise<AgentRun> {
+export async function uploadPaymentBundle(
+  agentId: number,
+  files: File[],
+  caption: string,
+  context: { channelId: number; sqlConnectionId: number },
+): Promise<AgentRun> {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
   form.append('caption', caption);
+  form.append('channel_id', String(context.channelId));
+  form.append('sql_connection_id', String(context.sqlConnectionId));
   const res = await fetch(`${BASE_URL}/agents/${agentId}/runs/payment-bundle`, { method: 'POST', headers: getScopedHeadersForFormData(), body: form });
   return handle<AgentRun>(res);
 }
@@ -471,9 +495,26 @@ export async function reviewRun(runId: number, correctedData: AgentRunData): Pro
   return handle<AgentRun>(res);
 }
 
+/** Re-run AI extraction against the retained PO/message without creating another review item. */
+export async function reanalyzeRun(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/reanalyze`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
 export async function refreshPaymentPreview(runId: number): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/refresh-payment-preview`, {
     method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function addPaymentEvidence(runId: number, files: File[]): Promise<AgentRun> {
+  const form = new FormData();
+  files.forEach((file) => form.append('files', file));
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/payment-evidence`, {
+    method: 'POST', headers: getScopedHeadersForFormData(), body: form,
   });
   return handle<AgentRun>(res);
 }
@@ -492,6 +533,18 @@ export async function generateRun(runId: number): Promise<AgentRun> {
   return handle<AgentRun>(res);
 }
 
+export async function updateRunDocumentNumbers(
+  runId: number,
+  deliveryOrderNo: string,
+  invoiceNo: string,
+): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/document-numbers`, {
+    method: 'PATCH', headers: getScopedHeaders(),
+    body: JSON.stringify({ delivery_order_no: deliveryOrderNo, invoice_no: invoiceNo }),
+  });
+  return handle<AgentRun>(res);
+}
+
 export async function approveRun(runId: number, correctedData?: AgentRunData): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/approve`, {
     method: 'POST', headers: getScopedHeaders(),
@@ -502,6 +555,13 @@ export async function approveRun(runId: number, correctedData?: AgentRunData): P
 
 export async function sendRunToWhatsApp(runId: number): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/send-whatsapp`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function verifySupplierDocuments(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/verify-supplier-documents`, {
     method: 'POST', headers: getScopedHeaders(),
   });
   return handle<AgentRun>(res);

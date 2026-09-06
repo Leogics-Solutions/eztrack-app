@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/i18n';
 import { Moon, Sun, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { AttentionMenu } from './AttentionMenu';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 // import { LanguageSwitcher } from './LanguageSwitcher';
@@ -108,6 +109,9 @@ export function Header({ pageName = 'Dashboard', isCollapsed, onToggle }: Header
       <div className="flex items-center gap-6">
         {/* Language Switcher */}
         {/* <LanguageSwitcher /> */}
+
+        {/* Items waiting on a person, each linking to its own Review page */}
+        <AttentionMenu />
 
         {/* Theme Toggle */}
         <button

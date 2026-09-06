@@ -70,6 +70,13 @@ import { useEffect, useMemo, useState } from 'react';
 
 type SectionKey = 'source' | 'instructions' | 'workflow' | 'approval' | 'outputs' | 'test';
 type WorkflowFocus = 'read' | 'process' | 'checks' | 'knowledge';
+type PaymentShadowContext = {
+  key: string;
+  channelId: number;
+  sqlConnectionId: number;
+  label: string;
+  detail: string;
+};
 
 const SECTIONS = [
   ['source', 'Source', 'Where work arrives', MessageCircle],
@@ -118,6 +125,7 @@ const AGENT_TOOL_OPTIONS: Array<[AutomationAgentTool, string, string]> = [
   ['SQL_CREATE_CUSTOMER_PAYMENT', 'Create Customer Payment / OR', 'Post approved receipt allocations and knock-offs'],
   ['SQL_GET_RECEIPT_PDF', 'Retrieve official OR PDF', 'Export the official receipt from SQL Accounting'],
   ['SOURCE_SEND_DOCUMENTS', 'Return documents to source', 'Send official output files to the originating channel'],
+  ['SOURCE_SEND_MESSAGE', 'Send completion acknowledgement', 'Return the created OR number and completion status to the originating channel'],
   ['EMAIL_SEND_OUTSOURCE_REQUEST', 'Send outsourced request', 'Email the provider and recipients resolved from company knowledge'],
   ['EMAIL_WAIT_FOR_REPLY', 'Wait for email reply', 'Pause this run without blocking other work'],
   ['EMAIL_RECEIVE_DOCUMENTS', 'Receive returned documents', 'Resume the same run when reply attachments arrive'],
@@ -172,6 +180,39 @@ export default function AutomationSetupPage() {
   const [planningAgent, setPlanningAgent] = useState(false);
   const [paymentTestFiles, setPaymentTestFiles] = useState<File[]>([]);
   const [paymentTestMessage, setPaymentTestMessage] = useState('SLIP UPDATE\n\nCUSTOMER NAME\nRM 0.00\n\nIV-00001 - RM 0.00');
+  const [paymentTestContextKey, setPaymentTestContextKey] = useState('');
+
+  const paymentShadowContexts = useMemo<PaymentShadowContext[]>(() => {
+    if (!automation) return [];
+    const sqlById = new Map(sqlConnections.map((item) => [item.id, item]));
+    return automation.channels.flatMap((channel) => {
+      if (!channel.is_active || !['WECHAT', 'WHATSAPP'].includes(channel.channel_type.toUpperCase())) return [];
+      const channelConfig = channel.config as {
+        group_name?: string | null;
+        sql_connection_id?: number | null;
+        sql_connection_ids?: number[];
+      };
+      const groupName = channelConfig.group_name || channel.channel_ref || `Source #${channel.id}`;
+      return bindingSqlIds(channelConfig).flatMap((connectionId) => {
+        const connection = sqlById.get(connectionId);
+        if (!connection?.is_active) return [];
+        return [{
+          key: `${channel.id}:${connectionId}`,
+          channelId: channel.id,
+          sqlConnectionId: connectionId,
+          label: connection.company || connection.name,
+          detail: `${channel.channel_type.toUpperCase()} · ${groupName}`,
+        }];
+      });
+    });
+  }, [automation, sqlConnections]);
+
+  useEffect(() => {
+    setPaymentTestContextKey((current) => {
+      if (paymentShadowContexts.some((item) => item.key === current)) return current;
+      return paymentShadowContexts.length === 1 ? paymentShadowContexts[0].key : '';
+    });
+  }, [paymentShadowContexts]);
 
   useEffect(() => {
     if (!Number.isInteger(automationId) || automationId <= 0) return;
@@ -200,9 +241,52 @@ export default function AutomationSetupPage() {
       .catch(() => setConnections([]));
   }, [selectedOrganizationId]);
 
+  const storedWhatsAppTestConnectionId = useMemo(() => {
+    const output = config?.outputs.find((item) => item.action === 'OUTSOURCE_DOCUMENT_REQUEST');
+    return Number(output?.config.whatsapp_test_connection_id || 0);
+  }, [config]);
+
+  useEffect(() => {
+    if (!selectedOrganizationId || !storedWhatsAppTestConnectionId) return;
+    let active = true;
+    listWhatsAppGroups(storedWhatsAppTestConnectionId)
+      .then((items) => {
+        if (active) setGroups((current) => ({ ...current, [storedWhatsAppTestConnectionId]: items }));
+      })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not reload the saved WhatsApp testing group.');
+      });
+    return () => { active = false; };
+  }, [selectedOrganizationId, storedWhatsAppTestConnectionId]);
+
   useEffect(() => {
     if (!config?.source.sources.includes('WECHAT')) return;
-    listWeChatConnections().then((items) => setWechatConnections(items.filter((item) => item.status === 'connected'))).catch(() => setWechatConnections([]));
+    let active = true;
+    listWeChatConnections()
+      .then(async (items) => {
+        if (!active) return;
+        // A listener cannot be ready until the first group is mapped. Show all
+        // connected runners during setup and discover their groups immediately.
+        const connected = items.filter((item) => item.status === 'connected');
+        setWechatConnections(connected);
+        const discovered = await Promise.allSettled(
+          connected.map(async (connection) => ({
+            connectionId: connection.id,
+            groups: await listWeChatGroups(connection.id),
+          })),
+        );
+        if (!active) return;
+        const loaded: Record<number, WeChatGroup[]> = {};
+        discovered.forEach((result) => {
+          if (result.status === 'fulfilled') loaded[result.value.connectionId] = result.value.groups;
+        });
+        setWechatGroups((current) => ({ ...current, ...loaded }));
+        if (connected.length > 0 && discovered.every((result) => result.status === 'rejected')) {
+          setError('WeChat is connected, but its groups could not be loaded. Check the runner and try again.');
+        }
+      })
+      .catch(() => { if (active) setWechatConnections([]); });
+    return () => { active = false; };
   }, [config?.source.sources, selectedOrganizationId]);
 
   useEffect(() => {
@@ -245,6 +329,17 @@ export default function AutomationSetupPage() {
   if (!automation || !config) return <AppLayout pageName="Automation setup"><div className="rounded-xl border border-red-300 bg-red-50 p-5 text-sm text-red-800">{error || 'Automation not found.'}</div></AppLayout>;
 
   const outsourceOutput = config.outputs.find((item) => item.action === 'OUTSOURCE_DOCUMENT_REQUEST');
+  const whatsappTestConnectionId = Number(outsourceOutput?.config.whatsapp_test_connection_id || 0);
+  const whatsappTestGroupJid = String(outsourceOutput?.config.whatsapp_test_group_jid || '');
+  const whatsappTestGroupName = String(outsourceOutput?.config.whatsapp_test_group_name || '');
+  const whatsappTestGroupIsLoaded = Boolean(
+    whatsappTestGroupJid
+    && (groups[whatsappTestConnectionId] || []).some((item) => item.jid === whatsappTestGroupJid)
+  );
+  const whatsappTestSelectionMissing = Boolean(
+    outsourceOutput?.config.whatsapp_test_mode
+    && (!whatsappTestConnectionId || !whatsappTestGroupJid)
+  );
   const emailTools: AutomationAgentTool[] = ['EMAIL_SEND_OUTSOURCE_REQUEST', 'EMAIL_WAIT_FOR_REPLY', 'EMAIL_RECEIVE_DOCUMENTS'];
   const setOutsourceEnabled = (enabled: boolean) => {
     const defaultOutput = {
@@ -281,7 +376,16 @@ export default function AutomationSetupPage() {
   });
 
   const save = async () => {
-    if (!name.trim()) return null;
+    if (!name.trim()) {
+      setError('Enter an automation name before saving.');
+      return null;
+    }
+    if (whatsappTestSelectionMissing) {
+      setSection('outputs');
+      setError('Select both a testing account and testing group before saving WhatsApp test delivery mode.');
+      window.setTimeout(() => document.getElementById('whatsapp-test-group')?.focus(), 0);
+      return null;
+    }
     setBusy(true); setError(null); setNotice(null);
     try {
       const saved = await updateAutomation(automation.id, {
@@ -500,9 +604,11 @@ export default function AutomationSetupPage() {
 
   const testPaymentBundle = async () => {
     if (!paymentTestFiles.length || !paymentTestMessage.trim().toUpperCase().startsWith('SLIP UPDATE')) return;
+    const context = paymentShadowContexts.find((item) => item.key === paymentTestContextKey);
+    if (!context) { setError('Select the source group and SQL Accounting company to simulate.'); return; }
     setBusy(true); setError(null); setNotice(null);
     try {
-      const run = await uploadPaymentBundle(automation.id, paymentTestFiles, paymentTestMessage.trim());
+      const run = await uploadPaymentBundle(automation.id, paymentTestFiles, paymentTestMessage.trim(), context);
       await router.push(`/review/${run.id}`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not upload the payment bundle.'); }
     finally { setBusy(false); }
@@ -522,7 +628,7 @@ export default function AutomationSetupPage() {
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} className="mt-1 w-full resize-none bg-transparent text-sm leading-6 text-[var(--muted-foreground)] outline-none" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void save()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-semibold"><Save className="h-4 w-4" /> Save</button>
+          <button type="button" onClick={() => void save()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-semibold disabled:opacity-60"><Save className="h-4 w-4" /> {busy ? 'Saving…' : 'Save'}</button>
           {automation.status === 'ACTIVE' ? <button type="button" onClick={() => void pause()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white"><Pause className="h-4 w-4" /> Pause</button> : <button type="button" onClick={() => void activate()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white"><Play className="h-4 w-4" /> Activate</button>}
           {automation.status === 'DRAFT' && <button type="button" onClick={() => void remove()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2.5 text-sm text-red-700 dark:text-red-300"><Trash2 className="h-4 w-4" /> Delete</button>}
         </div>
@@ -531,7 +637,8 @@ export default function AutomationSetupPage() {
 
     {error && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-100">{error}</div>}
     {notice && <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">{notice}</div>}
-    {section === 'test' && config.template_key === 'payment_knock_off' && <PaymentShadowUploader files={paymentTestFiles} message={paymentTestMessage} busy={busy} onFiles={setPaymentTestFiles} onMessage={setPaymentTestMessage} onSubmit={() => void testPaymentBundle()} />}
+    {(error || notice) && <div role={error ? 'alert' : 'status'} aria-live="polite" className={`fixed right-4 top-20 z-[100] max-w-md rounded-xl border p-4 text-sm font-semibold shadow-xl ${error ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100'}`}>{error || notice}</div>}
+    {section === 'test' && config.template_key === 'payment_knock_off' && <PaymentShadowUploader files={paymentTestFiles} message={paymentTestMessage} contexts={paymentShadowContexts} selectedContextKey={paymentTestContextKey} busy={busy} onFiles={setPaymentTestFiles} onMessage={setPaymentTestMessage} onContext={setPaymentTestContextKey} onSubmit={() => void testPaymentBundle()} />}
 
     <div className="grid gap-5 xl:grid-cols-[270px_minmax(0,1fr)_240px]">
       <nav className="h-fit space-y-1 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
@@ -576,8 +683,8 @@ export default function AutomationSetupPage() {
               const query = (groupSearch[-connection.id] || '').toLowerCase();
               const visible = (wechatGroups[connection.id] || []).filter((group) => !query || group.name.toLowerCase().includes(query) || group.id.toLowerCase().includes(query));
               return <div key={connection.id} className="rounded-lg border border-cyan-200 bg-white/80 p-3 text-slate-950 dark:border-cyan-800 dark:bg-slate-950 dark:text-white">
-                <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">{connection.name}</p><p className="text-xs opacity-70">{connection.display_name || connection.account_id || `Connection #${connection.id}`}</p></div><button type="button" onClick={() => void loadWeChatGroups(connection.id)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs"><Users className="h-3.5 w-3.5" /> Load groups</button></div>
-                {wechatGroups[connection.id] && <><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[-connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [-connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label><div className="mt-2 max-h-80 overflow-y-auto"><div className="grid gap-2">{visible.map((group) => { const selected = (config.source.wechat_bindings || []).find((item) => item.connection_id === connection.id && item.group_id === group.id); return <div key={group.id} className={`grid gap-2 rounded-lg border p-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(240px,0.9fr)] sm:items-center ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span className="font-semibold">{group.name}<span className="block font-normal opacity-60">{group.member_count} members · {group.id}</span></span><SqlCompanyPicker companies={sqlConnections} selectedIds={bindingSqlIds(selected)} disabled={busy} onChange={(ids) => void setWeChatBindingCompanies({ connection_id: connection.id, group_id: group.id, group_name: group.name }, ids)} /></div>; })}</div></div><p className="mt-2 text-xs font-semibold">Select every SQL company this group may handle. Shared groups are routed from the unique company named in SLIP UPDATE; the stable group ID remains the source boundary.</p></>}
+                <div className="flex items-center justify-between gap-2"><div><p className="text-sm font-semibold">{connection.name}</p><p className="text-xs opacity-70">{connection.display_name || connection.account_id || `Smartdok connection ID ${connection.id}`}</p></div><button type="button" onClick={() => void loadWeChatGroups(connection.id)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs"><Users className="h-3.5 w-3.5" /> Load groups</button></div>
+                {wechatGroups[connection.id] && <><label className="relative mt-3 block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" /><input value={groupSearch[-connection.id] || ''} onChange={(event) => setGroupSearch((current) => ({ ...current, [-connection.id]: event.target.value }))} placeholder="Search groups" className="w-full rounded-lg border bg-transparent py-2 pl-8 pr-3 text-xs" /></label><div className="mt-2 max-h-80 overflow-y-auto"><div className="grid gap-2">{visible.map((group) => { const selected = (config.source.wechat_bindings || []).find((item) => item.connection_id === connection.id && item.group_id === group.id); return <div key={group.id} className={`grid gap-2 rounded-lg border p-2.5 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(240px,0.9fr)] sm:items-center ${selected ? 'border-cyan-600 bg-cyan-100 dark:bg-cyan-900' : ''}`}><span className="font-semibold">{group.name}<span className="block font-normal opacity-60">{group.member_count} members · {group.id}</span></span><SqlCompanyPicker companies={sqlConnections} selectedIds={bindingSqlIds(selected)} disabled={busy} emptyLabel="Select SQL company — group not monitored" onChange={(ids) => void setWeChatBindingCompanies({ connection_id: connection.id, group_id: group.id, group_name: group.name }, ids)} /></div>; })}</div></div><p className="mt-2 text-xs font-semibold">A WeChat group becomes monitored when you select at least one SQL company. Shared groups are routed from the unique company named in SLIP UPDATE; the stable group ID remains the source boundary.</p></>}
               </div>;
             })}{!wechatConnections.length && <Link href="/integrations/wechat" className="block rounded-lg border border-dashed border-cyan-400 p-3 text-sm font-semibold">Connect WeChat under Integrations →</Link>}</div>
           </div>}
@@ -667,7 +774,7 @@ export default function AutomationSetupPage() {
                   <label className="flex items-start justify-between gap-4"><span><span className="block text-sm font-semibold">WhatsApp test delivery mode</span><span className="mt-1 block text-xs leading-5 opacity-80">Send every outsourced WhatsApp request only to one testing group. The intended production group is retained for audit but never contacted.</span></span><input type="checkbox" checked={Boolean(outsourceOutput.config.whatsapp_test_mode)} onChange={(event) => updateOutsourceConfig({ whatsapp_test_mode: event.target.checked })} className="mt-1 h-5 w-5 shrink-0 accent-amber-600" /></label>
                   {Boolean(outsourceOutput.config.whatsapp_test_mode) && <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <label className="block text-xs font-semibold">Testing account<select value={Number(outsourceOutput.config.whatsapp_test_connection_id || 0) || ''} onChange={(event) => { const connectionId = Number(event.target.value) || 0; updateOutsourceConfig({ whatsapp_test_connection_id: connectionId, whatsapp_test_group_jid: '', whatsapp_test_group_name: '' }); if (connectionId) void loadGroups(connectionId); }} className="mt-1 w-full rounded-lg border border-amber-400 bg-white px-3 py-2.5 font-normal text-slate-950 dark:bg-slate-950 dark:text-white"><option value="">Select connected account</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-                    <label className="block text-xs font-semibold">Testing group<select value={String(outsourceOutput.config.whatsapp_test_group_jid || '')} disabled={!Number(outsourceOutput.config.whatsapp_test_connection_id || 0)} onFocus={() => { const connectionId = Number(outsourceOutput.config.whatsapp_test_connection_id || 0); if (connectionId && !groups[connectionId]) void loadGroups(connectionId); }} onChange={(event) => { const connectionId = Number(outsourceOutput.config.whatsapp_test_connection_id || 0); const group = (groups[connectionId] || []).find((item) => item.jid === event.target.value); updateOutsourceConfig({ whatsapp_test_group_jid: group?.jid || '', whatsapp_test_group_name: group?.name || '' }); }} className="mt-1 w-full rounded-lg border border-amber-400 bg-white px-3 py-2.5 font-normal text-slate-950 disabled:opacity-50 dark:bg-slate-950 dark:text-white"><option value="">Select testing group</option>{(groups[Number(outsourceOutput.config.whatsapp_test_connection_id || 0)] || []).map((group) => <option key={group.jid} value={group.jid}>{group.name}</option>)}</select></label>
+                    <label className="block text-xs font-semibold">Testing group<select id="whatsapp-test-group" aria-invalid={whatsappTestSelectionMissing} value={whatsappTestGroupJid} disabled={!whatsappTestConnectionId} onFocus={() => { if (whatsappTestConnectionId && !groups[whatsappTestConnectionId]) void loadGroups(whatsappTestConnectionId); }} onChange={(event) => { const group = (groups[whatsappTestConnectionId] || []).find((item) => item.jid === event.target.value); updateOutsourceConfig({ whatsapp_test_group_jid: group?.jid || '', whatsapp_test_group_name: group?.name || '' }); }} className={`mt-1 w-full rounded-lg border bg-white px-3 py-2.5 font-normal text-slate-950 disabled:opacity-50 dark:bg-slate-950 dark:text-white ${whatsappTestSelectionMissing ? 'border-red-500 ring-2 ring-red-200' : 'border-amber-400'}`}><option value="">Select testing group</option>{whatsappTestGroupJid && !whatsappTestGroupIsLoaded && <option value={whatsappTestGroupJid}>{whatsappTestGroupName || `Saved group · ${whatsappTestGroupJid}`}</option>}{(groups[whatsappTestConnectionId] || []).map((group) => <option key={group.jid} value={group.jid}>{group.name}</option>)}</select>{whatsappTestSelectionMissing && <span className="mt-1 block font-semibold text-red-700 dark:text-red-300">Choose a testing group before saving.</span>}</label>
                     <p className="sm:col-span-2 text-xs font-normal opacity-75">Test messages are prefixed with [TEST]. Disable this mode before production.</p>
                   </div>}
                 </div>
@@ -694,11 +801,11 @@ export default function AutomationSetupPage() {
   </div></AppLayout>;
 }
 
-function SqlCompanyPicker({ companies, selectedIds, disabled, onChange }: { companies: SqlAccountConnection[]; selectedIds: number[]; disabled: boolean; onChange: (ids: number[]) => void }) {
+function SqlCompanyPicker({ companies, selectedIds, disabled, emptyLabel = 'Not monitored', onChange }: { companies: SqlAccountConnection[]; selectedIds: number[]; disabled: boolean; emptyLabel?: string; onChange: (ids: number[]) => void }) {
   const active = companies.filter((item) => item.is_active);
   const names = active.filter((item) => selectedIds.includes(item.id)).map((item) => item.company || item.name);
   return <details className="relative min-w-0 rounded-md border bg-white text-xs text-slate-950">
-    <summary className="cursor-pointer list-none px-3 py-2 font-semibold">{names.length ? `${names.length} SQL ${names.length === 1 ? 'company' : 'companies'}: ${names.join(', ')}` : 'Not monitored'}</summary>
+    <summary className="cursor-pointer list-none px-3 py-2 font-semibold">{names.length ? `${names.length} SQL ${names.length === 1 ? 'company' : 'companies'}: ${names.join(', ')}` : emptyLabel}</summary>
     <div className="max-h-64 min-w-full overflow-y-auto border-t bg-white p-2">
       {active.map((item) => <label key={item.id} className="flex cursor-pointer items-start gap-2 rounded px-2 py-2 hover:bg-slate-100">
         <input type="checkbox" checked={selectedIds.includes(item.id)} disabled={disabled} onChange={(event) => onChange(event.target.checked ? [...selectedIds, item.id] : selectedIds.filter((id) => id !== item.id))} className="mt-0.5 h-4 w-4" />
@@ -711,9 +818,9 @@ function SqlCompanyPicker({ companies, selectedIds, disabled, onChange }: { comp
 
 function Panel({ title, description, children }: { title: string; description: string; children: React.ReactNode }) { return <section><h2 className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{description}</p><div className="mt-5">{children}</div></section>; }
 
-function PaymentShadowUploader({ files, message, busy, onFiles, onMessage, onSubmit }: { files: File[]; message: string; busy: boolean; onFiles: (files: File[]) => void; onMessage: (message: string) => void; onSubmit: () => void }) {
-  const valid = files.length > 0 && message.trim().toUpperCase().startsWith('SLIP UPDATE');
-  return <section className="rounded-xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-50"><div className="flex gap-3"><Upload className="h-5 w-5" /><div><h2 className="font-semibold">Shadow test with a manual payment bundle</h2><p className="mt-1 text-xs leading-5">Upload all slips together and paste the exact SLIP UPDATE message. This uses the same extraction, SQL preview and Review page as WeChat, but never posts without approval.</p></div></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><label className="text-xs font-semibold">Payment slips<input type="file" multiple accept="image/*,.pdf" onChange={(event) => onFiles(Array.from(event.target.files || []))} className="mt-1 block w-full rounded-lg border border-cyan-300 bg-white p-2 text-sm text-slate-950" />{files.length > 0 && <span className="mt-2 block font-normal">{files.length} file(s), preserved in this order: {files.map((file) => file.name).join(', ')}</span>}</label><label className="text-xs font-semibold">Bundle message<textarea value={message} onChange={(event) => onMessage(event.target.value)} rows={8} className="mt-1 w-full rounded-lg border border-cyan-300 bg-white p-3 font-mono text-xs text-slate-950 dark:bg-slate-950 dark:text-white" /></label></div><button type="button" onClick={onSubmit} disabled={busy || !valid} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Upload className="h-4 w-4" /> Upload & open Review</button>{!message.trim().toUpperCase().startsWith('SLIP UPDATE') && <p className="mt-2 text-xs font-semibold text-red-800 dark:text-red-200">The message must begin with SLIP UPDATE.</p>}</section>;
+function PaymentShadowUploader({ files, message, contexts, selectedContextKey, busy, onFiles, onMessage, onContext, onSubmit }: { files: File[]; message: string; contexts: PaymentShadowContext[]; selectedContextKey: string; busy: boolean; onFiles: (files: File[]) => void; onMessage: (message: string) => void; onContext: (key: string) => void; onSubmit: () => void }) {
+  const valid = Boolean(selectedContextKey) && files.length > 0 && message.trim().toUpperCase().startsWith('SLIP UPDATE');
+  return <section className="rounded-xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-50"><div className="flex gap-3"><Upload className="h-5 w-5" /><div><h2 className="font-semibold">Shadow test with a manual payment bundle</h2><p className="mt-1 text-xs leading-5">Choose the exact source group and company ledger to simulate, then upload all slips together and paste the SLIP UPDATE message. This runs extraction and SQL preview but never posts without approval.</p></div></div><label className="mt-4 block text-xs font-semibold">Company context<select value={selectedContextKey} onChange={(event) => onContext(event.target.value)} className="mt-1 block w-full rounded-lg border border-cyan-300 bg-white px-3 py-2.5 text-sm text-slate-950"><option value="">Select source group and SQL company</option>{contexts.map((context) => <option key={context.key} value={context.key}>{context.label} — {context.detail}</option>)}</select></label>{contexts.length === 0 && <p className="mt-2 text-xs font-semibold text-red-800 dark:text-red-200">No active group-to-company payment mappings are available.</p>}<div className="mt-4 grid gap-4 lg:grid-cols-2"><label className="text-xs font-semibold">Payment slips<input type="file" multiple accept="image/*,.pdf" onChange={(event) => onFiles(Array.from(event.target.files || []))} className="mt-1 block w-full rounded-lg border border-cyan-300 bg-white p-2 text-sm text-slate-950" />{files.length > 0 && <span className="mt-2 block font-normal">{files.length} file(s), preserved in this order: {files.map((file) => file.name).join(', ')}</span>}</label><label className="text-xs font-semibold">Bundle message<textarea value={message} onChange={(event) => onMessage(event.target.value)} rows={8} className="mt-1 w-full rounded-lg border border-cyan-300 bg-white p-3 font-mono text-xs text-slate-950 dark:bg-slate-950 dark:text-white" /></label></div><button type="button" onClick={onSubmit} disabled={busy || !valid} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Upload className="h-4 w-4" /> Upload & open Review</button>{!selectedContextKey && <p className="mt-2 text-xs font-semibold text-red-800 dark:text-red-200">Select the company context before uploading.</p>}{!message.trim().toUpperCase().startsWith('SLIP UPDATE') && <p className="mt-2 text-xs font-semibold text-red-800 dark:text-red-200">The message must begin with SLIP UPDATE.</p>}</section>;
 }
 
 function Choice({ selected, title, detail, onClick }: { selected: boolean; title: string; detail: string; onClick: () => void }) { return <button type="button" onClick={onClick} className={`rounded-xl border p-4 text-left ${selected ? 'border-cyan-500 bg-cyan-50 text-cyan-950 dark:bg-cyan-950 dark:text-cyan-50' : 'border-[var(--border)] hover:border-cyan-400'}`}><div className="flex justify-between gap-3"><span><span className="block text-sm font-semibold">{title}</span><span className={`mt-1 block text-xs ${selected ? 'opacity-75' : 'text-[var(--muted-foreground)]'}`}>{detail}</span></span>{selected && <Check className="h-4 w-4 text-cyan-700 dark:text-cyan-200" />}</div></button>; }
