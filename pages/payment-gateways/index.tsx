@@ -158,7 +158,7 @@ export default function PaymentGatewayReconciliations() {
               Platform & Merchant Reconciliation
             </h1>
             <p style={{ color: 'var(--muted-foreground)' }}>
-              Upload platform or merchant transaction and settlement files, then reconcile payouts to bank statement transactions.
+              Settlement matching counts successful sales in each batch, including settlements from other batches. Open a batch for separate bank and ledger reconciliation results.
             </p>
           </div>
           <button
@@ -222,9 +222,9 @@ export default function PaymentGatewayReconciliations() {
                       <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Status</th>
                       <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Transactions</th>
                       <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Settlements</th>
-                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Matched</th>
-                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Warnings</th>
-                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Unmatched</th>
+                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Settlement matched</th>
+                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Settlement warnings</th>
+                      <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Unmatched sales / settlements</th>
                       <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Created</th>
                       <th className="px-4 py-3 text-left" style={{ color: 'var(--muted-foreground)' }}>Actions</th>
                     </tr>
@@ -255,7 +255,7 @@ export default function PaymentGatewayReconciliations() {
                         </td>
                         <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>{batch.warning_count ?? 0}</td>
                         <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
-                          {(batch.unmatched_transaction_count ?? 0) + (batch.unmatched_settlement_count ?? 0)}
+                          {batch.unmatched_transaction_count ?? 0} sales / {batch.unmatched_settlement_count ?? 0} settlements
                         </td>
                         <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>{formatDate(batch.created_at)}</td>
                         <td className="px-4 py-3">

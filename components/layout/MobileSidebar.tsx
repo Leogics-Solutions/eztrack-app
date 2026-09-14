@@ -21,6 +21,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
+import { LOCAL_CONNECTORS_ENABLED } from '@/services/LocalConnectorService';
 
 interface MobileSidebarProps {
   isOpen: boolean;
@@ -62,6 +63,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const operationItems = [
     { href: '/project-gp', label: t.nav.projects, icon: Briefcase },
     { href: '/jobs', label: t.nav.jobs, icon: FileText },
+    ...(LOCAL_CONNECTORS_ENABLED ? [{ href: '/local-connectors', label: 'Local connectors', icon: Settings }] : []),
   ];
 
   const settingsItem = { href: '/settings', label: t.nav.settings, icon: Settings };

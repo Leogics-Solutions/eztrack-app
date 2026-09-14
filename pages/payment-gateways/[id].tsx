@@ -916,8 +916,8 @@ export default function PaymentGatewayReconciliationDetail() {
             <SummaryItem label="Transactions" value={batch.transaction_count ?? 0} />
             <SummaryItem label="Sales Transactions" value={batch.successful_transaction_count ?? 0} />
             <SummaryItem label="Settlement Rows" value={batch.settlement_row_count ?? 0} />
-            <SummaryItem label="Matched" value={batch.matched_count ?? 0} />
-            <SummaryItem label="Warnings" value={batch.warning_count ?? 0} />
+            <SummaryItem label="Settlement Matched Sales" value={batch.matched_count ?? 0} />
+            <SummaryItem label="Settlement Warnings" value={batch.warning_count ?? 0} />
             <SummaryItem label="Unmatched Transactions" value={batch.unmatched_transaction_count ?? 0} />
             <SummaryItem label="Unmatched Settlements" value={batch.unmatched_settlement_count ?? 0} />
             <SummaryItem label="Imported Transactions" value={batch.imported_transaction_count ?? 0} />
@@ -1354,7 +1354,9 @@ export default function PaymentGatewayReconciliationDetail() {
                                             color: 'white',
                                           }}
                                         >
-                                          {flag.replaceAll('_', ' ')}
+                                          {flag === 'ledger_warning' && row.ledger_match_method === 'amount_date_customer'
+                                            ? 'ledger found · confirm association'
+                                            : flag.replaceAll('_', ' ')}
                                         </span>
                                       ))}
                                     </div>
@@ -1389,7 +1391,9 @@ export default function PaymentGatewayReconciliationDetail() {
                                 </td>}
                                 {endToEndVisibleColumns.bankAmount && <td className="px-4 py-3 text-right" style={{ color: 'var(--foreground)' }}>{formatCurrency(row.bank_amount ?? undefined)}</td>}
                                 {endToEndVisibleColumns.ledger && <td className="px-4 py-3" style={{ color: 'var(--foreground)' }}>
-                                  <StatusBadge status={row.ledger_status} />
+                                  {row.ledger_match_method === 'amount_date_customer' ? (
+                                    <span className="text-xs">Ledger found · confirm association</span>
+                                  ) : <StatusBadge status={row.ledger_status} />}
                                   <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
                                     {row.ledger_entry_id ? `Entry #${row.ledger_entry_id}` : 'No ledger entry'}
                                   </div>

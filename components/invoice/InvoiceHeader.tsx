@@ -1,4 +1,6 @@
 import { useLanguage } from "@/lib/i18n";
+import Link from 'next/link';
+import { LOCAL_CONNECTORS_ENABLED } from '@/services/LocalConnectorService';
 
 interface InvoiceHeaderProps {
   invoice: {
@@ -42,6 +44,10 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
             {invoice.status || 'draft'}
           </span>
         </div>
+        <div className="flex items-center gap-2">
+        {LOCAL_CONNECTORS_ENABLED && !isEditMode && invoice.status === 'validated' && (
+          <Link href={`/local-connectors?invoice=${invoice.id}`} className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Send to UBS</Link>
+        )}
         <button
           onClick={onEditToggle}
           className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-white"
@@ -49,6 +55,7 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
           <span className="mr-2">{isEditMode ? '✖️' : '✏️'}</span>
           {isEditMode ? t.documents.invoiceHeader.cancel : t.documents.invoiceHeader.edit}
         </button>
+        </div>
       </div>
 
       {/* Financial Summary */}
