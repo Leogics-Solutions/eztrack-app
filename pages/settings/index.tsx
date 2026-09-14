@@ -270,7 +270,8 @@ export default function SettingsPage() {
   }
 
   const effectiveQuota = quota?.effective_quota;
-  const usagePercent = effectiveQuota?.total_quota
+  const unlimitedQuota = Boolean(quota?.unlimited || effectiveQuota?.unlimited);
+  const usagePercent = !unlimitedQuota && effectiveQuota?.total_quota
     ? Math.min(100, Math.round((effectiveQuota.used_quota / effectiveQuota.total_quota) * 100))
     : 0;
 
@@ -405,15 +406,15 @@ export default function SettingsPage() {
             </section>
             <section className={`${cardClass} p-6`}>
               <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Current processing allowance</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">{effectiveQuota?.remaining_quota?.toLocaleString() || 0}<span className="ml-2 text-base font-medium text-[var(--muted-foreground)]">pages remaining</span></p><p className="mt-2 text-sm text-[var(--muted-foreground)]">Billed to {effectiveQuota?.type === 'organization' ? selectedOrganization?.name || 'your company' : 'your personal account'}.</p></div>
-                <div className="w-full max-w-sm"><div className="mb-2 flex justify-between text-xs font-semibold text-[var(--muted-foreground)]"><span>{effectiveQuota?.used_quota?.toLocaleString() || 0} used</span><span>{effectiveQuota?.total_quota?.toLocaleString() || 0} total</span></div><div className="h-3 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full rounded-full bg-cyan-600 transition-all" style={{ width: `${usagePercent}%` }} /></div><p className="mt-2 text-right text-xs text-[var(--muted-foreground)]">{usagePercent}% used</p></div>
+                <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Current processing allowance</p><p className="mt-2 text-4xl font-bold text-[var(--foreground)]">{unlimitedQuota ? 'Unlimited' : effectiveQuota?.remaining_quota?.toLocaleString() || 0}{!unlimitedQuota && <span className="ml-2 text-base font-medium text-[var(--muted-foreground)]">pages remaining</span>}</p><p className="mt-2 text-sm text-[var(--muted-foreground)]">{unlimitedQuota ? 'Quota enforcement is disabled for this account.' : `Billed to ${effectiveQuota?.type === 'organization' ? selectedOrganization?.name || 'your company' : 'your personal account'}.`}</p></div>
+                <div className="w-full max-w-sm">{unlimitedQuota ? <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">All document-processing workflows are available without a page limit.</div> : <><div className="mb-2 flex justify-between text-xs font-semibold text-[var(--muted-foreground)]"><span>{effectiveQuota?.used_quota?.toLocaleString() || 0} used</span><span>{effectiveQuota?.total_quota?.toLocaleString() || 0} total</span></div><div className="h-3 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full rounded-full bg-cyan-600 transition-all" style={{ width: `${usagePercent}%` }} /></div><p className="mt-2 text-right text-xs text-[var(--muted-foreground)]">{usagePercent}% used</p></>}</div>
               </div>
             </section>
             <section className={`${cardClass} overflow-hidden`}>
               <div className="border-b border-[var(--border)] p-5"><h2 className="font-bold text-[var(--foreground)]">Quota allocations</h2><p className="text-sm text-[var(--muted-foreground)]">Allowance periods currently attached to this account.</p></div>
               <div className="divide-y divide-[var(--border)]">
                 {(effectiveQuota?.allocations || []).map((allocation) => <div key={allocation.allocation_id} className="grid gap-3 p-5 sm:grid-cols-4 sm:items-center"><div><p className="text-xs text-[var(--muted-foreground)]">Allowance</p><p className="font-bold text-[var(--foreground)]">{allocation.quota_pages.toLocaleString()} pages</p></div><div><p className="text-xs text-[var(--muted-foreground)]">Remaining</p><p className="font-semibold text-[var(--foreground)]">{allocation.remaining_quota.toLocaleString()}</p></div><div><p className="text-xs text-[var(--muted-foreground)]">Valid until</p><p className="font-semibold text-[var(--foreground)]">{formatDate(allocation.valid_until)}</p></div><span className="justify-self-start rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold capitalize text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 sm:justify-self-end">{allocation.status.toLowerCase()}</span></div>)}
-                {!effectiveQuota?.allocations?.length && <p className="p-8 text-center text-sm text-[var(--muted-foreground)]">No active quota allocations.</p>}
+                {!effectiveQuota?.allocations?.length && <p className="p-8 text-center text-sm text-[var(--muted-foreground)]">{unlimitedQuota ? 'No allowance allocation is required for this account.' : 'No active quota allocations.'}</p>}
               </div>
             </section>
           </div>

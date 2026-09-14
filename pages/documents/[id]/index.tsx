@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { InvoiceHeader } from "@/components/invoice/InvoiceHeader";
 import { PaymentValidationResult } from "@/components/invoice/PaymentValidationResult";
 import { ProjectSelect } from "@/components/ProjectSelect";
+import { formatMalaysiaDateTime } from "@/lib/dateTime";
 import { useLanguage } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
@@ -42,6 +43,7 @@ import {
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 import { useOrganization } from "@/lib/OrganizationContext";
+import { listSqlAccountConnections, pushPurchaseInvoiceToSqlAccount } from "@/services/SqlAccountService";
 
 // Types
 // Extend backend Invoice type with extra optional fields used by UI
@@ -239,6 +241,8 @@ const InvoiceDetail = () => {
   const [isPushingToBC, setIsPushingToBC] = useState(false);
   const [showPushResultModal, setShowPushResultModal] = useState(false);
   const [pushResult, setPushResult] = useState<PushInvoicesResponse | null>(null);
+  const [sqlAccountConnectionId, setSqlAccountConnectionId] = useState<number | null>(null);
+  const [isPushingToSqlAccount, setIsPushingToSqlAccount] = useState(false);
   const [isValidatingPayment, setIsValidatingPayment] = useState(false);
   const [paymentValidationResult, setPaymentValidationResult] = useState<MatchInvoicesAcrossStatementsResponse | null>(null);
   const [showPaymentValidationResult, setShowPaymentValidationResult] = useState(false);
@@ -250,6 +254,7 @@ const InvoiceDetail = () => {
     if (id && !isOrganizationLoading) {
       loadInvoiceData();
       loadBusinessCentralConnection();
+      loadSqlAccountConnection();
     }
   }, [id, selectedOrganizationId, isOrganizationLoading]);
 
@@ -325,6 +330,34 @@ const InvoiceDetail = () => {
     } catch (error) {
       console.error('Failed to load Business Central connection', error);
       setIsBusinessCentralEnabled(false);
+    }
+  };
+
+  const loadSqlAccountConnection = async () => {
+    try {
+      const result = await listSqlAccountConnections();
+      setSqlAccountConnectionId(result.connections.find((item) => item.is_active)?.id || null);
+    } catch (reason) {
+      console.error('Failed to load SQL Account connection', reason);
+      setSqlAccountConnectionId(null);
+    }
+  };
+
+  const handlePushToSqlAccount = async () => {
+    if (!invoice || !sqlAccountConnectionId) {
+      showToast('Connect SQL Accounting before posting this purchase invoice.', { type: 'error' });
+      return;
+    }
+    setIsPushingToSqlAccount(true);
+    try {
+      const result = await pushPurchaseInvoiceToSqlAccount(invoice.id, sqlAccountConnectionId);
+      const documentNo = result.purchase_invoice?.document_no || invoice.invoice_no;
+      showToast(`Purchase Invoice ${documentNo} is in SQL Accounting.`, { type: 'success' });
+      await loadInvoiceData();
+    } catch (reason) {
+      showToast(reason instanceof Error ? reason.message : 'Could not post the Purchase Invoice to SQL Accounting.', { type: 'error' });
+    } finally {
+      setIsPushingToSqlAccount(false);
     }
   };
 
@@ -1210,6 +1243,9 @@ const InvoiceDetail = () => {
             isBusinessCentralEnabled={isBusinessCentralEnabled}
             isPushingToBC={isPushingToBC}
             onPushToBusinessCentral={handlePushToBusinessCentral}
+            sqlAccountConnectionId={sqlAccountConnectionId}
+            isPushingToSqlAccount={isPushingToSqlAccount}
+            onPushToSqlAccount={handlePushToSqlAccount}
             onValidatePayment={handleValidatePayment}
             isValidatingPayment={isValidatingPayment}
             t={t}
@@ -1234,11 +1270,16 @@ const InvoiceDetail = () => {
           )}
 
           {showPaymentProof && (
-            <PaymentProofPanel
-              invoice={invoice}
-              lineItems={lineItems}
-              proofDocuments={proofDocuments}
-            />
+            <>
+              {invoice.payment_proof_details?.policy_validation && (
+                <StaffClaimPolicyPanel invoice={invoice} />
+              )}
+              <PaymentProofPanel
+                invoice={invoice}
+                lineItems={lineItems}
+                proofDocuments={proofDocuments}
+              />
+            </>
           )}
 
           {/* Bank Reconciliation Status */}
@@ -1255,7 +1296,7 @@ const InvoiceDetail = () => {
                       ✓ Reconciled
                     </span>
                     <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                      Matched on {new Date(bankRecon.reconciled_at).toLocaleDateString()}
+                      Matched on {formatMalaysiaDateTime(bankRecon.reconciled_at)}
                     </span>
                   </div>
 
@@ -1800,6 +1841,9 @@ function InvoiceInformationCard({
   isBusinessCentralEnabled,
   isPushingToBC,
   onPushToBusinessCentral,
+  sqlAccountConnectionId,
+  isPushingToSqlAccount,
+  onPushToSqlAccount,
   onValidatePayment,
   isValidatingPayment,
   t
@@ -1924,6 +1968,16 @@ function InvoiceInformationCard({
                     Push to Business Central
                   </>
                 )}
+              </button>
+            )}
+            {sqlAccountConnectionId && onPushToSqlAccount && invoice.status !== 'posted' && (
+              <button
+                onClick={onPushToSqlAccount}
+                disabled={isPushingToSqlAccount || invoice.status === 'draft'}
+                title={invoice.status === 'draft' ? 'Validate the invoice before posting' : undefined}
+                className="px-3 py-1.5 bg-cyan-700 text-white rounded-md text-xs font-medium hover:bg-cyan-800 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isPushingToSqlAccount ? 'Pushing to SQL…' : 'Push Purchase Invoice to SQL'}
               </button>
             )}
           </div>
@@ -2277,6 +2331,50 @@ function InvoiceInformationCard({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function StaffClaimPolicyPanel({ invoice }: { invoice: Invoice }) {
+  const policy = invoice.payment_proof_details?.policy_validation;
+  if (!policy) return null;
+  const passed = policy.status === 'pass';
+
+  const statusClasses = (status: string) => {
+    if (status === 'pass') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
+    if (status === 'not_required') return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+    return 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100';
+  };
+
+  return (
+    <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold">AI Staff Claim Checks</h3>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            {policy.policy_name} · submitted {formatDateOnly(policy.submitted_date)}
+          </p>
+        </div>
+        <div className="text-right">
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${passed ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100'}`}>
+            {passed ? 'PASS' : 'HOLD FOR REVIEW'}
+          </span>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{policy.reason}</p>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {policy.checks.map((check) => (
+          <div key={check.id} className="rounded-lg border border-[var(--border)] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-sm font-medium">{check.label}</span>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${statusClasses(check.status)}`}>
+                {check.status.replaceAll('_', ' ')}
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">{check.reason}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

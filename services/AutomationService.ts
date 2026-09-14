@@ -2,9 +2,9 @@ import { getScopedHeaders } from './apiHelpers';
 import { BASE_URL } from './config';
 
 export type AutomationStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED';
-export type AutomationTemplateKey = 'order_to_invoice' | 'payment_knock_off';
+export type AutomationTemplateKey = 'order_to_invoice' | 'payment_knock_off' | 'supplier_invoice_to_sql' | 'staff_claim_validation' | 'soa_collection_follow_up' | 'supplier_statement_reconciliation';
 export type AutomationFieldType = 'TEXT' | 'NUMBER' | 'MONEY' | 'CURRENCY' | 'DATE' | 'BOOLEAN' | 'ENTITY' | 'OBJECT';
-export type AutomationAgentTool = 'KNOWLEDGE_SEARCH_ENTITIES' | 'KNOWLEDGE_FIND_DOCUMENT_TEMPLATE' | 'SQL_SEARCH_CUSTOMER' | 'SQL_SEARCH_ITEM' | 'SQL_CHECK_DUPLICATE' | 'SQL_CREATE_DELIVERY_ORDER' | 'SQL_CREATE_INVOICE_FROM_DO' | 'SQL_GET_DOCUMENT_PDF' | 'SMARTDOK_RENDER_DOCUMENTS' | 'WHATSAPP_SEND_DOCUMENTS' | 'EMAIL_SEND_OUTSOURCE_REQUEST' | 'EMAIL_WAIT_FOR_REPLY' | 'EMAIL_RECEIVE_DOCUMENTS' | 'SQL_LIST_OPEN_RECEIVABLES' | 'SQL_LIST_PAYMENT_METHODS' | 'SQL_CHECK_DUPLICATE_RECEIPT' | 'SQL_CREATE_CUSTOMER_PAYMENT' | 'SQL_GET_RECEIPT_PDF' | 'SOURCE_SEND_DOCUMENTS';
+export type AutomationAgentTool = 'KNOWLEDGE_SEARCH_ENTITIES' | 'KNOWLEDGE_FIND_DOCUMENT_TEMPLATE' | 'SQL_SEARCH_CUSTOMER' | 'SQL_SEARCH_ITEM' | 'SQL_CHECK_DUPLICATE' | 'SQL_CREATE_DELIVERY_ORDER' | 'SQL_CREATE_INVOICE_FROM_DO' | 'SQL_GET_DOCUMENT_PDF' | 'SMARTDOK_RENDER_DOCUMENTS' | 'WHATSAPP_SEND_DOCUMENTS' | 'EMAIL_SEND_OUTSOURCE_REQUEST' | 'EMAIL_WAIT_FOR_REPLY' | 'EMAIL_RECEIVE_DOCUMENTS' | 'SQL_LIST_OPEN_RECEIVABLES' | 'SQL_LIST_PAYMENT_METHODS' | 'SQL_CHECK_DUPLICATE_RECEIPT' | 'SQL_CREATE_CUSTOMER_PAYMENT' | 'SQL_GET_RECEIPT_PDF' | 'SOURCE_SEND_DOCUMENTS' | 'SQL_SEARCH_SUPPLIER' | 'SQL_CHECK_DUPLICATE_PURCHASE_INVOICE' | 'SQL_CREATE_PURCHASE_INVOICE';
 
 export interface AutomationDataField {
   key: string;
@@ -91,6 +91,27 @@ export interface AutomationConfig {
     stop_on_uncertainty: boolean;
   };
   outputs: AutomationOutputAction[];
+  policy?: {
+    name?: string;
+    demo_mode?: boolean;
+    send_mode?: string;
+    source_system?: string;
+    pause_on_statuses?: string[];
+    stages?: Array<{
+      key: string;
+      label: string;
+      minimum_days_overdue: number;
+      action: string;
+      requires_approval: boolean;
+    }>;
+    submission_window_months?: number;
+    require_claim_form?: boolean;
+    require_receipt_dates?: boolean;
+    require_payment_proof?: boolean;
+    duplicate_scope?: string;
+    require_project_or_cost_code?: boolean;
+    category_limits?: Record<string, number>;
+  };
   test: { status: string; last_run_at?: string | null };
 }
 

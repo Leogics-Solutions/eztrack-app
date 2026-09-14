@@ -1,0 +1,5 @@
+﻿Supplier,Reference,Posting Date,Amount,Currency,Record Type
+ABC Infrastructure Sdn Bhd,INV-TS-1001,2026-08-01,10000,MYR,Invoice
+ABC Infrastructure Sdn Bhd,INV-TS-1002,2026-08-01,5000,MYR,Invoice
+ABC Infrastructure Sdn Bhd,INV-TS-1004,2026-08-01,11500,MYR,Invoice
+ABC Infrastructure Sdn Bhd,CN-TS-1001,2026-08-01,-1000,MYR,Credit Note

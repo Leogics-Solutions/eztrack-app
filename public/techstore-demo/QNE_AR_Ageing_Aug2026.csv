@@ -1,0 +1,5 @@
+Statement Date,Customer Code,Customer,Approved Billing Email,Payment Terms,Invoice Number,Invoice Date,Due Date,Original Amount,Outstanding,Currency,Collection Status,Promise To Pay Date,Dispute Reason
+2026-08-19,CUST-GOV-A,Government Project A,finance.demo@example.com,30 days,INV-2026-001,2026-03-31,2026-04-30,150000.00,150000.00,MYR,OPEN,,
+2026-08-19,CUST-MEGA,Mega Network Solutions Sdn Bhd,accounts.demo@example.com,30 days,INV-TS-2001,2026-05-31,2026-06-30,80000.00,80000.00,MYR,PROMISE_TO_PAY,2026-08-25,
+2026-08-19,CUST-DIGI,Digital Equipment Resources Sdn Bhd,billing.demo@example.com,30 days,INV-TS-3001,2026-06-30,2026-07-31,45000.00,45000.00,MYR,DISPUTED,,Delivery milestone under review
+2026-08-19,CUST-CORP,Corporate Client C,ap.demo@example.com,30 days,INV-TS-4001,2026-07-15,2026-08-14,25000.00,25000.00,MYR,OPEN,,

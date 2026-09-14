@@ -242,6 +242,48 @@ export interface DeleteSupplierStatementLinkResponse {
   data: null;
 }
 
+export type SupplierStatementReconciliationStatus =
+  | 'MATCHED'
+  | 'AMOUNT_DIFFERENCE'
+  | 'MISSING_INVOICE'
+  | 'DUPLICATE_REFERENCE'
+  | 'NEEDS_REVIEW'
+  | 'ALREADY_LINKED';
+
+export interface SupplierStatementReconciliationItem {
+  line_item_id: number;
+  reference?: string | null;
+  status: SupplierStatementReconciliationStatus;
+  match_score?: number | null;
+  amount_difference?: number | null;
+  reasons: string[];
+  existing_link_id?: number | null;
+  invoice?: {
+    id: number;
+    invoice_no?: string | null;
+    po_number?: string | null;
+    vendor_name?: string | null;
+    invoice_date?: string | null;
+    total?: number | null;
+    currency?: string | null;
+  } | null;
+}
+
+export interface SupplierStatementReconciliation {
+  statement_id: number;
+  supplier_name?: string | null;
+  summary: {
+    total: number;
+    matched: number;
+    amount_difference: number;
+    missing_invoice: number;
+    duplicate_reference: number;
+    needs_review: number;
+    already_linked: number;
+  };
+  items: SupplierStatementReconciliationItem[];
+}
+
 /**
  * Create upload intent and get presigned S3 URL
  * POST /supplier-statements/upload-intent
@@ -699,5 +741,22 @@ export async function deleteSupplierStatementLink(
       data: null,
     };
   }
+}
+
+/** Propose invoice matches for every line without creating links. */
+export async function reconcileSupplierStatement(
+  statementId: number
+): Promise<SupplierStatementReconciliation> {
+  const response = await fetch(`${BASE_URL}/supplier-statements/${statementId}/reconcile`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.detail || error.message || error.error || 'Failed to reconcile supplier statement');
+  }
+
+  return response.json();
 }
 

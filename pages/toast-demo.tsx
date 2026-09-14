@@ -14,7 +14,7 @@ const ToastDemo: React.FC = () => {
 
   return (
     <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '30px' }}>Toast Notification System Demo</h1>
+      <h1 style={{ marginBottom: '30px' }}>Toast Notification Examples</h1>
 
       {/* Toast Type Buttons */}
       <section style={{ marginBottom: '40px' }}>

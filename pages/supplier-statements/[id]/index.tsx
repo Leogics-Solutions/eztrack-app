@@ -4,14 +4,18 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import { ArrowLeft, Trash2, Download } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import {
   getSupplierStatement,
   getSupplierStatementLineItems,
   deleteSupplierStatement,
   deleteSupplierStatementLink,
+  createSupplierStatementLink,
+  reconcileSupplierStatement,
   type SupplierStatement,
   type SupplierStatementLineItem,
+  type SupplierStatementReconciliation,
+  type SupplierStatementReconciliationItem,
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { API_BASE_URL } from "@/services/config";
@@ -37,6 +41,8 @@ const SupplierStatementDetail = () => {
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileContentType, setFileContentType] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconciliation, setReconciliation] = useState<SupplierStatementReconciliation | null>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -232,6 +238,72 @@ const SupplierStatementDetail = () => {
     }
   };
 
+  const runReconciliation = async () => {
+    if (!id || typeof id !== 'string') return;
+    setIsReconciling(true);
+    try {
+      const result = await reconcileSupplierStatement(Number(id));
+      setReconciliation(result);
+      showToast(
+        result.summary.matched > 0
+          ? `${result.summary.matched} invoice match${result.summary.matched === 1 ? '' : 'es'} ready for review`
+          : 'Reconciliation finished. Review the exceptions below.',
+        { type: result.summary.matched > 0 ? 'success' : 'info' }
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to reconcile supplier statement', { type: 'error' });
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const acceptMatch = async (item: SupplierStatementReconciliationItem, refresh = true) => {
+    if (!item.invoice) return false;
+    if (refresh) setIsLinking(true);
+    try {
+      await createSupplierStatementLink(item.line_item_id, item.invoice.id, {
+        match_type: 'auto',
+        match_score: item.match_score ?? undefined,
+        notes: item.reasons.join(' '),
+      });
+      if (refresh) {
+        await loadStatement();
+        await runReconciliation();
+        showToast('Invoice match confirmed', { type: 'success' });
+      }
+      return true;
+    } catch (err) {
+      if (refresh) {
+        showToast(err instanceof Error ? err.message : 'Failed to confirm invoice match', { type: 'error' });
+      }
+      return false;
+    } finally {
+      if (refresh) setIsLinking(false);
+    }
+  };
+
+  const acceptAllMatches = async () => {
+    if (!reconciliation) return;
+    const matches = reconciliation.items.filter((item) => item.status === 'MATCHED' && item.invoice);
+    if (matches.length === 0) return;
+    setIsLinking(true);
+    let confirmed = 0;
+    for (const item of matches) {
+      if (await acceptMatch(item, false)) confirmed += 1;
+    }
+    await loadStatement();
+    await runReconciliation();
+    setIsLinking(false);
+    showToast(`${confirmed} invoice match${confirmed === 1 ? '' : 'es'} confirmed`, { type: confirmed === matches.length ? 'success' : 'info' });
+  };
+
+  const reconciliationItems = reconciliation
+    ? [...reconciliation.items].sort((left, right) => {
+        const order = { AMOUNT_DIFFERENCE: 0, MISSING_INVOICE: 1, DUPLICATE_REFERENCE: 2, NEEDS_REVIEW: 3, MATCHED: 4, ALREADY_LINKED: 5 };
+        return order[left.status] - order[right.status];
+      })
+    : [];
+
   if (isLoading) {
     return (
       <AppLayout pageName={t.supplierStatements?.detail?.title || 'Supplier Statement Detail'}>
@@ -291,17 +363,27 @@ const SupplierStatementDetail = () => {
             <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
               {t.supplierStatements?.detail?.summary || 'Statement Summary'}
             </h3>
-            <button
-              onClick={handleDelete}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-red-500/10 transition-colors"
-              style={{
-                borderColor: 'var(--error)',
-                color: 'var(--error)',
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              {t.supplierStatements?.detail?.delete || 'Delete'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => void runReconciliation()}
+                disabled={isReconciling}
+                className="flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-white transition-opacity disabled:opacity-50"
+              >
+                {isReconciling ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {isReconciling ? 'Reconciling…' : 'Reconcile statement'}
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border hover:bg-red-500/10 transition-colors"
+                style={{
+                  borderColor: 'var(--error)',
+                  color: 'var(--error)',
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                {t.supplierStatements?.detail?.delete || 'Delete'}
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
@@ -372,6 +454,66 @@ const SupplierStatementDetail = () => {
             </div>
           </div>
         </div>
+
+        {reconciliation && (
+          <section className="overflow-hidden rounded-lg border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+            <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between" style={{ borderColor: 'var(--border)' }}>
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <h3 className="text-lg font-semibold">Reconciliation review</h3>
+                </div>
+                <p className="mt-1 text-sm text-[var(--muted-foreground)]">Exceptions are shown first. Confirmed matches create the same invoice links used throughout Smartdok.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void acceptAllMatches()}
+                disabled={isLinking || reconciliation.summary.matched === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
+              >
+                {isLinking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Confirm {reconciliation.summary.matched} matched
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-[var(--border)] sm:grid-cols-3 lg:grid-cols-6">
+              {[
+                ['Matched', reconciliation.summary.matched, 'text-emerald-600'],
+                ['Amount difference', reconciliation.summary.amount_difference, 'text-amber-600'],
+                ['Missing invoice', reconciliation.summary.missing_invoice, 'text-red-600'],
+                ['Duplicate ref', reconciliation.summary.duplicate_reference, 'text-orange-600'],
+                ['Needs review', reconciliation.summary.needs_review, 'text-violet-600'],
+                ['Already linked', reconciliation.summary.already_linked, 'text-sky-600'],
+              ].map(([label, value, color]) => (
+                <div key={String(label)} className="bg-[var(--card)] p-4">
+                  <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--muted)] text-left text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <tr><th className="px-4 py-3">Statement ref</th><th className="px-4 py-3">Result</th><th className="px-4 py-3">Proposed invoice</th><th className="px-4 py-3">Variance</th><th className="px-4 py-3">Reason</th><th className="px-4 py-3">Action</th></tr>
+                </thead>
+                <tbody>
+                  {reconciliationItems.map((item) => {
+                    const isException = !['MATCHED', 'ALREADY_LINKED'].includes(item.status);
+                    return (
+                      <tr key={item.line_item_id} className={isException ? 'bg-amber-500/5' : ''} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td className="px-4 py-3 font-medium">{item.reference || `Line ${item.line_item_id}`}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${item.status === 'MATCHED' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : item.status === 'ALREADY_LINKED' ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{isException && <AlertTriangle className="h-3 w-3" />}{item.status.replaceAll('_', ' ')}</span></td>
+                        <td className="px-4 py-3">{item.invoice ? <div><a href={`/documents/${item.invoice.id}`} className="font-medium text-[var(--primary)] hover:underline">{item.invoice.invoice_no || `Invoice #${item.invoice.id}`}</a><p className="text-xs text-[var(--muted-foreground)]">{item.invoice.vendor_name || '-'} · {formatCurrency(item.invoice.total, item.invoice.currency || undefined)}</p></div> : '-'}</td>
+                        <td className="px-4 py-3">{item.amount_difference == null ? '-' : formatCurrency(item.amount_difference, item.invoice?.currency || undefined)}</td>
+                        <td className="max-w-sm px-4 py-3 text-[var(--muted-foreground)]">{item.reasons.join(' ')}</td>
+                        <td className="px-4 py-3">{item.status === 'MATCHED' && item.invoice ? <button type="button" disabled={isLinking} onClick={() => void acceptMatch(item)} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Confirm</button> : item.status === 'ALREADY_LINKED' ? <span className="text-xs text-[var(--muted-foreground)]">No action</span> : <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Review source</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Linked Invoices Section */}
         {statement.supplier_statement_links && statement.supplier_statement_links.length > 0 && (

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Plus, Check, ArrowLeft, ArrowUp, ArrowDown, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { formatMalaysiaTime } from '@/lib/dateTime';
 import { useLanguage } from '@/lib/i18n';
 import {
   uploadToGroup,
@@ -1029,7 +1030,7 @@ export function InvoiceScanner({ onComplete, onCancel, autoClassify = false }: I
                 Group ID: {groupStatus.group_id.substring(0, 8)}...
                 {groupStatus.expires_at && (
                   <span className="ml-2">
-                    Expires: {new Date(groupStatus.expires_at).toLocaleTimeString()}
+                    Expires: {formatMalaysiaTime(groupStatus.expires_at)}
                   </span>
                 )}
               </p>

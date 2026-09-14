@@ -2,6 +2,7 @@
 
 import { CaptureShell } from '@/components/capture/CaptureShell';
 import { AppLayout } from '@/components/layout';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
   getCaptureAttachmentPreview,
@@ -91,7 +92,7 @@ export default function CaptureMessageDetailPage() {
               </div>
               <dl className="grid gap-4 p-5 text-sm sm:grid-cols-2">
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Source</dt><dd className="mt-1 font-medium">{item.source_type.replaceAll('_', ' ')}</dd></div>
-                <div><dt className="text-xs text-[var(--muted-foreground)]">Received</dt><dd className="mt-1 font-medium">{new Date(item.received_at || item.created_at).toLocaleString()}</dd></div>
+                <div><dt className="text-xs text-[var(--muted-foreground)]">Received</dt><dd className="mt-1 font-medium">{formatMalaysiaDateTime(item.received_at || item.created_at)}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Sender</dt><dd className="mt-1 break-all font-medium">{item.sender || 'Not provided'}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Recipients</dt><dd className="mt-1 break-all font-medium">{item.recipients.join(', ') || 'Not provided'}</dd></div>
                 <div className="sm:col-span-2"><dt className="text-xs text-[var(--muted-foreground)]">Subject</dt><dd className="mt-1 font-medium">{item.subject || 'No subject'}</dd></div>

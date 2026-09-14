@@ -2,6 +2,7 @@
 
 import { CaptureShell } from '@/components/capture/CaptureShell';
 import { AppLayout } from '@/components/layout';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
   createIntegrationSetupRequest,
@@ -184,7 +185,7 @@ function AutoSyncPanel({
       {schedule?.enabled && schedule.next_sync_at && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
           <Clock3 className="h-3.5 w-3.5" />
-          Next automatic sync {new Date(schedule.next_sync_at).toLocaleString()}
+          Next automatic sync {formatMalaysiaDateTime(schedule.next_sync_at)}
           {schedule.last_status ? ` · Last run ${schedule.last_status.toLowerCase()}` : ''}
         </p>
       )}
@@ -592,7 +593,7 @@ export default function CaptureChannelsPage() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{connection.email}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${connection.can_send ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{connection.can_send ? 'Capture & send' : 'Capture only'}</span></div>
-                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{connection.last_sync_at ? `Last sync ${new Date(connection.last_sync_at).toLocaleString()}` : 'Not synced yet'}</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{connection.last_sync_at ? `Last sync ${formatMalaysiaDateTime(connection.last_sync_at)}` : 'Not synced yet'}</p>
                         </div>
                          <div className="flex gap-2">
                            {!connection.can_send && <button type="button" onClick={() => void connect('gmail')} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"><Link2 className="h-3.5 w-3.5" /> Allow sending</button>}
@@ -639,7 +640,7 @@ export default function CaptureChannelsPage() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-medium">{connection.email || `Connection ${connection.id}`}</p>
-                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{connection.last_sync_at ? `Last sync ${new Date(connection.last_sync_at).toLocaleString()}` : 'Not synced yet'} · {folderCount} watched folder{folderCount === 1 ? '' : 's'}</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{connection.last_sync_at ? `Last sync ${formatMalaysiaDateTime(connection.last_sync_at)}` : 'Not synced yet'} · {folderCount} watched folder{folderCount === 1 ? '' : 's'}</p>
                         </div>
                         <div className="flex gap-2">
                           <button type="button" onClick={() => void sync('drive', connection.id)} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${busy === `drive-sync-${connection.id}` ? 'animate-spin' : ''}`} /> Sync now</button>

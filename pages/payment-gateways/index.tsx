@@ -2,6 +2,7 @@
 
 import { AppLayout } from "@/components/layout";
 import { FileUpload } from "@/components/FileUpload";
+import { formatMalaysiaDateTime } from "@/lib/dateTime";
 import { useOrganization } from "@/lib/OrganizationContext";
 import { useToast } from "@/lib/toast";
 import {
@@ -30,12 +31,7 @@ function providerLabel(provider?: string) {
 }
 
 function formatDate(value?: string) {
-  if (!value) return '-';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return value;
-  }
+  return formatMalaysiaDateTime(value);
 }
 
 function pct(numerator?: number, denominator?: number) {

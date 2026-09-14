@@ -73,6 +73,25 @@ export interface PaymentProofDetails {
   matched_lines?: PaymentProofMatchedLine[];
   proof_document_ids?: number[];
   transactions?: Array<Record<string, unknown>>;
+  duplicate_receipt_flags?: Array<Record<string, unknown>>;
+  historical_duplicate_receipt_flags?: Array<Record<string, unknown>>;
+  has_duplicate_receipts?: boolean;
+  has_historical_duplicates?: boolean;
+  policy_validation?: {
+    policy_name: string;
+    status: 'pass' | 'exception' | string;
+    recommended_action: 'APPROVE' | 'HOLD_FOR_REVIEW' | string;
+    submitted_date: string;
+    exception_count: number;
+    reason: string;
+    checks: Array<{
+      id: string;
+      label: string;
+      status: 'pass' | 'fail' | 'needs_review' | 'not_required' | string;
+      reason: string;
+      [key: string]: unknown;
+    }>;
+  };
 }
 
 export interface Invoice {
@@ -640,7 +659,16 @@ async function uploadToPresignedUrl(uploadUrl: string, file: File, contentType: 
 
 export type BatchJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
 
+export interface ProcessingEvent {
+  sequence: number;
+  stage: string;
+  message: string;
+  state: 'started' | 'completed' | 'failed';
+  at: string;
+}
+
 export interface BatchJobStatusData {
+  progress_events?: ProcessingEvent[];
   id: string;
   user_id: number;
   file_path: string;
@@ -2216,4 +2244,41 @@ export async function cancelGroup(groupId: string): Promise<CancelGroupResponse>
   }
 
   return response.json();
+}
+
+/** Authenticated SSE; credentials stay in headers, never in the URL. */
+export async function streamBatchJobProgress(
+  jobIds: string[],
+  onProgress: (jobs: BatchJobStatusData[]) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const query = new URLSearchParams();
+  jobIds.forEach(id => query.append('job_ids', id));
+  const response = await fetch(`${BASE_URL}/invoices/batch-jobs/events?${query}`, {
+    headers: { ...getScopedHeaders(), Accept: 'text/event-stream' }, signal,
+  });
+  if (!response.ok || !response.body) throw new Error('Live progress unavailable');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const lines = frame.split('\n');
+        if (lines.includes('event: progress')) {
+          const data = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n');
+          onProgress((JSON.parse(data) as { jobs: BatchJobStatusData[] }).jobs);
+        }
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }

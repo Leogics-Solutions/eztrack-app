@@ -1,0 +1,374 @@
+{
+  "environment": "TechStore Demo Environment",
+  "generated_at": "2026-08-18T12:05:30.401536+00:00",
+  "data_sources": {
+    "supplier_statement": "ABC_Statement_Aug2026.pdf",
+    "qne_export": "QNE_AP_Aug2026.csv",
+    "bank_statement": "CIMB_Statement_Aug2026.csv",
+    "claims_export": "InfoTech_Claims_Aug2026.csv"
+  },
+  "supplier_reconciliation": {
+    "supplier": "ABC Infrastructure Sdn Bhd",
+    "currency": "MYR",
+    "lines": [
+      {
+        "reference": "INV-TS-1001",
+        "statement_amount": 10000,
+        "accounting_amount": 10000,
+        "status": "MATCHED"
+      },
+      {
+        "reference": "INV-TS-1002",
+        "statement_amount": 5000,
+        "accounting_amount": 5000,
+        "status": "MATCHED"
+      },
+      {
+        "reference": "INV-TS-1003",
+        "statement_amount": 8000,
+        "accounting_amount": null,
+        "status": "MISSING_RECORD"
+      },
+      {
+        "reference": "INV-TS-1004",
+        "statement_amount": 12000,
+        "accounting_amount": 11500,
+        "status": "AMOUNT_DIFFERENCE"
+      },
+      {
+        "reference": "CN-TS-1001",
+        "statement_amount": -1000,
+        "accounting_amount": -1000,
+        "status": "MATCHED"
+      },
+      {
+        "reference": "INV-TS-1002",
+        "statement_amount": 5000,
+        "accounting_amount": 5000,
+        "status": "DUPLICATE_REFERENCE"
+      }
+    ]
+  },
+  "three_way_scenarios": [
+    {
+      "id": "clean",
+      "label": "Clean match",
+      "purchase_order": {
+        "document_number": "PO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 40000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4000
+          }
+        ]
+      },
+      "delivery_order": {
+        "document_number": "DO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10
+          }
+        ]
+      },
+      "invoice": {
+        "document_number": "INV-TS-CLEAN-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 40000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4000
+          }
+        ],
+        "is_duplicate": false
+      }
+    },
+    {
+      "id": "quantity",
+      "label": "Quantity problem",
+      "purchase_order": {
+        "document_number": "PO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 40000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4000
+          }
+        ]
+      },
+      "delivery_order": {
+        "document_number": "DO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 8
+          }
+        ]
+      },
+      "invoice": {
+        "document_number": "INV-TS-QUANTITY-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 40000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4000
+          }
+        ],
+        "is_duplicate": false
+      }
+    },
+    {
+      "id": "price",
+      "label": "Price problem",
+      "purchase_order": {
+        "document_number": "PO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 40000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4000
+          }
+        ]
+      },
+      "delivery_order": {
+        "document_number": "DO-TS-2026-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10
+          }
+        ]
+      },
+      "invoice": {
+        "document_number": "INV-TS-PRICE-001",
+        "po_number": "PO-TS-2026-001",
+        "supplier": "ABC Infrastructure Sdn Bhd",
+        "total": 42000,
+        "items": [
+          {
+            "description": "Project Laptop",
+            "quantity": 10,
+            "unit_price": 4200
+          }
+        ],
+        "is_duplicate": false
+      }
+    }
+  ],
+  "bank_reconciliation": [
+    {
+      "transaction_id": "CIMB-260801",
+      "date": "2026-08-01",
+      "description": "ABC INFRA INV-TS-1001",
+      "amount": 10000,
+      "invoice": "INV-TS-1001",
+      "allocated": 10000,
+      "outstanding": 0,
+      "confidence": 98,
+      "result": "EXACT_MATCH",
+      "reason": "Amount and invoice reference match exactly."
+    },
+    {
+      "transaction_id": "CIMB-260805",
+      "date": "2026-08-05",
+      "description": "MEGA NETWORK PART PAYMENT",
+      "amount": 6000,
+      "invoice": "INV-TS-2001",
+      "allocated": 6000,
+      "outstanding": 4000,
+      "confidence": 91,
+      "result": "PARTIAL_PAYMENT",
+      "reason": "Supplier text and date align; RM4,000 remains outstanding."
+    },
+    {
+      "transaction_id": "CIMB-260812-A",
+      "date": "2026-08-12",
+      "description": "DIGITAL EQUIP SPLIT 1",
+      "amount": 6000,
+      "invoice": "INV-TS-3001",
+      "allocated": 6000,
+      "outstanding": 4000,
+      "confidence": 89,
+      "result": "SPLIT_PAYMENT",
+      "reason": "First of two transactions allocated to the same invoice."
+    },
+    {
+      "transaction_id": "CIMB-260812-B",
+      "date": "2026-08-12",
+      "description": "DIGITAL EQUIP SPLIT 2",
+      "amount": 4000,
+      "invoice": "INV-TS-3001",
+      "allocated": 4000,
+      "outstanding": 0,
+      "confidence": 88,
+      "result": "SPLIT_PAYMENT",
+      "reason": "Combined transactions settle the RM10,000 invoice."
+    },
+    {
+      "transaction_id": "CIMB-260814",
+      "date": "2026-08-14",
+      "description": "TRANSFER REF 88421",
+      "amount": 7650,
+      "invoice": null,
+      "allocated": 0,
+      "outstanding": 7650,
+      "confidence": 34,
+      "result": "NEEDS_REVIEW",
+      "reason": "No invoice has a sufficiently consistent amount or reference."
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "CLM-TS-001",
+      "staff": "John Tan",
+      "receipt_number": "RCP-10001",
+      "merchant": "KL Project Travel",
+      "receipt_date": "2026-07-20",
+      "submitted_date": "2026-08-10",
+      "receipt_amount": 182.5,
+      "claim_amount": 182.5,
+      "attachment_present": true,
+      "payment_proof_matched": true
+    },
+    {
+      "claim_id": "CLM-TS-002",
+      "staff": "Sarah Lim",
+      "receipt_number": "RCP-10002",
+      "merchant": "Site Transport",
+      "receipt_date": "2026-04-15",
+      "submitted_date": "2026-08-10",
+      "receipt_amount": 95,
+      "claim_amount": 95,
+      "attachment_present": true,
+      "payment_proof_matched": true
+    },
+    {
+      "claim_id": "CLM-TS-003",
+      "staff": "John Tan",
+      "receipt_number": "RCP-88421",
+      "merchant": "City Office Supplies",
+      "receipt_date": "2026-07-18",
+      "submitted_date": "2026-08-10",
+      "receipt_amount": 286.4,
+      "claim_amount": 286.4,
+      "attachment_present": true,
+      "payment_proof_matched": true
+    },
+    {
+      "claim_id": "CLM-TS-004",
+      "staff": "Sarah Lim",
+      "receipt_number": "RCP-88421",
+      "merchant": "City Office Supplies",
+      "receipt_date": "2026-07-18",
+      "submitted_date": "2026-08-10",
+      "receipt_amount": 286.4,
+      "claim_amount": 286.4,
+      "attachment_present": true,
+      "payment_proof_matched": true
+    },
+    {
+      "claim_id": "CLM-TS-005",
+      "staff": "John Tan",
+      "receipt_number": "RCP-10005",
+      "merchant": "Project Parking",
+      "receipt_date": "2026-08-01",
+      "submitted_date": "2026-08-10",
+      "receipt_amount": 42,
+      "claim_amount": 48,
+      "attachment_present": false,
+      "payment_proof_matched": false
+    }
+  ],
+  "collections": {
+    "customer": "Government Project A",
+    "invoice": "INV-2026-001",
+    "amount": 150000,
+    "due_date": "2026-04-30",
+    "status": "OVERDUE",
+    "timeline": [
+      {
+        "stage": "Month 1",
+        "action": "Reminder 1",
+        "status": "SENT"
+      },
+      {
+        "stage": "Month 2",
+        "action": "Reminder 2",
+        "status": "SENT"
+      },
+      {
+        "stage": "Month 3",
+        "action": "Final reminder",
+        "status": "PENDING"
+      },
+      {
+        "stage": "Month 4",
+        "action": "Letter of Demand",
+        "status": "REQUIRES_APPROVAL"
+      }
+    ],
+    "forecast": {
+      "this_month": 245000,
+      "next_month": 180000,
+      "overdue": 320000,
+      "disputed": 45000
+    }
+  },
+  "payment_voucher": {
+    "voucher_number": "PV-TS-2026-0818",
+    "supplier": "Mega Network Solutions Sdn Bhd",
+    "bank_name": "Sample Commercial Bank",
+    "bank_account": "**** 4821",
+    "amount": 40000,
+    "invoice_reference": "INV-TS-2008",
+    "payment_date": "2026-08-20",
+    "validations": [
+      {
+        "label": "Supplier exists",
+        "passed": true
+      },
+      {
+        "label": "Bank details present",
+        "passed": true
+      },
+      {
+        "label": "Invoice approved",
+        "passed": true
+      },
+      {
+        "label": "Amount matches",
+        "passed": true
+      },
+      {
+        "label": "Duplicate payment check",
+        "passed": true
+      },
+      {
+        "label": "Supporting documents complete",
+        "passed": true
+      }
+    ]
+  }
+}

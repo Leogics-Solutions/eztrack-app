@@ -54,6 +54,7 @@ export interface UpdateUserResponse {
 }
 
 export interface PersonalQuota {
+  unlimited?: boolean;
   total_quota: number;
   used_quota: number;
   remaining_quota: number;
@@ -63,6 +64,7 @@ export interface PersonalQuota {
 }
 
 export interface OrganizationQuota {
+  unlimited?: boolean;
   organization_id: number;
   organization_name: string;
   total_quota: number;
@@ -73,6 +75,7 @@ export interface OrganizationQuota {
 }
 
 export interface EffectiveQuota {
+  unlimited?: boolean;
   type: 'personal' | 'organization';
   total_quota: number;
   used_quota: number;
@@ -81,6 +84,7 @@ export interface EffectiveQuota {
 }
 
 export interface QuotaData {
+  unlimited?: boolean;
   quota_mode: 'personal' | 'organization';
   use_organization_quota: boolean;
   primary_organization_id: number | null;

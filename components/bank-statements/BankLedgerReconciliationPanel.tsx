@@ -1,6 +1,7 @@
 'use client';
 
 import { FileUpload } from '@/components/FileUpload';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
 import { useToast } from '@/lib/toast';
 import {
   autoReconcileBankLedger,
@@ -36,12 +37,7 @@ function formatDate(value?: string | null) {
 }
 
 function formatDateTime(value?: string) {
-  if (!value) return '-';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return value;
-  }
+  return formatMalaysiaDateTime(value);
 }
 
 function numberValue(value: unknown) {

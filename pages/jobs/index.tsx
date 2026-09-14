@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from "@/components/layout";
+import { formatMalaysiaDateTime } from "@/lib/dateTime";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
@@ -123,12 +124,7 @@ const JobsPage = () => {
   };
 
   const formatDate = (s: string | undefined | null) => {
-    if (!s) return "—";
-    try {
-      return new Date(s).toLocaleString();
-    } catch {
-      return s;
-    }
+    return formatMalaysiaDateTime(s);
   };
 
   return (

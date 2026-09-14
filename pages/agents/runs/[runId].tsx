@@ -1,7 +1,8 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import { ArrowLeft, CheckCircle2, AlertTriangle, FileText, Send, Download, FileSpreadsheet, Image as ImageIcon, Clock3, History, Inbox, ShieldCheck, Plus, Trash2, X, LoaderCircle } from 'lucide-react';
 import {
@@ -65,12 +66,15 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   const [forexDraft, setForexDraft] = useState<AgentRunForex | null>(null);
   const [customerDraft, setCustomerDraft] = useState('');
   const [customerCodeDraft, setCustomerCodeDraft] = useState('');
+  const [customerAddressDraft, setCustomerAddressDraft] = useState('');
   const [documentCodeDraft, setDocumentCodeDraft] = useState('');
   const [invoiceDateDraft, setInvoiceDateDraft] = useState('');
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [sourceMime, setSourceMime] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshingPaymentPreview, setRefreshingPaymentPreview] = useState(false);
+  const [paymentPreviewError, setPaymentPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,48 +87,66 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
   const [pendingLineRemoval, setPendingLineRemoval] = useState<number | null>(null);
   const [entityProfiles, setEntityProfiles] = useState<BusinessEntityProfile[]>([]);
   const [issuingEntityKey, setIssuingEntityKey] = useState('');
+  const paymentPreviewAttemptedRunId = useRef<number | null>(null);
 
-  const hydrate = (r: AgentRun) => {
+  const hydrate = useCallback((r: AgentRun) => {
     setRun(r);
     const reviewed = r.corrected_data || r.extracted_data;
     setGenericDraft({ ...((reviewed || {}) as Record<string, unknown>) });
     setLines(canonicalRunLines(reviewed));
     setForexDraft(reviewed?.forex ? { ...reviewed.forex } : null);
-    setCustomerDraft(reviewed?.customer || '');
-    setCustomerCodeDraft(reviewed?.customer_code || '');
     setDocumentCodeDraft(reviewed?.code || '');
     setInvoiceDateDraft(reviewed?.inv_date || '');
     setIssuingEntityKey(reviewed?.issuing_entity?.entity_key || reviewed?.issuing_entity?.key || '');
     const proposal = (r.output_refs as { sql_account?: { customer_proposal?: SqlAccountCustomerProposal } } | undefined)?.sql_account?.customer_proposal;
-    setCustomerProposal(proposal?.code && proposal.code.length <= 10 && proposal.company_name ? { code: proposal.code, company_name: proposal.company_name, address: proposal.address || '' } : null);
+    const usableProposal = proposal?.code && proposal.code.length <= 10 && proposal.company_name
+      ? { code: proposal.code, company_name: proposal.company_name, address: proposal.address || '' }
+      : null;
+    setCustomerProposal(usableProposal);
+    setCustomerDraft(reviewed?.customer || usableProposal?.company_name || '');
+    setCustomerCodeDraft(reviewed?.customer_code || usableProposal?.code || '');
+    setCustomerAddressDraft(usableProposal?.address || '');
     setItemProposals((r.output_refs as { sql_account?: { item_proposals?: SqlAccountStockItemProposal[] } } | undefined)?.sql_account?.item_proposals || []);
-  };
+  }, []);
 
   const load = useCallback(async () => {
     if (!runId) return;
     setLoading(true);
     try {
-      let loaded = await getRun(runId);
-      const paymentData = loaded.corrected_data || loaded.extracted_data;
-      const hasPaymentMethods = Array.isArray(paymentData?.payment_methods) && paymentData.payment_methods.length > 0;
-      if (loaded.review_schema?.template_key === 'payment_knock_off' && !hasPaymentMethods) {
-        try {
-          loaded = await refreshPaymentPreview(runId);
-          setError(null);
-        } catch (refreshError) {
-          setError((refreshError as Error)?.message || 'Could not refresh SQL payment methods');
-        }
-      }
+      const loaded = await getRun(runId);
       hydrate(loaded);
-      if (loaded.review_schema?.template_key !== 'payment_knock_off') setError(null);
+      setError(null);
     } catch (e) {
       setError((e as Error)?.message || 'Failed to load run');
     } finally {
       setLoading(false);
     }
-  }, [runId]);
+  }, [hydrate, runId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const refreshPaymentData = useCallback(async () => {
+    if (!runId) return;
+    setRefreshingPaymentPreview(true);
+    setPaymentPreviewError(null);
+    try {
+      const refreshed = await refreshPaymentPreview(runId);
+      hydrate(refreshed);
+    } catch (refreshError) {
+      setPaymentPreviewError((refreshError as Error)?.message || 'Live SQL Accounting data could not be refreshed.');
+    } finally {
+      setRefreshingPaymentPreview(false);
+    }
+  }, [hydrate, runId]);
+
+  useEffect(() => {
+    if (!run || run.review_schema?.template_key !== 'payment_knock_off') return;
+    const paymentData = run.corrected_data || run.extracted_data;
+    const hasPaymentMethods = Array.isArray(paymentData?.payment_methods) && paymentData.payment_methods.length > 0;
+    if (hasPaymentMethods || paymentPreviewAttemptedRunId.current === run.id) return;
+    paymentPreviewAttemptedRunId.current = run.id;
+    void refreshPaymentData();
+  }, [refreshPaymentData, run]);
 
   useEffect(() => {
     let active = true;
@@ -350,6 +372,9 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
         busy={busy}
         loading={loading}
         error={error}
+        refreshingPaymentPreview={refreshingPaymentPreview}
+        paymentPreviewError={paymentPreviewError}
+        refreshPaymentPreview={refreshPaymentData}
         act={act}
       />
     );
@@ -560,29 +585,18 @@ export function AutomationRunReview({ reviewMode = false }: { reviewMode?: boole
             <div className="p-4 border-t border-[var(--border)] text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{originalCurrency} {fmt(displayedTotals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(displayedTotals.qty_total)}</b></span>{forex && <span>Flat fee: <b>RM {fmt(displayedTotals.flat_fee)}</b></span>}<span>Grand total: <b>{displayedTotals.grand_total_myr == null ? 'Pending conversion' : `RM ${fmt(displayedTotals.grand_total_myr)}`}</b></span></div>
           </div>
 
-          {status === 'DRAFT_GENERATED' && sqlAccountDelivery?.status === 'needs_customer_approval' && customerProposal && (
-            <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5">
-              <h2 className="font-semibold">Suggested SQL Account customer</h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">No high-confidence customer match was found. Review this proposal, then create it in SQL Account and retry this run. This action does not create stock items.</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Field label="Customer code"><input maxLength={10} value={customerProposal.code} onChange={(event) => setCustomerProposal({ ...customerProposal, code: event.target.value.toUpperCase() })} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
-                <Field label="Company name"><input value={customerProposal.company_name} onChange={(event) => setCustomerProposal({ ...customerProposal, company_name: event.target.value })} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
-                <Field label="Billing address"><textarea value={customerProposal.address || ''} onChange={(event) => setCustomerProposal({ ...customerProposal, address: event.target.value })} rows={3} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)] sm:col-span-2" /></Field>
-              </div>
-              <button disabled={busy || customerProposal.code.trim().length < 2 || customerProposal.company_name.trim().length < 2} onClick={() => act(() => createSqlAccountCustomerAndRepush(runId, customerProposal))} className="mt-4 inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create customer & re-push</button>
-            </section>
-          )}
           {needsSqlCustomer && (
             <section className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-5">
-              <h2 className="font-semibold">Set SQL Account customer</h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">The document did not contain a usable customer. Enter an existing SQL Account customer code, or create a reviewed customer master and immediately re-push this run.</p>
+              <h2 className="font-semibold">Resolve SQL Account customer</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{customerProposal ? 'Smartdok suggested the details below because no high-confidence customer match was found. Review them, then use an existing SQL Account code or create this customer and re-push.' : 'Enter an existing SQL Account customer code, or create a reviewed customer and immediately re-push this run.'} This action does not create stock items.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Field label="Customer / company name"><input value={customerDraft} onChange={(event) => setCustomerDraft(event.target.value)} placeholder="e.g. COMPANY SDN BHD" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
                 <Field label="SQL Account customer code"><input maxLength={10} value={customerCodeDraft} onChange={(event) => setCustomerCodeDraft(event.target.value.toUpperCase())} placeholder="Existing or new code" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Customer / company name"><input value={customerDraft} onChange={(event) => setCustomerDraft(event.target.value)} placeholder="e.g. COMPANY SDN BHD" className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)]" /></Field>
+                <Field label="Billing address"><textarea value={customerAddressDraft} onChange={(event) => setCustomerAddressDraft(event.target.value)} rows={3} className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--foreground)] sm:col-span-2" /></Field>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
                 <button disabled={busy || customerCodeDraft.trim().length < 2} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return repushRunToSqlAccount(runId); })} className="inline-flex items-center gap-2 rounded-md border border-violet-500/50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/10 disabled:opacity-50 dark:text-violet-300"><Send className="h-4 w-4" /> Use existing code & re-push</button>
-                <button disabled={busy || customerCodeDraft.trim().length < 2 || customerDraft.trim().length < 2} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return createSqlAccountCustomerAndRepush(runId, { code: customerCodeDraft, company_name: customerDraft, address: '' }); })} className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create customer & re-push</button>
+                <button disabled={busy || customerCodeDraft.trim().length < 2 || customerDraft.trim().length < 2} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return createSqlAccountCustomerAndRepush(runId, { code: customerCodeDraft.trim(), company_name: customerDraft.trim(), address: customerAddressDraft.trim() }); })} className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"><Send className="h-4 w-4" /> Create customer & re-push</button>
               </div>
             </section>
           )}
@@ -673,6 +687,9 @@ function GenericWorkflowReview({
   busy,
   loading,
   error,
+  refreshingPaymentPreview,
+  paymentPreviewError,
+  refreshPaymentPreview,
   act,
 }: {
   run: AgentRun;
@@ -681,11 +698,14 @@ function GenericWorkflowReview({
   busy: boolean;
   loading: boolean;
   error: string | null;
+  refreshingPaymentPreview: boolean;
+  paymentPreviewError: string | null;
+  refreshPaymentPreview: () => Promise<void>;
   act: (fn: () => Promise<AgentRun>) => Promise<void>;
 }) {
   const router = useRouter();
   if (run.review_schema?.template_key === 'payment_knock_off') {
-    return <PaymentWorkflowReview run={run} draft={draft} setDraft={setDraft} busy={busy} loading={loading} error={error} act={act} />;
+    return <PaymentWorkflowReview run={run} draft={draft} setDraft={setDraft} busy={busy} loading={loading} error={error} refreshingPaymentPreview={refreshingPaymentPreview} paymentPreviewError={paymentPreviewError} refreshPaymentPreview={refreshPaymentPreview} act={act} />;
   }
   const runId = run.id;
   const fields = run.review_schema?.fields || [];
@@ -757,18 +777,20 @@ function GenericWorkflowReview({
   );
 }
 
-type PaymentSlip = { source_index?: number; payment_date?: string | null; bank_reference?: string | null; payer?: string | null; amount?: number | null; currency?: string | null; payment_method_code?: string | null; confidence?: number | null; evidence_file?: string | null; unapplied_amount?: number | null };
+type PaymentSlip = { source_index?: number; payment_date?: string | null; bank_reference?: string | null; payer_name?: string | null; payer?: string | null; amount?: number | null; currency?: string | null; payment_method_code?: string | null; confidence?: number | null; evidence_file?: string | null; unapplied_amount?: number | null };
 type PaymentInvoice = { invoice_number?: string | null; stated_amount?: number | null; requested_amount?: number | null; open_balance?: number | null; status?: string | null };
 type PaymentAllocation = { or_index?: number; slip_index?: number; invoice_number?: string | null; amount_to_allocate?: number | null; remaining_invoice_balance?: number | null };
 type PaymentMethod = { code?: string; label?: string; bank_account?: string; is_default?: boolean };
+type BankTransactionMatch = { slip_index?: number; status?: 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS'; confidence?: number; statement_id?: number; bank_name?: string | null; transaction_id?: number; transaction_date?: string; reference_number?: string | null; amount?: number; reasons?: string[] };
 
-function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act }: { run: AgentRun; draft: Record<string, unknown>; setDraft: (value: Record<string, unknown>) => void; busy: boolean; loading: boolean; error: string | null; act: (fn: () => Promise<AgentRun>, message?: string) => Promise<void> }) {
+function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, refreshingPaymentPreview, paymentPreviewError, refreshPaymentPreview, act }: { run: AgentRun; draft: Record<string, unknown>; setDraft: (value: Record<string, unknown>) => void; busy: boolean; loading: boolean; error: string | null; refreshingPaymentPreview: boolean; paymentPreviewError: string | null; refreshPaymentPreview: () => Promise<void>; act: (fn: () => Promise<AgentRun>, message?: string) => Promise<void> }) {
   const router = useRouter();
   const [varianceModal, setVarianceModal] = useState(false);
   const slips = (Array.isArray(draft.payment_slips) ? draft.payment_slips : []) as PaymentSlip[];
   const invoices = (Array.isArray(draft.requested_invoices) ? draft.requested_invoices : []) as PaymentInvoice[];
   const allocations = (Array.isArray(draft.allocations) ? draft.allocations : []) as PaymentAllocation[];
   const methods = (Array.isArray(draft.payment_methods) ? draft.payment_methods : []) as PaymentMethod[];
+  const bankMatches = (Array.isArray(draft.bank_transaction_matches) ? draft.bank_transaction_matches : []) as BankTransactionMatch[];
   const warnings = (Array.isArray(draft.warnings) ? draft.warnings : []) as string[];
   const source = (draft.source && typeof draft.source === 'object' ? draft.source : {}) as { files?: ExternalDocument[]; message?: string };
   const refs = (run.output_refs || {}) as { sql_account_payment?: { status?: string; detail?: string; note?: string; receipts?: Array<{ or_no?: string; receipt?: { or_no?: string }; status?: string; allocations?: Array<Record<string, unknown>>; invoice_allocations?: Array<Record<string, unknown>>; detail?: string }> }; sql_official_receipts?: ExternalDocument[]; notify?: { status?: string; detail?: string; note?: string; documents?: string[] } };
@@ -796,11 +818,15 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     <button onClick={() => router.push('/review')} className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><ArrowLeft className="h-4 w-4" /> Back to Review</button>
     {loading && <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading payment bundle…</div>}
     {error && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">{error}</div>}
+    {refreshingPaymentPreview && <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100"><LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /><div><p className="font-semibold">Review ready — refreshing live accounting data</p><p className="mt-1 text-xs opacity-75">You can inspect the extracted slip and bank evidence while customer, invoice and payment-method details update.</p></div></div>}
+    {!refreshingPaymentPreview && paymentPreviewError && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><div><p className="font-semibold">Live accounting data is temporarily unavailable</p><p className="mt-1 text-xs opacity-80">The extracted payment remains available. Refresh the accounting data before validating or posting.</p></div><button type="button" onClick={() => void refreshPaymentPreview()} className="rounded-lg border border-amber-500/60 bg-white px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-slate-900">Try again</button></div>}
     {busy && <div role="status" className="flex items-center gap-3 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm font-semibold text-cyan-950"><LoaderCircle className="h-5 w-5 animate-spin" /> Smartdok is checking live SQL Accounting data. Posting can take up to a minute.</div>}
 
     <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><StatusPill status={run.status} /><span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Payment knock-off</span></div><h1 className="mt-3 text-2xl font-bold">{draft.customer ? String(draft.customer) : 'Customer payment'}</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">{draft.customer_code ? `SQL customer ${String(draft.customer_code)}` : 'Customer still needs a live SQL match'} · {slips.length} payment slip{slips.length === 1 ? '' : 's'}</p></div><div className="text-right text-xs text-[var(--muted-foreground)]"><p>Run #{run.id}</p><p>{formatDateTime(run.received_at)}</p></div></div>{source.message && <div className="mt-4 rounded-xl bg-[var(--muted)] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">SLIP UPDATE instruction</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.message}</p></div>}</header>
 
     <section className="grid gap-3 sm:grid-cols-4"><Metric label="Slip total" value={moneyText(displayedSlipTotal)} /><Metric label="Requested invoices" value={moneyText(displayedInvoiceTotal)} /><Metric label="Allocated" value={moneyText(displayedAllocatedTotal)} /><Metric label="Unapplied / variance" value={moneyText(displayedUnappliedTotal)} warning={Math.abs(displayedUnappliedTotal) > 0.005} /></section>
+
+    <BankEvidenceReview slips={slips} matches={bankMatches} moneyText={moneyText} />
 
     {(warnings.length > 0 || run.error_message) && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950"><div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><h2 className="font-semibold">Review required</h2>{[run.error_message, ...warnings].filter(Boolean).map((warning, index) => <p key={index} className="mt-1 text-sm">{warning}</p>)}</div></div></section>}
 
@@ -814,11 +840,20 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
 
     {refs.sql_account_payment && <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">Posting results</h2><StatusPill status={refs.sql_account_payment.status || 'pending'} /></div>{refs.sql_account_payment.status !== 'created' && <p className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-900">{refs.sql_account_payment.detail || refs.sql_account_payment.note || 'SQL Accounting did not create the receipt.'}</p>}<div className="mt-3 space-y-2">{(refs.sql_account_payment.receipts || []).map((receipt, index) => { const orNo = receipt.receipt?.or_no || receipt.or_no; const allocationCount = receipt.allocations?.length || receipt.invoice_allocations?.length || 0; return <div key={orNo || index} className="flex items-center justify-between rounded-lg bg-[var(--muted)] p-3 text-sm"><span><b>{orNo || `OR ${index + 1}`}</b><span className="ml-2 text-[var(--muted-foreground)]">{receipt.detail || `${allocationCount} invoice allocation(s)`}</span></span><span className="font-semibold">{receipt.status || 'created'}</span></div>; })}</div>{refs.sql_official_receipts && refs.sql_official_receipts.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{refs.sql_official_receipts.map((file) => <PaymentEvidence key={file.file_key} runId={run.id} file={file} />)}</div>}{refs.notify && <p className={`mt-3 rounded-lg p-3 text-sm ${refs.notify.status === 'sent' ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-950'}`}>{refs.notify.status === 'sent' ? 'Official SQL OR PDFs were returned to the originating WeChat group.' : `Delivery pending: ${refs.notify.detail || refs.notify.note || 'official PDF is not available yet'}`}</p>}</section>}
 
-    <section className="sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-4 shadow-lg backdrop-blur">{run.status === 'PENDING_REVIEW' && <><button disabled={busy} onClick={() => void act(() => reviewRun(run.id, draft as AgentRunData))} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold disabled:opacity-50">Save corrections</button><button disabled={busy} onClick={requestPrepare} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Validate payment knock-off</button></>}{canApprove && <button disabled={busy} onClick={() => void act(() => approveRun(run.id, draft as AgentRunData), 'Posting the approved receipt to SQL Accounting...')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {busy ? 'Posting receipt...' : `Approve & post ${slips.length} receipt${slips.length === 1 ? '' : 's'}`}</button>}{run.status === 'DELIVERY_PENDING' && <button disabled={busy} onClick={() => void act(() => retryRunDelivery(run.id))} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Send className="h-4 w-4" /> Retry PDF delivery</button>}{editable && <button disabled={busy} onClick={() => void act(() => rejectRun(run.id, 'Rejected by payment reviewer'))} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Reject</button>}{run.status === 'COMPLETED' && <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Posted and returned to WeChat</span>}</section>
+    <section className="sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-4 shadow-lg backdrop-blur">{run.status === 'PENDING_REVIEW' && <><button disabled={busy} onClick={() => void act(() => reviewRun(run.id, draft as AgentRunData))} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold disabled:opacity-50">Save corrections</button><button disabled={busy || refreshingPaymentPreview || Boolean(paymentPreviewError)} onClick={requestPrepare} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{refreshingPaymentPreview ? 'Refreshing accounting data…' : 'Validate payment knock-off'}</button></>}{canApprove && <button disabled={busy || refreshingPaymentPreview || Boolean(paymentPreviewError)} onClick={() => void act(() => approveRun(run.id, draft as AgentRunData), 'Posting the approved receipt to SQL Accounting...')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{busy || refreshingPaymentPreview ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {busy ? 'Posting receipt...' : refreshingPaymentPreview ? 'Refreshing accounting data…' : `Approve & post ${slips.length} receipt${slips.length === 1 ? '' : 's'}`}</button>}{run.status === 'DELIVERY_PENDING' && <button disabled={busy} onClick={() => void act(() => retryRunDelivery(run.id))} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Send className="h-4 w-4" /> Retry PDF delivery</button>}{editable && <button disabled={busy} onClick={() => void act(() => rejectRun(run.id, 'Rejected by payment reviewer'))} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Reject</button>}{run.status === 'COMPLETED' && <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Posted and returned to WeChat</span>}</section>
   </div>{varianceModal && <ReviewConfirmationModal title="Accept unapplied customer credit?" confirmLabel="Accept variance & prepare" tone="warning" busy={busy} onCancel={() => setVarianceModal(false)} onConfirm={acceptVariance}><p>The slips exceed the selected invoice allocations by <b>{moneyText(displayedUnappliedTotal)}</b>. Continuing records an explicit reviewer override and allows SQL Accounting to retain this amount as unapplied customer credit. It will never be accepted silently.</p></ReviewConfirmationModal>}</AppLayout>;
 }
 
 function Metric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) { return <div className={`rounded-xl border p-4 ${warning ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-[var(--border)] bg-[var(--card)]'}`}><p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>; }
+
+function BankEvidenceReview({ slips, matches, moneyText }: { slips: PaymentSlip[]; matches: BankTransactionMatch[]; moneyText: (value?: number | null) => string }) {
+  const matchedCount = matches.filter((item) => item.status === 'MATCHED').length;
+  const allMatched = slips.length > 0 && matchedCount === slips.length;
+  return <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Bank-statement verification</h2><p className="mt-1 text-sm text-[var(--muted-foreground)]">Each payment slip must resolve to one transaction from an uploaded bank statement before posting.</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${allMatched ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{matchedCount} of {slips.length} verified</span></div>
+    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[var(--muted)]"><tr>{['Slip', 'Status', 'Bank transaction', 'Reference', 'Amount', 'Why'].map((label) => <th key={label} className="px-3 py-2 text-left">{label}</th>)}</tr></thead><tbody>{slips.map((slip, index) => { const match = matches.find((item) => Number(item.slip_index) === Number(slip.source_index ?? index)); return <tr key={index} className="border-t border-[var(--border)]"><td className="px-3 py-3 font-semibold">Slip {index + 1}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${match?.status === 'MATCHED' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>{match?.status?.replaceAll('_', ' ') || 'NOT CHECKED'}</span></td><td className="px-3 py-3">{match?.statement_id ? <a href={`/bank-statements/${match.statement_id}`} className="font-medium text-[var(--primary)] hover:underline">{match.bank_name || 'Bank'} · transaction #{match.transaction_id}</a> : '-'}</td><td className="px-3 py-3">{match?.reference_number || '-'}</td><td className="px-3 py-3">{match?.amount == null ? '-' : moneyText(match.amount)}</td><td className="max-w-xs px-3 py-3 text-xs text-[var(--muted-foreground)]">{match?.reasons?.join(' ') || 'Upload the bank statement containing this receipt.'}</td></tr>; })}</tbody></table></div>
+  </section>;
+}
 
 function PaymentEvidence({ runId, file }: { runId: number; file: ExternalDocument }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -853,7 +888,7 @@ function inferColumns(rows: Array<Record<string, unknown>>): ReviewFieldDefiniti
 }
 
 function humanLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function formatDateTime(value?: string | null) { return value ? new Date(value).toLocaleString() : '—'; }
+function formatDateTime(value?: string | null) { return formatMalaysiaDateTime(value); }
 function StatusPill({ status }: { status: string }) { const tone = status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : status === 'FAILED' ? 'bg-red-100 text-red-800' : status === 'DRAFT_GENERATED' ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-900'; return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{humanLabel(status)}</span>; }
 function Meta({ label, value }: { label: string; value: string }) { return <div className="grid grid-cols-[80px_1fr] gap-2"><dt className="text-[var(--muted-foreground)]">{label}</dt><dd className="break-words font-medium">{value}</dd></div>; }
 

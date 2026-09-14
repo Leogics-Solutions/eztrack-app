@@ -1,0 +1,6 @@
+﻿Claim ID,Staff,Receipt Number,Merchant,Receipt Date,Submitted Date,Receipt Amount,Claim Amount,Attachment Present
+CLM-TS-001,John Tan,RCP-10001,KL Project Travel,2026-07-20,2026-08-10,182.5,182.5,True
+CLM-TS-002,Sarah Lim,RCP-10002,Site Transport,2026-04-15,2026-08-10,95,95,True
+CLM-TS-003,John Tan,RCP-88421,City Office Supplies,2026-07-18,2026-08-10,286.4,286.4,True
+CLM-TS-004,Sarah Lim,RCP-88421,City Office Supplies,2026-07-18,2026-08-10,286.4,286.4,True
+CLM-TS-005,John Tan,RCP-10005,Project Parking,2026-08-01,2026-08-10,42,48,False

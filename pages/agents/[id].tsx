@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
 import { useLanguage } from '@/lib/i18n';
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useCallback, useEffect, useState } from 'react';
@@ -176,7 +177,7 @@ export default function AgentDetailPage() {
                       <td className="px-4 py-2">{r.source_channel}</td>
                       <td className="px-4 py-2">{r.source_filename || '—'}</td>
                       <td className="px-4 py-2"><StatusBadge status={r.status} /></td>
-                      <td className="px-4 py-2">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-2">{formatMalaysiaDateTime(r.received_at)}</td>
                     </tr>
                   ))}
                   {runs.length === 0 && (

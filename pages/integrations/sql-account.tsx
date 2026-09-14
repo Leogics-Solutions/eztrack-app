@@ -39,6 +39,8 @@ export default function SqlAccountIntegrationPage() {
   const [invoicePrefix, setInvoicePrefix] = useState('IV-');
   const [invoiceNextNumber, setInvoiceNextNumber] = useState(1);
   const [invoicePadding, setInvoicePadding] = useState(5);
+  const [defaultPurchaseAccount, setDefaultPurchaseAccount] = useState('');
+  const [defaultPurchaseUom, setDefaultPurchaseUom] = useState('UNIT');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodMapping[]>([{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
 
   const load = useCallback(async () => {
@@ -67,6 +69,8 @@ export default function SqlAccountIntegrationPage() {
     setInvoicePrefix('IV-');
     setInvoiceNextNumber(1);
     setInvoicePadding(5);
+    setDefaultPurchaseAccount('');
+    setDefaultPurchaseUom('UNIT');
     setPaymentMethods([{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
     setShowForm(false);
   }
@@ -90,6 +94,8 @@ export default function SqlAccountIntegrationPage() {
     setInvoicePrefix('IV-');
     setInvoiceNextNumber(1);
     setInvoicePadding(5);
+    setDefaultPurchaseAccount(String(item.config?.default_purchase_account || ''));
+    setDefaultPurchaseUom(String(item.config?.default_purchase_uom || item.config?.default_uom || 'UNIT'));
     const configured = Array.isArray(item.config?.payment_methods) ? item.config.payment_methods as PaymentMethodMapping[] : [];
     setPaymentMethods(configured.length ? configured : [{ code: '', label: 'Bank transfer', bank_account: '', is_default: true }]);
     setShowForm(true);
@@ -125,14 +131,14 @@ export default function SqlAccountIntegrationPage() {
           api_url: apiUrl.trim(),
           api_key: apiKey.trim(),
           company: company.trim() || undefined,
-          config: { payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
+          config: { default_purchase_account: defaultPurchaseAccount.trim(), default_purchase_uom: defaultPurchaseUom.trim() || 'UNIT', payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
         });
       } else {
         const changes: { name: string; api_url: string; company: string; api_key?: string; config: Record<string, unknown> } = {
           name: name.trim(),
           api_url: apiUrl.trim(),
           company: company.trim(),
-          config: { ...((items.find((item) => item.id === editingId)?.config || {})), payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
+          config: { ...((items.find((item) => item.id === editingId)?.config || {})), default_purchase_account: defaultPurchaseAccount.trim(), default_purchase_uom: defaultPurchaseUom.trim() || 'UNIT', payment_methods: paymentMethods.filter((item) => item.code.trim()).map((item) => ({ ...item, code: item.code.trim(), label: item.label.trim(), bank_account: item.bank_account.trim() })) },
         };
         if (apiKey.trim()) changes.api_key = apiKey.trim();
         savedConnection = await updateSqlAccountConnection(editingId, changes);
@@ -225,6 +231,14 @@ export default function SqlAccountIntegrationPage() {
             <label className="text-xs font-semibold">Invoice prefix<input value={invoicePrefix} onChange={(event) => setInvoicePrefix(event.target.value)} className={`${inputClass} mt-1`} /></label>
             <label className="text-xs font-semibold">Next invoice number<input required min={1} type="number" value={invoiceNextNumber} onChange={(event) => setInvoiceNextNumber(Math.max(1, Number(event.target.value) || 1))} className={`${inputClass} mt-1`} /></label>
             <label className="text-xs font-semibold">Invoice digits<input required min={1} max={12} type="number" value={invoicePadding} onChange={(event) => setInvoicePadding(Math.min(12, Math.max(1, Number(event.target.value) || 1)))} className={`${inputClass} mt-1`} /></label>
+          </div>
+        </div>
+        <div className="mt-5 rounded-xl border border-[var(--border)] p-4">
+          <h3 className="text-sm font-semibold">Purchase Invoice defaults</h3>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">Used when an approved supplier-invoice line has no exact SQL Account item or GL account mapping.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-semibold">Default purchase account<input value={defaultPurchaseAccount} onChange={(event) => setDefaultPurchaseAccount(event.target.value)} placeholder="e.g. 610-000" className={`${inputClass} mt-1`} /></label>
+            <label className="text-xs font-semibold">Default purchase UOM<input value={defaultPurchaseUom} onChange={(event) => setDefaultPurchaseUom(event.target.value.toUpperCase())} placeholder="UNIT" className={`${inputClass} mt-1`} /></label>
           </div>
         </div>
         <div className="mt-5 rounded-xl border border-[var(--border)] p-4">

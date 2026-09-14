@@ -64,6 +64,7 @@ export {
   uploadInvoiceMultipart,
   batchUploadSupportingDocuments,
   getBatchJobStatus,
+  streamBatchJobProgress,
   getDocumentBatchJobStatus,
   listBatchJobs,
   downloadInvoiceFile,
@@ -75,6 +76,7 @@ export {
 } from './InvoiceService';
 
 export type {
+  ProcessingEvent,
   Invoice,
   InvoiceLineItem,
   BankReconciliation,
@@ -501,11 +503,15 @@ export {
   createSupplierStatementLinksBulk,
   getInvoiceSupplierStatementLinks,
   deleteSupplierStatementLink,
+  reconcileSupplierStatement,
 } from './SupplierStatementService';
 
 export type {
   SupplierStatement,
   SupplierStatementLineItem,
+  SupplierStatementReconciliation,
+  SupplierStatementReconciliationItem,
+  SupplierStatementReconciliationStatus,
   UploadIntentRequest,
   UploadIntentResponse,
   ConfirmUploadResponse,

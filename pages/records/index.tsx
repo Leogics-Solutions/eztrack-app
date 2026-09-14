@@ -55,6 +55,7 @@ const SECTIONS: RecordSection[] = [
     description: 'Customer invoices, incoming money, and payment allocation work.',
     links: [
       { href: '/sales-invoices', title: 'Customer invoices', description: 'Review issued invoices and outstanding customer records.', icon: FileCheck2 },
+      { href: '/collections', title: 'SOA & collections', description: 'Import receivables ageing, prepare customer SOAs, and control follow-up actions.', icon: ReceiptText },
       { href: '/bank-statements', title: 'Incoming payments', description: 'Find bank receipts and match them to open invoices.', icon: WalletCards },
       { href: '/bank-statements', title: 'Payment allocation', description: 'Review partial, combined, and unidentified customer payments.', icon: Scale },
       { href: '/creditor-accounts', title: 'Business counterparties', description: 'Browse counterparties and their related finance records.', icon: Users },

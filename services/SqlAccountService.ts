@@ -65,6 +65,24 @@ export async function diagnoseSqlAccountCustomerPayment(id: number): Promise<Rec
   return handle(await fetch(`${BASE_URL}/sql-account/connections/${id}/payment-diagnostic`, { method: 'POST', headers: getScopedHeaders() }));
 }
 
+export interface SqlAccountPurchaseInvoiceResult {
+  status: 'created' | 'already_exists';
+  connection_id: number;
+  purchase_invoice: { document_no: string; document_date?: string; document_amount?: string };
+  supplier?: { code: string; company_name: string };
+}
+
+export async function pushPurchaseInvoiceToSqlAccount(
+  invoiceId: number,
+  connectionId: number,
+): Promise<SqlAccountPurchaseInvoiceResult> {
+  return handle(await fetch(`${BASE_URL}/sql-account/purchase-invoices/${invoiceId}/push`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+    body: JSON.stringify({ connection_id: connectionId }),
+  }));
+}
+
 export async function getSqlAccountNumberSeries(id: number): Promise<SqlAccountNumberSeries | null> {
   const response = await fetch(`${BASE_URL}/sql-account/connections/${id}/number-series`, { headers: getScopedHeaders() });
   if (response.status === 404) return null;

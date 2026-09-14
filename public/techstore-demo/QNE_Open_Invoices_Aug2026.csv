@@ -1,0 +1,4 @@
+﻿Invoice Number,Customer / Supplier,Invoice Date,Original Amount,Outstanding,Currency
+INV-TS-1001,ABC Infrastructure Sdn Bhd,2026-07-28,10000,10000,MYR
+INV-TS-2001,Mega Network Solutions Sdn Bhd,2026-07-30,10000,10000,MYR
+INV-TS-3001,Digital Equipment Resources Sdn Bhd,2026-08-01,10000,10000,MYR

@@ -38,6 +38,7 @@ const RECORD_ROUTES = [
   '/payment-gateways',
   '/supplier-statements',
   '/project-gp',
+  '/collections',
 ];
 
 export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
@@ -53,7 +54,7 @@ export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
       relatedRoutes: RECORD_ROUTES,
       children: [
         { href: '/records?section=documents', label: 'Documents', relatedRoutes: ['/documents', '/supporting-documents'] },
-        { href: '/records?section=receivables', label: 'Receivables', relatedRoutes: ['/sales-invoices'] },
+        { href: '/records?section=receivables', label: 'Receivables', relatedRoutes: ['/sales-invoices', '/collections'] },
         { href: '/records?section=payables', label: 'Payables', relatedRoutes: ['/purchase-invoices', '/creditor-accounts', '/supplier-statements', '/settlement-documents'] },
         { href: '/records?section=banking', label: 'Banking & reconciliation', relatedRoutes: ['/bank-statements', '/payment-gateways', '/chart-of-accounts', '/coa-viewer'] },
         { href: '/records?section=operations', label: 'Operations', relatedRoutes: ['/project-gp'] },

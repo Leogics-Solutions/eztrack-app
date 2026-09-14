@@ -5,12 +5,15 @@ import { useLanguage } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
 import { FileUpload } from "@/components/FileUpload";
+import { DocumentProcessingProgress } from "@/components/DocumentProcessingProgress";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import {
   batchUploadInvoices,
   batchUploadInvoicesMultipart,
   uploadInvoiceMultipart,
   getBatchJobStatus,
+  streamBatchJobProgress,
+  type ProcessingEvent,
   listProjects,
   normalizeProjects,
   type DocumentType,
@@ -19,6 +22,7 @@ import {
 import { useOrganization } from "@/lib/OrganizationContext";
 
 interface JobProgress {
+  progressEvents?: ProcessingEvent[];
   jobId: string;
   filename: string;
   status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
@@ -80,26 +84,27 @@ const BatchUpload = () => {
   const [uploadMode, setUploadMode] = useState<'s3' | 'multipart'>('multipart');
   const [isUploading, setIsUploading] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("");
   const [progressDetails, setProgressDetails] = useState("");
   const [elapsedTime, setElapsedTime] = useState("0.0s");
-  const [currentFileTime, setCurrentFileTime] = useState("0.0s");
-  const [showFileTiming, setShowFileTiming] = useState(false);
   const [progressStatus, setProgressStatus] = useState<'normal' | 'error' | 'completed'>('normal');
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [showResultActions, setShowResultActions] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [jobProgresses, setJobProgresses] = useState<JobProgress[]>([]);
+  const progressStreamRef = useRef<AbortController | null>(null);
+  const activeUploadRef = useRef(0);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
-  const currentFileStartTimeRef = useRef<number>(0);
+  const [connectionIssue, setConnectionIssue] = useState(false);
 
   // Clean up on unmount
   useEffect(() => {
+    const uploadGeneration = activeUploadRef;
     return () => {
+      uploadGeneration.current++;
+      progressStreamRef.current?.abort();
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
@@ -132,7 +137,7 @@ const BatchUpload = () => {
     setDocumentCategory(category);
     setDocumentSubCategory('');
     if (category !== 'claims_compilation') setCompileBatch(false);
-    
+
     // Map category to document type
     if (category === 'petty_cash') {
       setDocumentType('petty_cash');
@@ -146,7 +151,7 @@ const BatchUpload = () => {
   // Handle document sub-category change
   const handleSubCategoryChange = (subCategory: string) => {
     setDocumentSubCategory(subCategory);
-    
+
     // Keep document_type as base category (petty_cash or claims_compilation)
     // The sub-category will be passed separately as document_sub_type
     // This aligns with backend which expects: document_type + document_sub_type
@@ -173,42 +178,43 @@ const BatchUpload = () => {
     // Validate file types for combined_docs (PDFs and images allowed)
     if (documentType === 'combined_docs') {
       const invalidFiles = selectedFiles.filter(file => !isAcceptedCombinedDocFile(file));
-      
+
       if (invalidFiles.length > 0) {
         alert(`Combined Documents mode only accepts PDF files or images. Please remove the following unsupported files:\n${invalidFiles.map(f => f.name).join('\n')}`);
         return;
       }
     }
 
+    progressStreamRef.current?.abort();
+    const uploadId = ++activeUploadRef.current;
     setIsUploading(true);
     setShowProgress(true);
     setProgressStatus('normal');
+    setConnectionIssue(false);
+    setElapsedTime("0.0s");
     setResultSummary(null);
     setShowResultActions(false);
     setJobProgresses([]);
 
     // Start timing
     startTimeRef.current = Date.now();
-    currentFileStartTimeRef.current = Date.now();
 
-    // Update elapsed time every 100ms
+    // Update elapsed time every second
     timingIntervalRef.current = setInterval(() => {
       const elapsed = ((Date.now() - startTimeRef.current) / 1000).toFixed(1);
       setElapsedTime(elapsed + 's');
 
-      const currentFileElapsed = ((Date.now() - currentFileStartTimeRef.current) / 1000).toFixed(1);
-      setCurrentFileTime(currentFileElapsed + 's');
-    }, 100);
+    }, 1000);
 
     try {
       // Upload files using batch upload API
-      setProgressText(t.documents.batchUploadPage.preparingUpload);
+
       setProgressDetails(
         uploadMode === 'multipart'
           ? 'Uploading files to backend...'
           : 'Requesting presigned URLs → uploading to S3 → confirming...'
       );
-      
+
       let uploadResponse: any;
       let jobs: any[] = [];
       let failures: any[] = [];
@@ -228,7 +234,7 @@ const BatchUpload = () => {
             compile_batch: documentType === 'claims_compilation' ? compileBatch : undefined,
             project_id: projectId,
           });
-          
+
           if (uploadResponse.success && uploadResponse.data) {
             jobs = uploadResponse.data.jobs || [];
             failures = uploadResponse.data.failures || [];
@@ -246,22 +252,22 @@ const BatchUpload = () => {
                            error.message?.includes('413') || 
                            error.message?.toLowerCase().includes('payload too large') ||
                            error.message?.toLowerCase().includes('request entity too large');
-          
+
           if (is413Error || error.message) {
             setProgressDetails(
               is413Error 
                 ? 'Batch upload too large, uploading files sequentially...'
                 : 'Upload failed, retrying files sequentially...'
             );
-            
+
             // Upload files sequentially
             const sequentialJobs: any[] = [];
             const sequentialFailures: any[] = [];
-            
+
             for (let i = 0; i < selectedFiles.length; i++) {
               const file = selectedFiles[i];
               setProgressDetails(`Uploading file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
-              
+
               try {
                 const singleFileResponse = await uploadInvoiceMultipart(file, {
                   auto_classify: autoClassify,
@@ -270,7 +276,7 @@ const BatchUpload = () => {
                   document_sub_type: documentSubCategory || undefined,
                   project_id: projectId,
                 });
-                
+
                 if (singleFileResponse.success && singleFileResponse.data) {
                   const fileJobs = singleFileResponse.data.jobs || [];
                   const fileFailures = singleFileResponse.data.failures || [];
@@ -293,7 +299,7 @@ const BatchUpload = () => {
                 });
               }
             }
-            
+
             jobs = sequentialJobs;
             failures = sequentialFailures;
             totalFiles = selectedFiles.length;
@@ -310,7 +316,7 @@ const BatchUpload = () => {
           document_sub_type: documentSubCategory || undefined,
           project_id: projectId,
         });
-        
+
         if (!uploadResponse.success || !uploadResponse.data) {
           throw new Error('Upload failed');
         }
@@ -319,7 +325,7 @@ const BatchUpload = () => {
         failures = uploadResponse.data.failures || [];
         totalFiles = uploadResponse.data.total_files ?? selectedFiles.length;
       }
-      
+
       // Initialize job progresses
       const localFailures: JobProgress[] = failures.map((f, idx) => ({
         jobId: `local-failure:${f.index ?? idx}`,
@@ -339,10 +345,17 @@ const BatchUpload = () => {
           errorMessage: null,
         })),
       ];
+      if (uploadId !== activeUploadRef.current) return;
       setJobProgresses(initialProgresses);
 
       // Start polling for job statuses
+      let pollingFinished = false;
+      let pollInFlight = false;
+      let lastProgresses = initialProgresses;
       const pollJobs = async () => {
+        if (pollingFinished || pollInFlight || uploadId !== activeUploadRef.current) return;
+        pollInFlight = true;
+        let connectionFailed = false;
         const updatedProgresses: JobProgress[] = [...localFailures];
         let allCompleted = true;
         let runningCount = 0;
@@ -352,12 +365,17 @@ const BatchUpload = () => {
         for (const job of jobs) {
           try {
             const statusResponse = await getBatchJobStatus(job.job_id);
+            if (uploadId !== activeUploadRef.current) return;
+            if (!statusResponse.success || !statusResponse.data?.data) {
+              throw new Error('Progress update unavailable');
+            }
             if (statusResponse.success && statusResponse.data?.data) {
               const jobData = statusResponse.data.data;
               updatedProgresses.push({
                 jobId: job.job_id,
                 filename: jobData.original_filename,
                 status: jobData.status,
+                progressEvents: jobData.progress_events,
                 invoiceId: jobData.invoice_id,
                 errorMessage: jobData.error_message,
               });
@@ -365,8 +383,6 @@ const BatchUpload = () => {
               if (jobData.status === 'RUNNING') {
                 allCompleted = false;
                 runningCount++;
-                currentFileStartTimeRef.current = Date.now();
-                setShowFileTiming(true);
               } else if (jobData.status === 'SUCCESS') {
                 successCount++;
               } else if (jobData.status === 'FAILED') {
@@ -377,47 +393,47 @@ const BatchUpload = () => {
             }
           } catch (error) {
             console.error(`Error polling job ${job.job_id}:`, error);
-            updatedProgresses.push({
-              jobId: job.job_id,
-              filename: job.filename,
-              status: 'FAILED',
-              invoiceId: null,
-              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            connectionFailed = true;
+            allCompleted = false;
+            updatedProgresses.push(lastProgresses.find(item => item.jobId === job.job_id) || {
+              jobId: job.job_id, filename: job.filename, status: 'PENDING',
+              invoiceId: null, errorMessage: null,
             });
-            failedCount++;
           }
         }
 
-        setJobProgresses(updatedProgresses);
+        if (uploadId !== activeUploadRef.current) return;
+        lastProgresses = updatedProgresses;
+        setConnectionIssue(connectionFailed);
+        setJobProgresses(current => updatedProgresses.map(incoming => {
+          const existing = current.find(job => job.jobId === incoming.jobId);
+          const oldSequence = existing?.progressEvents?.at(-1)?.sequence ?? 0;
+          const newSequence = incoming.progressEvents?.at(-1)?.sequence ?? 0;
+          return existing && oldSequence > newSequence ? existing : incoming;
+        }));
 
-        // Update progress percentage
-        const total = isClaimsCompilation ? Math.max(jobs.length + localFailures.length, 1) : totalFiles;
-        const completed = successCount + failedCount;
-        const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
-        setProgress(progressPercent);
 
-        // Update progress text
+
+        // Update extraction details
         if (runningCount > 0) {
-          setProgressText(
-            isClaimsCompilation
-              ? 'Processing staff claim batch'
-              : `${t.documents.batchUploadPage.processing} ${Math.min(completed + 1, total)} of ${total} files`
-          );
+
           setProgressDetails(
             isClaimsCompilation
               ? `Compiling ${totalFiles} uploaded file(s) into one claim invoice...`
               : `Processing ${runningCount} file(s)...`
           );
         } else if (allCompleted) {
-          setProgress(100);
+          pollingFinished = true;
+          progressStreamRef.current?.abort();
+
           setProgressStatus('completed');
-          setProgressText(t.documents.batchUploadPage.uploadCompleted);
+
           setProgressDetails(
             isClaimsCompilation
               ? `Created ${successCount} compiled claim invoice${failedCount > 0 ? `, ${failedCount} failed` : ''}`
               : `Successfully processed ${successCount} file(s)${failedCount > 0 ? `, ${failedCount} failed` : ''}`
           );
-          
+
           // Build result summary
           const failedFiles: ResultSummary['failed_files'] = updatedProgresses
             .filter(jp => jp.status === 'FAILED')
@@ -426,7 +442,7 @@ const BatchUpload = () => {
               type: 'error' as const,
               reason: jp.errorMessage || 'Processing failed',
             }));
-          
+
           setResultSummary({
             created: successCount,
             failed: failedCount,
@@ -445,14 +461,30 @@ const BatchUpload = () => {
           }
           setIsUploading(false);
         }
+        pollInFlight = false;
       };
 
-      // Poll immediately, then every 10 seconds
+      // Streaming updates complement polling, which remains the fallback if a proxy buffers SSE.
+      if (jobs.length > 0 && jobs.length <= 100) {
+        const controller = new AbortController();
+        progressStreamRef.current = controller;
+        void streamBatchJobProgress(jobs.map(job => job.job_id), updates => {
+          if (uploadId !== activeUploadRef.current) return;
+          setJobProgresses(current => current.map(job => {
+            const update = updates.find(item => item.id === job.jobId);
+            return update ? { ...job, status: update.status, progressEvents: update.progress_events,
+              invoiceId: update.invoice_id, errorMessage: update.error_message } : job;
+          }));
+          if (updates.every(job => job.status === 'SUCCESS' || job.status === 'FAILED')) void pollJobs();
+        }, controller.signal).catch(() => { /* Existing polling continues on stream failure. */ });
+      }
+
+      // Poll while processing; avoid an extra interval after immediate completion.
       await pollJobs();
-      pollingIntervalRef.current = setInterval(pollJobs, 10000);
+      if (!pollingFinished && uploadId === activeUploadRef.current) pollingIntervalRef.current = setInterval(pollJobs, 3000);
 
     } catch (error) {
-      setProgressText(t.documents.batchUploadPage.uploadFailed);
+
       setProgressDetails(error instanceof Error ? error.message : 'Unknown error');
       setProgressStatus('error');
 
@@ -471,7 +503,7 @@ const BatchUpload = () => {
 
   const duplicates = resultSummary?.failed_files?.filter(ff => ff && ff.type === 'duplicate') || [];
   const errors = resultSummary?.failed_files?.filter(ff => !ff || ff.type !== 'duplicate') || [];
-  
+
   // Get failed jobs from jobProgresses for display
   const failedJobs = jobProgresses.filter(jp => jp.status === 'FAILED');
   const successfulJobs = jobProgresses.filter(jp => jp.status === 'SUCCESS');
@@ -645,20 +677,15 @@ const BatchUpload = () => {
         {/* Progress Bar */}
         {showProgress && (
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-3">{t.documents.batchUploadPage.uploadProgress}</h3>
-
-            <div className="w-full h-5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
-              <div
-                className={`h-full transition-all duration-300 rounded-full ${
-                  progressStatus === 'error' ? 'bg-[var(--error)]' :
-                  progressStatus === 'completed' ? 'bg-[var(--primary)]' : 'bg-green-500'
-                }`}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-
-            <div className="mb-2 text-sm">{progressText}</div>
-            <div className="text-[var(--muted-foreground)] text-sm mb-4">{progressDetails}</div>
+            <DocumentProcessingProgress
+              jobs={jobProgresses}
+              totalFiles={selectedFiles.length}
+              status={progressStatus}
+              elapsed={elapsedTime}
+              errorMessage={progressDetails}
+              connectionIssue={connectionIssue}
+              summary={resultSummary}
+            />
 
             {/* Individual Job Statuses */}
             {jobProgresses.length > 0 && (
@@ -668,16 +695,16 @@ const BatchUpload = () => {
                   {jobProgresses.map((job, idx) => (
                     <div
                       key={job.jobId}
-                      className="flex items-center justify-between p-2 rounded border border-[var(--border)] text-xs"
+                      className="flex items-center justify-between gap-2 p-3 rounded-lg border border-[var(--border)] text-xs"
                     >
-                      <span className="truncate flex-1">{job.filename}</span>
+                      <span className="truncate flex-1" title={job.filename}>{job.filename}</span>
                       <span className={`ml-2 px-2 py-1 rounded ${
                         job.status === 'SUCCESS' ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' :
                         job.status === 'FAILED' ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' :
                         job.status === 'RUNNING' ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' :
                         'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
                       }`}>
-                        {job.status}
+                        {job.status === 'RUNNING' && job.progressEvents?.length ? job.progressEvents[job.progressEvents.length - 1].message : ({ PENDING: 'Queued', RUNNING: 'Processing?', SUCCESS: 'Ready to review', FAILED: 'Needs attention' })[job.status]}
                       </span>
                       {job.invoiceId && (
                         <a
@@ -787,7 +814,7 @@ const BatchUpload = () => {
                   {t.documents.batchUploadPage.goToDocuments}
                 </button>
                 <button
-                  onClick={() => {}}
+                  onClick={() => setShowProgress(false)}
                   className="px-4 py-2 bg-[var(--hover-bg-lighter)] hover:bg-[var(--hover-bg-light)] dark:bg-[var(--hover-border)] dark:hover:bg-[var(--hover-bg-light)] rounded-md transition-colors font-medium text-sm"
                 >
                   {t.documents.batchUploadPage.stayHere}
@@ -795,16 +822,7 @@ const BatchUpload = () => {
               </div>
             )}
 
-            {/* Timing Information */}
-            <div className="mt-4 pt-4 border-t border-[var(--border)]">
-              <h4 className="font-semibold mb-2 text-sm">{t.documents.batchUploadPage.processingTime}</h4>
-              <div className="text-sm">
-                <div>{t.documents.batchUploadPage.elapsed}: <span className="font-mono font-bold">{elapsedTime}</span></div>
-                {showFileTiming && (
-                  <div>{t.documents.batchUploadPage.currentFile}: <span className="font-mono font-bold">{currentFileTime}</span></div>
-                )}
-              </div>
-            </div>
+
           </div>
         )}
 

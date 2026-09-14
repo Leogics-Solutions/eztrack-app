@@ -1,6 +1,7 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
+import { formatMalaysiaDateTime, parseApiDateTime } from '@/lib/dateTime';
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
   listCaptureWorkInbox,
@@ -8,6 +9,7 @@ import {
 } from '@/services/CaptureService';
 import { listInvoices, type Invoice } from '@/services/InvoiceService';
 import { listRuns, type AgentRunListItem } from '@/services/AgentsService';
+import { listCollectionImports, type CollectionCase, type CollectionImport } from '@/services/CollectionService';
 import {
   AlertTriangle,
   ArrowRight,
@@ -38,7 +40,7 @@ interface ReviewTask {
   href: string;
   updatedAt: string;
   amount?: string;
-  source: 'inbox' | 'record' | 'automation';
+  source: 'inbox' | 'record' | 'automation' | 'collection';
 }
 
 function automationTask(run: AgentRunListItem): ReviewTask {
@@ -63,6 +65,22 @@ function automationTask(run: AgentRunListItem): ReviewTask {
     href: `/review/${run.id}`,
     updatedAt: run.completed_at || run.received_at || new Date(0).toISOString(),
     source: 'automation',
+  };
+}
+
+function collectionTask(batch: CollectionImport, item: CollectionCase): ReviewTask {
+  const paused = item.review_status === 'PAUSED';
+  return {
+    id: `collection-${batch.id}-${item.customer_code}`,
+    title: item.customer,
+    subtitle: `${item.customer_code} · ${item.oldest_days_overdue} days overdue`,
+    workflow: 'SOA & collection follow-up',
+    kind: paused ? 'validation' : 'approval',
+    reason: paused ? `Collection paused: ${item.pause_reason || 'Finance follow-up required'}` : `${item.next_action} is prepared and awaiting Finance approval.`,
+    href: `/collections?import=${encodeURIComponent(batch.id)}&case=${encodeURIComponent(item.customer_code)}`,
+    updatedAt: batch.created_at || `${batch.statement_date}T00:00:00Z`,
+    amount: `${item.currency} ${item.total_outstanding.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    source: 'collection',
   };
 }
 
@@ -95,11 +113,15 @@ function captureTask(item: CaptureWorkItem): ReviewTask {
 
 function invoiceIssues(invoice: Invoice) {
   const issues: string[] = [];
+  const claimPolicy = invoice.payment_proof_details?.policy_validation;
   if (invoice.is_duplicate) issues.push('Possible duplicate document');
   if (invoice.missing_do) issues.push('Delivery order is missing');
   if (invoice.missing_custom_form) issues.push('Required supporting form is missing');
   if (invoice.payment_proof_status && ['needs_review', 'mismatch', 'partial'].includes(invoice.payment_proof_status)) {
     issues.push(`Payment evidence is ${invoice.payment_proof_status.replaceAll('_', ' ')}`);
+  }
+  if (claimPolicy && claimPolicy.status !== 'pass') {
+    issues.push(claimPolicy.reason || 'Staff claim policy requires review');
   }
   if (invoice.compliance_status && ['warning', 'fail', 'needs_review'].includes(invoice.compliance_status)) {
     issues.push(`Compliance check returned ${invoice.compliance_status.replaceAll('_', ' ')}`);
@@ -114,14 +136,16 @@ function invoiceIssues(invoice: Invoice) {
 function invoiceTask(invoice: Invoice): ReviewTask | null {
   const issues = invoiceIssues(invoice);
   if (issues.length === 0) return null;
+  const claimPolicyIssue = invoice.payment_proof_details?.policy_validation?.status !== undefined
+    && invoice.payment_proof_details.policy_validation.status !== 'pass';
   const matchingIssue = invoice.payment_proof_status && ['needs_review', 'mismatch', 'partial'].includes(invoice.payment_proof_status);
   const missingIssue = invoice.missing_do || invoice.missing_custom_form;
   return {
     id: `invoice-${invoice.id}`,
     title: invoice.invoice_no || `Document #${invoice.id}`,
     subtitle: invoice.vendor_name || invoice.customer_name || invoice.original_filename || 'Finance document',
-    workflow: matchingIssue ? 'Payment matching' : 'Finance document',
-    kind: matchingIssue ? 'matching' : missingIssue ? 'missing' : 'validation',
+    workflow: claimPolicyIssue ? 'Staff claim validation' : matchingIssue ? 'Payment matching' : 'Finance document',
+    kind: claimPolicyIssue ? 'validation' : matchingIssue ? 'matching' : missingIssue ? 'missing' : 'validation',
     reason: issues.join(' · '),
     href: `/documents/${invoice.id}`,
     updatedAt: invoice.created_at || invoice.invoice_date,
@@ -140,10 +164,11 @@ export default function ReviewPage() {
   const [workflow, setWorkflow] = useState('ALL');
 
   const load = useCallback(async () => {
-    const [captureResult, invoiceResult, runResult] = await Promise.allSettled([
+    const [captureResult, invoiceResult, runResult, collectionResult] = await Promise.allSettled([
       listCaptureWorkInbox({ view: 'TO_REVIEW', page: 1, pageSize: 100, sourceType: 'ALL', search: '', includeIgnored: false }),
       listInvoices({ page: 1, page_size: 100 }),
       listRuns({ page: 1, pageSize: 100 }),
+      listCollectionImports(),
     ]);
 
     const next: ReviewTask[] = [];
@@ -158,11 +183,19 @@ export default function ReviewPage() {
         .filter((run) => ['PENDING_REVIEW', 'DRAFT_GENERATED', 'DELIVERY_PENDING', 'FAILED', 'OUTPUT_FAILED'].includes(run.status.toUpperCase()))
         .map(automationTask));
     }
-    next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    if (collectionResult.status === 'fulfilled') {
+      next.push(...collectionResult.value.flatMap((batch) => batch.cases
+        .filter((item) => ['PENDING_APPROVAL', 'PAUSED'].includes(item.review_status))
+        .map((item) => collectionTask(batch, item))));
+    }
+    next.sort((a, b) =>
+      (parseApiDateTime(b.updatedAt)?.getTime() ?? 0) -
+      (parseApiDateTime(a.updatedAt)?.getTime() ?? 0),
+    );
     setTasks(next);
 
-    const rejectedSources = [captureResult, invoiceResult, runResult].filter((result) => result.status === 'rejected').length;
-    if (rejectedSources === 3) {
+    const rejectedSources = [captureResult, invoiceResult, runResult, collectionResult].filter((result) => result.status === 'rejected').length;
+    if (rejectedSources === 4) {
       setError('Review items could not be loaded. Check the API connection and try again.');
     } else if (rejectedSources > 0) {
       setError('Some review sources could not be loaded. The available tasks are shown below.');
@@ -274,7 +307,7 @@ function ReviewRow({ task }: { task: ReviewTask }) {
       <div>
         <p className="text-sm font-medium text-[var(--foreground)]">{task.workflow}</p>
         {task.amount && <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-[var(--foreground)]"><CircleDollarSign className="h-4 w-4" />{task.amount}</p>}
-        <p className="mt-1 text-xs text-[var(--muted-foreground)]">Updated {new Date(task.updatedAt).toLocaleString()}</p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">Updated {formatMalaysiaDateTime(task.updatedAt)}</p>
       </div>
       <Link href={task.href} className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-cyan-800">Review task <ArrowRight className="h-4 w-4" /></Link>
     </article>

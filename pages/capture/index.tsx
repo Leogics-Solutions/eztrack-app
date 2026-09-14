@@ -2,6 +2,7 @@
 
 import { AppLayout } from '@/components/layout';
 import { CaptureShell } from '@/components/capture/CaptureShell';
+import { formatMalaysiaDateTime } from '@/lib/dateTime';
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
   listCaptureWorkInbox,
@@ -411,7 +412,7 @@ export default function CaptureInboxPage() {
                       {item.status_label}
                     </span>
                     <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      {humanize(item.source_type)} · {new Date(item.received_at).toLocaleString()}
+                      {humanize(item.source_type)} · {formatMalaysiaDateTime(item.received_at)}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
