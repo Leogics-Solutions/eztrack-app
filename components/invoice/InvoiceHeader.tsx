@@ -6,7 +6,7 @@ interface InvoiceHeaderProps {
   invoice: {
     id: number;
     invoice_no?: string;
-    status?: 'draft' | 'validated' | 'posted';
+    status?: string;
     currency?: string;
     subtotal?: number;
     tax?: number;
@@ -21,7 +21,7 @@ interface InvoiceHeaderProps {
 export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHeaderProps) {
   const { t } = useLanguage();
   const getStatusColor = (status?: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'posted':
         return 'bg-[var(--success)] text-white';
       case 'validated':
@@ -45,8 +45,8 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
           </span>
         </div>
         <div className="flex items-center gap-2">
-        {LOCAL_CONNECTORS_ENABLED && !isEditMode && invoice.status === 'validated' && (
-          <Link href={`/local-connectors?invoice=${invoice.id}`} className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Send to UBS</Link>
+        {LOCAL_CONNECTORS_ENABLED && !isEditMode && invoice.status?.toUpperCase() === 'VALIDATED' && (
+          <Link href={`/local-connectors?invoice=${invoice.id}`} className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Push to UBS</Link>
         )}
         <button
           onClick={onEditToggle}
