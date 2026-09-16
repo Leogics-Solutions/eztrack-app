@@ -18,9 +18,14 @@ frontend:
           if [ -n "$NEXT_PUBLIC_AUTH_URL" ]; then
             echo "NEXT_PUBLIC_AUTH_URL=$NEXT_PUBLIC_AUTH_URL" >> .env.production
           fi
-        # Add any other environment variables you need here
-        # Example:
-        # - echo "NEXT_PUBLIC_ANOTHER_VAR=$NEXT_PUBLIC_ANOTHER_VAR" >> .env.production
+        - |
+          if [ -n "$NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED" ]; then
+            echo "NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED=$NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED" >> .env.production
+          fi
+        - |
+          if [ -n "$NEXT_PUBLIC_CONNECTOR_INSTALLER_URL" ]; then
+            echo "NEXT_PUBLIC_CONNECTOR_INSTALLER_URL=$NEXT_PUBLIC_CONNECTOR_INSTALLER_URL" >> .env.production
+          fi
         
         - npm run build
   artifacts:
