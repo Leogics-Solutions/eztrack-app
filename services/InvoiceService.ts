@@ -219,10 +219,23 @@ export interface ConfirmUploadResponse {
 }
 
 export type InvoiceStatus = 'DRAFT' | 'VALIDATED' | 'POSTED' | 'PAID';
+export type InvoiceSortField =
+  | 'id'
+  | 'party_name'
+  | 'invoice_no'
+  | 'project_name'
+  | 'invoice_date'
+  | 'created_at'
+  | 'currency'
+  | 'total'
+  | 'status';
+export type SortOrder = 'asc' | 'desc';
 
 export interface ListInvoicesParams {
   page?: number;
   page_size?: number;
+  sort_by?: InvoiceSortField;
+  sort_order?: SortOrder;
   search?: string;
   status?: InvoiceStatus[];
   /** Repeatable on the wire as `direction=AP&direction=AR` (SQL IN). Omit for no direction filter. */
@@ -1016,6 +1029,12 @@ export async function listInvoices(
   }
   if (params?.page_size !== undefined) {
     queryParams.append('page_size', params.page_size.toString());
+  }
+  if (params?.sort_by) {
+    queryParams.append('sort_by', params.sort_by);
+  }
+  if (params?.sort_order) {
+    queryParams.append('sort_order', params.sort_order);
   }
   if (params?.search) {
     queryParams.append('search', params.search);

@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, Check, ChevronDown, CircleHelp, Edit2, FileWarning, Landmark, Plus, Ship, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, CircleHelp, Edit2, FileWarning, Landmark, Plus, Ship, X } from "lucide-react";
 import {
   listInvoices,
   updateInvoice,
@@ -28,6 +28,8 @@ import {
   projectDisplayName,
   type Invoice as ApiInvoice,
   type InvoiceStatus,
+  type InvoiceSortField,
+  type SortOrder,
   type DocumentDirection,
   type Project,
   type PushInvoicesResponse,
@@ -197,6 +199,8 @@ export const DocumentsListing = ({
     requires_einvoice_review: false,
     page: 1,
     per_page: 20,
+    sort_by: 'id' as InvoiceSortField,
+    sort_order: 'desc' as SortOrder,
   });
 
   useEffect(() => {
@@ -319,6 +323,8 @@ export const DocumentsListing = ({
       const response = await listInvoices({
         page: filters.page,
         page_size: filters.per_page,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
         search: filters.search || undefined,
         status:
           filters.status && filters.status.length > 0
@@ -353,9 +359,7 @@ export const DocumentsListing = ({
         : Array.isArray(rawData?.invoices)
         ? rawData.invoices
         : [];
-      // Sort by ID in descending order (largest to smallest)
-      const sortedData = [...data].sort((a, b) => b.id - a.id);
-      setInvoices(sortedData as Invoice[]);
+      setInvoices(data as Invoice[]);
 
       // Use backend pagination metadata when available
       const total = typeof rawData?.total === 'number' ? rawData.total : data.length;
@@ -481,6 +485,8 @@ export const DocumentsListing = ({
       requires_einvoice_review: false,
       page: 1,
       per_page: 20,
+      sort_by: 'id' as InvoiceSortField,
+      sort_order: 'desc' as SortOrder,
     });
   };
 
@@ -650,6 +656,55 @@ export const DocumentsListing = ({
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters({ ...filters, [key]: value, page: 1 });
+  };
+
+  const handleSort = (sortBy: InvoiceSortField) => {
+    setFilters((current) => ({
+      ...current,
+      sort_by: sortBy,
+      sort_order:
+        current.sort_by === sortBy && current.sort_order === 'asc'
+          ? 'desc'
+          : 'asc',
+      page: 1,
+    }));
+  };
+
+  const sortableHeader = (label: string, sortBy: InvoiceSortField) => {
+    const isActive = filters.sort_by === sortBy;
+    const ariaSort = isActive
+      ? filters.sort_order === 'asc'
+        ? 'ascending'
+        : 'descending'
+      : 'none';
+
+    return (
+      <th
+        className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]"
+        aria-sort={ariaSort}
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(sortBy)}
+          className="group/sort inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm hover:text-[var(--primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+          title={`Sort by ${label}`}
+        >
+          <span>{label}</span>
+          {isActive ? (
+            filters.sort_order === 'asc' ? (
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ArrowDown className="h-4 w-4" aria-hidden="true" />
+            )
+          ) : (
+            <ArrowUpDown
+              className="h-4 w-4 opacity-40 group-hover/sort:opacity-100"
+              aria-hidden="true"
+            />
+          )}
+        </button>
+      </th>
+    );
   };
 
   const handleStatusChange = (status: string, checked: boolean) => {
@@ -1979,23 +2034,21 @@ export const DocumentsListing = ({
                 {needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)] sticky left-[56px] z-10 bg-[var(--muted)] border-r border-[var(--border)]">{t.documents.table.actions}</th>
                 )}
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.id}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">
-                  {isSalesView ? 'Customer' : t.documents.table.vendor}
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.invoiceNo}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Project</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.documentDate}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.createdDate}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
+                {sortableHeader(t.documents.table.id, 'id')}
+                {sortableHeader(isSalesView ? 'Customer' : t.documents.table.vendor, 'party_name')}
+                {sortableHeader(t.documents.table.invoiceNo, 'invoice_no')}
+                {sortableHeader('Project', 'project_name')}
+                {sortableHeader(t.documents.table.documentDate, 'invoice_date')}
+                {sortableHeader(t.documents.table.createdDate, 'created_at')}
+                {sortableHeader(t.documents.table.currency, 'currency')}
+                {sortableHeader(t.documents.table.total, 'total')}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Remark/Tag</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Handwriting</th>
                 {orgRole === 'admin' && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
                 )}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.verify}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.status}</th>
+                {sortableHeader(t.documents.table.status, 'status')}
                 {!needsHorizontalScroll && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.actions}</th>
                 )}

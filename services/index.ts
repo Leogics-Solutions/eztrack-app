@@ -132,6 +132,8 @@ export type {
   InvoiceStatisticsData,
   InvoiceStatisticsResponse,
   InvoiceStatus,
+  InvoiceSortField,
+  SortOrder,
   DocumentType,
   DocumentDirection,
 } from './InvoiceService';
