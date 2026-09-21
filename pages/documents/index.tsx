@@ -4,9 +4,10 @@ import { AppLayout } from "@/components/layout";
 import { useLanguage } from "@/lib/i18n";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { AlertTriangle, Check, ChevronDown, CircleHelp, Edit2, FileWarning, Landmark, Lock, Plus, Ship, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, CircleHelp, Edit2, FileWarning, Landmark, Plus, Ship, X } from "lucide-react";
 import {
   listInvoices,
+  updateInvoice,
   deleteInvoice as deleteInvoiceApi,
   bulkDeleteInvoices,
   bulkVerifyInvoices,
@@ -14,7 +15,6 @@ import {
   downloadInvoicesZip,
   getSettings,
   pushInvoicesToBusinessCentral,
-  updateInvoicePartyRemark,
   markInvoiceCompliancePass,
   matchInvoicesAcrossStatements,
   createLink,
@@ -33,11 +33,9 @@ import {
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
-  type PartyRemarkOwner,
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { useOrganization } from "@/lib/OrganizationContext";
-import { useAuth } from "@/lib/auth";
 import { canUseLocalConnectors } from "@/services/LocalConnectorService";
 
 // Types
@@ -115,14 +113,12 @@ export const DocumentsListing = ({
   const router = useRouter();
   const { t } = useLanguage();
   const { showToast } = useToast();
-  const { selectedOrganizationId } = useOrganization();
-  const { user } = useAuth();
+  const { selectedOrganizationId, organizations } = useOrganization();
   const resolvedPageTitle = pageTitle || t.documents.title;
   const isSalesView = lockDirection && initialDirectionTab === 'sales';
-  const currentRemarkOwner: PartyRemarkOwner | null =
-    user?.remark_party === 'coey' || user?.remark_party === 'samudra'
-      ? user.remark_party
-      : null;
+  const orgRole =
+    organizations.find((organization) => organization.id === selectedOrganizationId)?.role ?? 'member';
+  const canEditSharedInvoices = orgRole === 'admin';
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -136,11 +132,9 @@ export const DocumentsListing = ({
   const [advancedFiltersVisible, setAdvancedFiltersVisible] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [orgRole, setOrgRole] = useState<string>('member');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
-  const [editingRemarkOwner, setEditingRemarkOwner] = useState<PartyRemarkOwner | null>(null);
   const [remarkDraft, setRemarkDraft] = useState('');
   const [savingRemarkId, setSavingRemarkId] = useState<number | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
@@ -418,9 +412,7 @@ export const DocumentsListing = ({
           // @ts-expect-error vendor_id may not exist on type
           uniqueVendors[inv.vendor_id] = inv.vendor_name;
         }
-        if (inv.samudra_remarks) remarkSet.add(inv.samudra_remarks);
-        if (inv.coey_remarks) remarkSet.add(inv.coey_remarks);
-        if (!inv.samudra_remarks && inv.remarks) remarkSet.add(inv.remarks);
+        if (inv.remarks) remarkSet.add(inv.remarks);
       });
 
       setVendors(
@@ -492,29 +484,20 @@ export const DocumentsListing = ({
     });
   };
 
-  const getPartyRemark = (invoice: Invoice, owner: PartyRemarkOwner) => {
-    if (owner === 'samudra') {
-      return invoice.samudra_remarks ?? invoice.remarks ?? '';
-    }
-    return invoice.coey_remarks ?? '';
-  };
-
-  const startRemarkEdit = (invoice: Invoice, owner: PartyRemarkOwner) => {
-    if (currentRemarkOwner !== owner) return;
+  const startRemarkEdit = (invoice: Invoice) => {
+    if (!canEditSharedInvoices) return;
     setEditingRemarkId(invoice.id);
-    setEditingRemarkOwner(owner);
-    setRemarkDraft(getPartyRemark(invoice, owner));
+    setRemarkDraft(invoice.remarks ?? '');
   };
 
   const cancelRemarkEdit = () => {
     setEditingRemarkId(null);
-    setEditingRemarkOwner(null);
     setRemarkDraft('');
   };
 
-  const saveRemarkEdit = async (invoice: Invoice, owner: PartyRemarkOwner) => {
+  const saveRemarkEdit = async (invoice: Invoice) => {
     const nextRemark = remarkDraft.trim();
-    const currentRemark = getPartyRemark(invoice, owner).trim();
+    const currentRemark = (invoice.remarks ?? '').trim();
 
     if (nextRemark === currentRemark) {
       cancelRemarkEdit();
@@ -524,15 +507,14 @@ export const DocumentsListing = ({
     setSavingRemarkId(invoice.id);
 
     try {
-      await updateInvoicePartyRemark(invoice.id, owner, nextRemark);
+      await updateInvoice(invoice.id, { remarks: nextRemark });
 
       setInvoices((currentInvoices) =>
         currentInvoices.map((currentInvoice) =>
           currentInvoice.id === invoice.id
             ? {
                 ...currentInvoice,
-                [owner === 'samudra' ? 'samudra_remarks' : 'coey_remarks']:
-                  nextRemark || null,
+                remarks: nextRemark,
               }
             : currentInvoice
         )
@@ -553,7 +535,7 @@ export const DocumentsListing = ({
       });
 
       cancelRemarkEdit();
-      showToast(`${owner === 'samudra' ? 'Samudra' : 'Coey'} remark updated`, { type: 'success' });
+      showToast('Remark updated', { type: 'success' });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update remark', { type: 'error' });
     } finally {
@@ -561,11 +543,9 @@ export const DocumentsListing = ({
     }
   };
 
-  const renderPartyRemarkCell = (invoice: Invoice, owner: PartyRemarkOwner) => {
-    const label = owner === 'samudra' ? 'Samudra' : 'Coey';
-    const value = getPartyRemark(invoice, owner);
-    const isEditing = editingRemarkId === invoice.id && editingRemarkOwner === owner;
-    const canEdit = currentRemarkOwner === owner;
+  const renderRemarkCell = (invoice: Invoice) => {
+    const value = invoice.remarks ?? '';
+    const isEditing = editingRemarkId === invoice.id;
 
     if (isEditing) {
       return (
@@ -580,16 +560,16 @@ export const DocumentsListing = ({
             rows={3}
             autoFocus
             className="w-full min-w-[200px] rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
-            aria-label={`${label} remark`}
+            aria-label="Remark"
           />
           <div className="flex shrink-0 gap-1">
             <button
               type="button"
-              onClick={() => saveRemarkEdit(invoice, owner)}
+              onClick={() => saveRemarkEdit(invoice)}
               disabled={savingRemarkId === invoice.id}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-              title={`Save ${label} remark`}
-              aria-label={`Save ${label} remark`}
+              title="Save remark"
+              aria-label="Save remark"
             >
               <Check className="h-4 w-4" />
             </button>
@@ -617,21 +597,17 @@ export const DocumentsListing = ({
         ) : (
           <span className="text-[var(--muted-foreground)]">-</span>
         )}
-        {canEdit ? (
+        {canEditSharedInvoices ? (
           <button
             type="button"
-            onClick={() => startRemarkEdit(invoice, owner)}
+            onClick={() => startRemarkEdit(invoice)}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
-            title={`Edit ${label} remark`}
-            aria-label={`Edit ${label} remark`}
+            title="Edit remark"
+            aria-label="Edit remark"
           >
             <Edit2 className="h-3.5 w-3.5" />
           </button>
-        ) : (
-          <span title={`Only ${label} users can edit this column`} className="mt-1 text-[var(--muted-foreground)]">
-            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        )}
+        ) : null}
       </div>
     );
   };
@@ -2013,8 +1989,7 @@ export const DocumentsListing = ({
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.createdDate}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.currency}</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.total}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Samudra Remark/Tag</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Coey Remark/Tag</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Remark/Tag</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Handwriting</th>
                 {orgRole === 'admin' && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
@@ -2100,10 +2075,7 @@ export const DocumentsListing = ({
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>
                   <td className="px-4 py-3 text-sm">{(invoice.total || 0).toFixed(2)}</td>
                   <td className="px-4 py-3">
-                    {renderPartyRemarkCell(invoice, 'samudra')}
-                  </td>
-                  <td className="px-4 py-3">
-                    {renderPartyRemarkCell(invoice, 'coey')}
+                    {renderRemarkCell(invoice)}
                   </td>
                   <td className="px-4 py-3">
                     {(() => {

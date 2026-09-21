@@ -21,6 +21,7 @@ export interface UserOrganization {
   name: string;
   industry?: string;
   is_primary: boolean;
+  role: OrganizationRole;
 }
 
 export interface GetUserOrganizationsResponse {
