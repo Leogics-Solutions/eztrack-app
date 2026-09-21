@@ -38,7 +38,7 @@ import {
 import { useToast } from "@/lib/toast";
 import { useOrganization } from "@/lib/OrganizationContext";
 import { useAuth } from "@/lib/auth";
-import { LOCAL_CONNECTORS_ENABLED } from "@/services/LocalConnectorService";
+import { canUseLocalConnectors } from "@/services/LocalConnectorService";
 
 // Types
 interface Vendor {
@@ -2046,7 +2046,7 @@ export const DocumentsListing = ({
                         >
                           {t.documents.table.open}
                         </button>
-                        {LOCAL_CONNECTORS_ENABLED && String(invoice.status).toUpperCase() === 'VALIDATED' && !invoice.is_duplicate && (
+                        {canUseLocalConnectors(selectedOrganizationId) && String(invoice.status).toUpperCase() === 'VALIDATED' && !invoice.is_duplicate && (
                           <button
                             onClick={() => router.push(`/local-connectors?invoice=${invoice.id}`)}
                             className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"
@@ -2400,7 +2400,7 @@ export const DocumentsListing = ({
                         >
                           {t.documents.table.open}
                         </button>
-                        {LOCAL_CONNECTORS_ENABLED && String(invoice.status).toUpperCase() === 'VALIDATED' && !invoice.is_duplicate && (
+                        {canUseLocalConnectors(selectedOrganizationId) && String(invoice.status).toUpperCase() === 'VALIDATED' && !invoice.is_duplicate && (
                           <button
                             onClick={() => router.push(`/local-connectors?invoice=${invoice.id}`)}
                             className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap"

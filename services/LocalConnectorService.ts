@@ -2,6 +2,13 @@ import { BASE_URL } from './config';
 import { getScopedHeaders } from './apiHelpers';
 
 export const LOCAL_CONNECTORS_ENABLED = process.env.NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED === 'true';
+const LOCAL_CONNECTOR_ORGANIZATION_ID = Number(process.env.NEXT_PUBLIC_LOCAL_CONNECTOR_ORGANIZATION_ID || '76');
+
+export function canUseLocalConnectors(organizationId: number | null | undefined): boolean {
+  return LOCAL_CONNECTORS_ENABLED
+    && Number.isInteger(LOCAL_CONNECTOR_ORGANIZATION_ID)
+    && organizationId === LOCAL_CONNECTOR_ORGANIZATION_ID;
+}
 const API = `${BASE_URL}/local-connectors`;
 
 export interface ConnectorDevice {

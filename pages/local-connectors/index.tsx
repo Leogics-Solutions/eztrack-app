@@ -10,6 +10,7 @@ import { API_BASE_URL } from '@/services/config';
 import {
   connectorCompanies, createConnectorCompany, createConnectorPairing, revokeConnector,
   connectorJobs, connectorPreview, enqueueConnectorInvoice, cancelConnectorJob, closeConnectorReview,
+  canUseLocalConnectors,
   type ConnectorCompany, type ConnectorJob, type ConnectorPreview,
 } from '@/services/LocalConnectorService';
 
@@ -21,7 +22,8 @@ const statusLabel = (value: string) => ({ leased: 'Preparing', processing: 'Ente
 
 export default function LocalConnectorsPage() {
   const router = useRouter();
-  const { selectedOrganizationId } = useOrganization();
+  const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
+  const connectorAllowed = canUseLocalConnectors(selectedOrganizationId);
   const generation = useRef(0);
   const [companies, setCompanies] = useState<ConnectorCompany[]>([]);
   const [selected, setSelected] = useState('');
@@ -43,8 +45,10 @@ export default function LocalConnectorsPage() {
   const paired = !!device && !device.revoked_at;
   const configured = paired && !!device.profile_hash;
   const download = process.env.NEXT_PUBLIC_CONNECTOR_INSTALLER_URL;
+  const partyCodeValid = /^\d{4}\/[A-Z0-9]{3}$/.test(party);
 
   const refresh = useCallback(async () => {
+    if (!connectorAllowed) return;
     const current = generation.current;
     try {
       const result = await connectorCompanies();
@@ -54,19 +58,23 @@ export default function LocalConnectorsPage() {
     } catch (e) {
       if (current === generation.current) setError(e instanceof Error ? e.message : 'Unable to load connectors');
     }
-  }, []);
+  }, [connectorAllowed]);
+
+  useEffect(() => {
+    if (!organizationLoading && !connectorAllowed) void router.replace('/');
+  }, [connectorAllowed, organizationLoading, router]);
 
   useEffect(() => {
     generation.current += 1;
     setCompanies([]); setSelected(''); setJobs([]); setPairing(null); setPreview(null); setParty(''); setError(''); setNotice(''); setBusy(false); setRole('');
-    void refresh();
+    if (connectorAllowed) void refresh();
     return () => { generation.current += 1; };
-  }, [selectedOrganizationId, refresh]);
+  }, [selectedOrganizationId, connectorAllowed, refresh]);
 
   useEffect(() => {
     let active = true;
     setJobs([]); setPairing(null);
-    if (!selected) return;
+    if (!connectorAllowed || !selected) return;
     const load = async () => {
       try {
         const data = await connectorJobs(selected);
@@ -79,7 +87,7 @@ export default function LocalConnectorsPage() {
     void load();
     const timer = setInterval(() => void load(), 10000);
     return () => { active = false; clearInterval(timer); };
-  }, [selected, selectedOrganizationId, refresh]);
+  }, [selected, selectedOrganizationId, connectorAllowed, refresh]);
 
   useEffect(() => {
     if (typeof router.query.invoice === 'string' && /^\d+$/.test(router.query.invoice)) setInvoiceId(router.query.invoice);
@@ -101,7 +109,7 @@ export default function LocalConnectorsPage() {
     });
   }
 
-  return <ProtectedRoute><AppLayout pageName="Local connectors">
+  return <ProtectedRoute>{connectorAllowed ? <AppLayout pageName="Local connectors">
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h1 className="text-2xl font-semibold">Local connectors</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">Send reviewed invoices to UBS on your accounting laptop.</p></div>
@@ -146,9 +154,11 @@ export default function LocalConnectorsPage() {
           <button className={button} disabled={busy || !canSend} onClick={() => void loadInvoice()}>Load invoice</button></div>
         {preview && <div className="mt-5 space-y-4">
           <div className="flex flex-wrap justify-between gap-3"><div><Link className="font-medium text-blue-600" href={`/documents/${preview.invoice_id}`}>{preview.invoice_no || `Invoice ${preview.invoice_id}`}</Link><p className="text-sm text-[var(--muted-foreground)]">{preview.direction === 'AR' ? 'Sales invoice' : 'Supplier invoice'} · {preview.party_name} · {preview.status}</p></div><span className="font-semibold">{preview.currency} {Number(preview.total).toFixed(2)}</span></div>
-          <label className="block max-w-sm text-sm">UBS {preview.direction === 'AR' ? 'customer' : 'supplier'} code<input className={`${input} mt-1`} value={party} onChange={e => setParty(e.target.value.toUpperCase())} placeholder={preview.direction === 'AR' ? '3000/U01' : '4000/W01'} maxLength={8} /></label>
+          <label className="block max-w-sm text-sm">UBS {preview.direction === 'AR' ? 'customer' : 'supplier'} code<input className={`${input} mt-1`} value={party} onChange={e => setParty(e.target.value.toUpperCase())} placeholder={preview.direction === 'AR' ? '3000/U01' : '4000/W01'} maxLength={8} />
+            {party && !partyCodeValid && <span className="mt-1 block text-xs text-red-700">Use four digits, a slash and three characters, for example 3000/U01.</span>}
+          </label>
           <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-[var(--border)]"><th className="p-2">Description</th><th className="p-2">Quantity</th><th className="p-2">UBS item code</th><th className="p-2">UBS base unit</th></tr></thead><tbody>{preview.lines.map((line, index) => <tr key={line.line_id} className="border-b border-[var(--border)]"><td className="p-2">{line.description}</td><td className="p-2">{line.quantity}</td><td className="p-2"><input aria-label={`UBS item code line ${index + 1}`} className={input} value={line.item_code} maxLength={24} onChange={e => setPreview(p => p && ({ ...p, lines: p.lines.map((x, i) => i === index ? { ...x, item_code: e.target.value } : x) }))} /></td><td className="p-2"><input aria-label={`UBS base unit line ${index + 1}`} className={input} value={line.uom} maxLength={12} onChange={e => setPreview(p => p && ({ ...p, lines: p.lines.map((x, i) => i === index ? { ...x, uom: e.target.value } : x) }))} /></td></tr>)}</tbody></table></div>
-          <button className={primary} disabled={busy || !configured || !canSend || preview.status !== 'VALIDATED' || !party || preview.lines.length > 5 || !preview.lines.every(l => l.item_code && l.uom)} onClick={() => void action(async current => {
+          <button className={primary} disabled={busy || !configured || !canSend || preview.status !== 'VALIDATED' || !partyCodeValid || preview.lines.length > 5 || !preview.lines.every(l => l.item_code && l.uom)} onClick={() => void action(async current => {
             const job = await enqueueConnectorInvoice(selected, preview.invoice_id, party, preview.lines.map(({ line_id, item_code, uom }) => ({ line_id, item_code, uom })));
             if (current !== generation.current) return;
             setNotice(`${preview.invoice_no}: ${statusLabel(job.status)}. The connector will verify the saved UBS invoice before marking it complete.`);
@@ -165,5 +175,5 @@ export default function LocalConnectorsPage() {
         </tbody></table></div>
       </section>
     </div>
-  </AppLayout></ProtectedRoute>;
+  </AppLayout> : null}</ProtectedRoute>;
 }

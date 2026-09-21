@@ -1,6 +1,7 @@
 import { useLanguage } from "@/lib/i18n";
+import { useOrganization } from '@/lib/OrganizationContext';
 import Link from 'next/link';
-import { LOCAL_CONNECTORS_ENABLED } from '@/services/LocalConnectorService';
+import { canUseLocalConnectors } from '@/services/LocalConnectorService';
 
 interface InvoiceHeaderProps {
   invoice: {
@@ -20,6 +21,7 @@ interface InvoiceHeaderProps {
 
 export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHeaderProps) {
   const { t } = useLanguage();
+  const { selectedOrganizationId } = useOrganization();
   const getStatusColor = (status?: string) => {
     switch (status?.toLowerCase()) {
       case 'posted':
@@ -45,7 +47,7 @@ export function InvoiceHeader({ invoice, onEditToggle, isEditMode }: InvoiceHead
           </span>
         </div>
         <div className="flex items-center gap-2">
-        {LOCAL_CONNECTORS_ENABLED && !isEditMode && invoice.status?.toUpperCase() === 'VALIDATED' && (
+        {canUseLocalConnectors(selectedOrganizationId) && !isEditMode && invoice.status?.toUpperCase() === 'VALIDATED' && (
           <Link href={`/local-connectors?invoice=${invoice.id}`} className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Push to UBS</Link>
         )}
         <button

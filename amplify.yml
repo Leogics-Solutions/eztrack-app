@@ -23,6 +23,10 @@ frontend:
             echo "NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED=$NEXT_PUBLIC_LOCAL_CONNECTOR_ENABLED" >> .env.production
           fi
         - |
+          if [ -n "$NEXT_PUBLIC_LOCAL_CONNECTOR_ORGANIZATION_ID" ]; then
+            echo "NEXT_PUBLIC_LOCAL_CONNECTOR_ORGANIZATION_ID=$NEXT_PUBLIC_LOCAL_CONNECTOR_ORGANIZATION_ID" >> .env.production
+          fi
+        - |
           if [ -n "$NEXT_PUBLIC_CONNECTOR_INSTALLER_URL" ]; then
             echo "NEXT_PUBLIC_CONNECTOR_INSTALLER_URL=$NEXT_PUBLIC_CONNECTOR_INSTALLER_URL" >> .env.production
           fi
