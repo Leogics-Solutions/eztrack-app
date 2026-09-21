@@ -44,6 +44,18 @@ const DocumentDetail = () => {
   });
   const { showToast } = useToast();
 
+  const handleBackToDocuments = () => {
+    const rawReturnTo = router.query.returnTo;
+    const returnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+    const safeReturnTo =
+      returnTo === '/supporting-documents' ||
+      returnTo?.startsWith('/supporting-documents?')
+        ? returnTo
+        : '/supporting-documents';
+
+    void router.push(safeReturnTo);
+  };
+
   // Load document data
   useEffect(() => {
     if (id) {
@@ -324,7 +336,7 @@ const DocumentDetail = () => {
         <div className="text-center py-12">
           <div className="text-lg text-red-500 mb-4">{error || 'Document not found'}</div>
           <button
-            onClick={() => router.push('/supporting-documents')}
+            onClick={handleBackToDocuments}
             className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
           >
             Back to Documents
@@ -356,7 +368,7 @@ const DocumentDetail = () => {
           <div>
             <h1 className="text-3xl font-bold mb-2">Document Detail</h1>
             <button
-              onClick={() => router.push('/supporting-documents')}
+              onClick={handleBackToDocuments}
               className="text-sm text-[var(--primary)] hover:underline"
             >
               ← Back to Documents

@@ -27,6 +27,91 @@ interface Pagination {
 
 type LinkedStatusFilter = '' | 'linked' | 'unlinked';
 
+type SupportingDocumentFilters = {
+  start_date: string;
+  end_date: string;
+  search: string;
+  direction: '' | 'AP' | 'AR' | 'NEUTRAL';
+  category: string;
+  document_type_key: string;
+  min_amount: string;
+  max_amount: string;
+  upload_status: string;
+  linked_status: LinkedStatusFilter;
+  page: number;
+  per_page: number;
+};
+
+const DEFAULT_FILTERS: SupportingDocumentFilters = {
+  start_date: '',
+  end_date: '',
+  search: '',
+  direction: '',
+  category: '',
+  document_type_key: '',
+  min_amount: '',
+  max_amount: '',
+  upload_status: '',
+  linked_status: '',
+  page: 1,
+  per_page: 20,
+};
+
+const firstQueryValue = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] || '' : value || '';
+
+const positiveInteger = (value: string, fallback: number) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const filtersFromQuery = (
+  query: Record<string, string | string[] | undefined>,
+): SupportingDocumentFilters => {
+  const direction = firstQueryValue(query.direction);
+  const linkedStatus = firstQueryValue(query.linked_status);
+
+  return {
+    start_date: firstQueryValue(query.start_date),
+    end_date: firstQueryValue(query.end_date),
+    search: firstQueryValue(query.search),
+    direction:
+      direction === 'AP' || direction === 'AR' || direction === 'NEUTRAL'
+        ? direction
+        : '',
+    category: firstQueryValue(query.category),
+    document_type_key: firstQueryValue(query.document_type_key),
+    min_amount: firstQueryValue(query.min_amount),
+    max_amount: firstQueryValue(query.max_amount),
+    upload_status: firstQueryValue(query.upload_status),
+    linked_status:
+      linkedStatus === 'linked' || linkedStatus === 'unlinked'
+        ? linkedStatus
+        : '',
+    page: positiveInteger(firstQueryValue(query.page), DEFAULT_FILTERS.page),
+    per_page: positiveInteger(
+      firstQueryValue(query.per_page),
+      DEFAULT_FILTERS.per_page,
+    ),
+  };
+};
+
+const buildSupportingDocumentsUrl = (filters: SupportingDocumentFilters) => {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    const defaultValue = DEFAULT_FILTERS[key as keyof SupportingDocumentFilters];
+    if (value !== '' && value !== defaultValue) {
+      params.set(key, String(value));
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString
+    ? `/supporting-documents?${queryString}`
+    : '/supporting-documents';
+};
+
 const DOCUMENT_TYPE_OPTIONS = [
   { value: 'proforma_invoice', label: 'Proforma Invoice' },
   { value: 'expense_receipt', label: 'Expense Receipt' },
@@ -62,24 +147,40 @@ const SupportingDocumentsListing = () => {
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Filter state
-  const [filters, setFilters] = useState({
-    start_date: '',
-    end_date: '',
-    search: '',
-    direction: '' as '' | 'AP' | 'AR' | 'NEUTRAL',
-    category: '',
-    document_type_key: '',
-    min_amount: '',
-    max_amount: '',
-    upload_status: '',
-    linked_status: '' as LinkedStatusFilter,
-    page: 1,
-    per_page: 20,
-  });
+  const [filters, setFilters] = useState<SupportingDocumentFilters>(DEFAULT_FILTERS);
+  const [filtersReady, setFiltersReady] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, [filters, selectedOrganizationId]);
+    if (!router.isReady || filtersReady) return;
+
+    const restoredFilters = filtersFromQuery(router.query);
+    setFilters(restoredFilters);
+    setAdvancedFiltersVisible(Boolean(
+      restoredFilters.document_type_key ||
+      restoredFilters.direction ||
+      restoredFilters.category ||
+      restoredFilters.upload_status ||
+      restoredFilters.linked_status ||
+      restoredFilters.min_amount ||
+      restoredFilters.max_amount,
+    ));
+    setFiltersReady(true);
+  }, [filtersReady, router.isReady, router.query]);
+
+  useEffect(() => {
+    if (!router.isReady || !filtersReady) return;
+
+    const listUrl = buildSupportingDocumentsUrl(filters);
+    if (router.asPath !== listUrl) {
+      void router.replace(listUrl, undefined, { shallow: true });
+    }
+  }, [filters, filtersReady, router]);
+
+  useEffect(() => {
+    if (filtersReady) {
+      loadData();
+    }
+  }, [filters, filtersReady, selectedOrganizationId]);
 
 
   // Check if table needs horizontal scrolling
@@ -221,20 +322,7 @@ const SupportingDocumentsListing = () => {
   };
 
   const clearFilters = () => {
-    setFilters({
-      start_date: '',
-      end_date: '',
-      search: '',
-      direction: '',
-      category: '',
-      document_type_key: '',
-      min_amount: '',
-      max_amount: '',
-      upload_status: '',
-      linked_status: '',
-      page: 1,
-      per_page: 20,
-    });
+    setFilters(DEFAULT_FILTERS);
   };
 
   const setDateRange = (preset: string) => {
@@ -284,6 +372,14 @@ const SupportingDocumentsListing = () => {
 
   const changePageSize = (size: number) => {
     setFilters({ ...filters, per_page: size, page: 1 });
+  };
+
+  const openDocument = (documentId: number) => {
+    const returnTo = buildSupportingDocumentsUrl(filters);
+    void router.push({
+      pathname: `/supporting-documents/${documentId}`,
+      query: { returnTo },
+    });
   };
 
   // Selection functions
@@ -691,7 +787,7 @@ const SupportingDocumentsListing = () => {
                     <td className="px-4 py-3 sticky left-[56px] z-10 bg-white dark:bg-[var(--card)] border-r border-[var(--border)] group-hover:bg-[var(--hover-bg)] dark:group-hover:bg-[var(--hover-bg)]">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => router.push(`/supporting-documents/${doc.id}`)}
+                          onClick={() => openDocument(doc.id)}
                           className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                         >
                           {t.supportingDocuments.table.open}
@@ -779,7 +875,7 @@ const SupportingDocumentsListing = () => {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => router.push(`/supporting-documents/${doc.id}`)}
+                          onClick={() => openDocument(doc.id)}
                           className="px-3 py-1 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-lighter)] dark:hover:bg-[var(--hover-bg)] transition-colors"
                         >
                           {t.supportingDocuments.table.open}
