@@ -10,6 +10,7 @@ import { API_BASE_URL } from '@/services/config';
 import {
   connectorCompanies, createConnectorCompany, createConnectorPairing, revokeConnector,
   connectorJobs, connectorPreview, enqueueConnectorInvoice, cancelConnectorJob, closeConnectorReview,
+  importConnectorMasters,
   canUseLocalConnectors,
   type ConnectorCompany, type ConnectorJob, type ConnectorPreview,
 } from '@/services/LocalConnectorService';
@@ -45,7 +46,7 @@ export default function LocalConnectorsPage() {
   const paired = !!device && !device.revoked_at;
   const configured = paired && !!device.profile_hash;
   const download = process.env.NEXT_PUBLIC_CONNECTOR_INSTALLER_URL;
-  const partyCodeValid = /^\d{4}\/[A-Z0-9]{3}$/.test(party);
+  const partyCodeValid = /^\d{4}\/[A-Za-z0-9]{3}$/.test(party);
 
   const refresh = useCallback(async () => {
     if (!connectorAllowed) return;
@@ -104,8 +105,8 @@ export default function LocalConnectorsPage() {
   async function loadInvoice() {
     await action(async current => {
       if (!/^\d+$/.test(invoiceId)) throw new Error('Enter a valid Smartdok invoice ID');
-      const data = await connectorPreview(Number(invoiceId));
-      if (current === generation.current) { setPreview(data); setParty(''); }
+      const data = await connectorPreview(Number(invoiceId), selected);
+      if (current === generation.current) { setPreview(data); setParty(data.suggested_party_code || ''); }
     });
   }
 
@@ -123,6 +124,19 @@ export default function LocalConnectorsPage() {
           <label className="block text-sm">Company connection<select aria-label="Company connection" className={`${input} mt-2`} value={selected} disabled={busy} onChange={e => { setSelected(e.target.value); setPreview(null); setNotice(''); }}>
             <option value="">Choose a connection</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
+          {company?.masters ? <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-900">
+            <p className="font-medium">UBS masters synced</p>
+            <p className="mt-1">{company.masters.counts.customer.toLocaleString()} customers · {company.masters.counts.supplier.toLocaleString()} suppliers · {company.masters.counts.item.toLocaleString()} items</p>
+            <p className="mt-1">{new Date(company.masters.synced_at).toLocaleString()}</p>
+          </div> : <p className="mt-4 text-xs text-amber-700">No UBS master list has been imported yet.</p>}
+          {admin && selected && <label className={`${button} mt-3 cursor-pointer`}>
+            Import UBS master ZIP<input className="sr-only" type="file" accept=".zip,application/zip" disabled={busy} onChange={event => {
+              const file = event.target.files?.[0]; event.target.value = '';
+              if (!file) return;
+              void action(async current => { const result = await importConnectorMasters(selected, file); if (current !== generation.current) return;
+                setNotice(`Imported ${result.counts.customers.toLocaleString()} customers, ${result.counts.suppliers.toLocaleString()} suppliers and ${result.counts.items.toLocaleString()} items.`); await refresh(); });
+            }} />
+          </label>}
           {admin && <div className="mt-4 space-y-2"><label className="block text-sm">New connection name<input className={`${input} mt-2`} value={name} onChange={e => setName(e.target.value)} placeholder="ABC Sdn Bhd - UBS" maxLength={120} /></label>
             <button className={button} disabled={busy || !name.trim()} onClick={() => void action(async current => { const c = await createConnectorCompany(name.trim()); if (current !== generation.current) return; setName(''); await refresh(); setSelected(c.id); })}>Add company connection</button></div>}
           <p className="mt-4 text-xs text-[var(--muted-foreground)]">Each connection is assigned to one local UBS company and one active laptop.</p>
@@ -154,7 +168,7 @@ export default function LocalConnectorsPage() {
           <button className={button} disabled={busy || !canSend} onClick={() => void loadInvoice()}>Load invoice</button></div>
         {preview && <div className="mt-5 space-y-4">
           <div className="flex flex-wrap justify-between gap-3"><div><Link className="font-medium text-blue-600" href={`/documents/${preview.invoice_id}`}>{preview.invoice_no || `Invoice ${preview.invoice_id}`}</Link><p className="text-sm text-[var(--muted-foreground)]">{preview.direction === 'AR' ? 'Sales invoice' : 'Supplier invoice'} · {preview.party_name} · {preview.status}</p></div><span className="font-semibold">{preview.currency} {Number(preview.total).toFixed(2)}</span></div>
-          <label className="block max-w-sm text-sm">UBS {preview.direction === 'AR' ? 'customer' : 'supplier'} code<input className={`${input} mt-1`} value={party} onChange={e => setParty(e.target.value.toUpperCase())} placeholder={preview.direction === 'AR' ? '3000/U01' : '4000/W01'} maxLength={8} />
+          <label className="block max-w-sm text-sm">UBS {preview.direction === 'AR' ? 'customer' : 'supplier'} code<input className={`${input} mt-1`} value={party} onChange={e => setParty(e.target.value)} placeholder={preview.direction === 'AR' ? '3000/U01' : '4000/W01'} maxLength={8} />
             {party && !partyCodeValid && <span className="mt-1 block text-xs text-red-700">Use four digits, a slash and three characters, for example 3000/U01.</span>}
           </label>
           <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-[var(--border)]"><th className="p-2">Description</th><th className="p-2">Quantity</th><th className="p-2">UBS item code</th><th className="p-2">UBS base unit</th></tr></thead><tbody>{preview.lines.map((line, index) => <tr key={line.line_id} className="border-b border-[var(--border)]"><td className="p-2">{line.description}</td><td className="p-2">{line.quantity}</td><td className="p-2"><input aria-label={`UBS item code line ${index + 1}`} className={input} value={line.item_code} maxLength={24} onChange={e => setPreview(p => p && ({ ...p, lines: p.lines.map((x, i) => i === index ? { ...x, item_code: e.target.value } : x) }))} /></td><td className="p-2"><input aria-label={`UBS base unit line ${index + 1}`} className={input} value={line.uom} maxLength={12} onChange={e => setPreview(p => p && ({ ...p, lines: p.lines.map((x, i) => i === index ? { ...x, uom: e.target.value } : x) }))} /></td></tr>)}</tbody></table></div>
