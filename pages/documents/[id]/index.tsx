@@ -11,6 +11,7 @@ import { useRouter } from "next/router";
 import {
   getInvoice,
   updateInvoice,
+  updateInvoicePartyRemark,
   downloadInvoiceFile,
   addLineItem as apiAddLineItem,
   updateLineItem as apiUpdateLineItem,
@@ -39,9 +40,11 @@ import {
   type ChartOfAccount,
   type LinkedDocument,
   type Project,
+  type PartyRemarkOwner,
 } from "@/services";
 import { API_BASE_URL } from "@/services/config";
 import { useOrganization } from "@/lib/OrganizationContext";
+import { useAuth } from "@/lib/auth";
 
 // Types
 // Extend backend Invoice type with extra optional fields used by UI
@@ -216,6 +219,11 @@ const InvoiceDetail = () => {
   const { t } = useLanguage();
   const { showToast } = useToast();
   const { selectedOrganizationId, isLoading: isOrganizationLoading } = useOrganization();
+  const { user } = useAuth();
+  const currentRemarkOwner: PartyRemarkOwner | null =
+    user?.remark_party === 'coey' || user?.remark_party === 'samudra'
+      ? user.remark_party
+      : null;
 
   // State
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -769,6 +777,19 @@ const InvoiceDetail = () => {
       setIsEditMode(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update invoice');
+    }
+  };
+
+  const handleSavePartyRemark = async (owner: PartyRemarkOwner, remarks: string) => {
+    if (!invoice || currentRemarkOwner !== owner) return;
+
+    try {
+      await updateInvoicePartyRemark(invoice.id, owner, remarks);
+      await loadInvoiceData();
+      setIsEditMode(false);
+      showToast(`${owner === 'samudra' ? 'Samudra' : 'Coey'} remark updated`, { type: 'success' });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update remark', { type: 'error' });
     }
   };
 
@@ -1400,7 +1421,14 @@ const InvoiceDetail = () => {
           <BankingDetailsCard invoice={invoice} isEditMode={isEditMode} t={t} onSave={handleSaveInvoice} />
 
           {/* Remarks */}
-          <RemarksCard invoice={invoice} isEditMode={isEditMode} t={t} onSave={handleSaveInvoice} />
+          <RemarksCard
+            invoice={invoice}
+            isEditMode={isEditMode}
+            t={t}
+            remarkOwner={currentRemarkOwner}
+            onSave={handleSaveInvoice}
+            onSavePartyRemark={handleSavePartyRemark}
+          />
 
           {/* Line Items */}
           <LineItemsCard
@@ -2705,12 +2733,59 @@ function BankingDetailsCard({ invoice, isEditMode, t, onSave }: any) {
   );
 }
 
-function RemarksCard({ invoice, isEditMode, t, onSave }: any) {
+function RemarksCard({ invoice, isEditMode, t, remarkOwner, onSave, onSavePartyRemark }: any) {
   const [formData, setFormData] = useState(invoice);
 
   useEffect(() => {
     setFormData(invoice);
   }, [invoice]);
+
+  if (remarkOwner) {
+    const samudraRemark = formData.samudra_remarks ?? formData.remarks ?? '';
+    const coeyRemark = formData.coey_remarks ?? '';
+    const currentValue = remarkOwner === 'samudra' ? samudraRemark : coeyRemark;
+
+    return (
+      <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
+        <h3 className="text-lg font-semibold mb-4">{t.documents.invoiceDetailPage.remarks}</h3>
+        <div className="space-y-4">
+          {([
+            ['samudra', 'Samudra', samudraRemark],
+            ['coey', 'Coey', coeyRemark],
+          ] as const).map(([owner, label, value]) => (
+            <div key={owner}>
+              <div className="mb-1 text-sm font-medium">{label} remark</div>
+              {isEditMode && remarkOwner === owner ? (
+                <textarea
+                  value={currentValue}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      [owner === 'samudra' ? 'samudra_remarks' : 'coey_remarks']: event.target.value,
+                    })
+                  }
+                  className="w-full px-2 py-1 border border-[var(--border)] rounded"
+                  rows={3}
+                />
+              ) : (
+                <div className="whitespace-pre-wrap">{value || '-'}</div>
+              )}
+            </div>
+          ))}
+          {isEditMode && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => onSavePartyRemark(remarkOwner, currentValue)}
+                className="px-4 py-2 bg-[var(--primary)] text-white rounded-md hover:bg-[var(--primary-hover)] transition-colors"
+              >
+                {t.documents.invoiceDetailPage.saveChanges}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
