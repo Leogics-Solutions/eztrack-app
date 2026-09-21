@@ -22,7 +22,7 @@ const statusLabel = (value: string) => ({ leased: 'Preparing', processing: 'Ente
 
 export default function LocalConnectorsPage() {
   const router = useRouter();
-  const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
+  const { selectedOrganizationId } = useOrganization();
   const connectorAllowed = canUseLocalConnectors(selectedOrganizationId);
   const generation = useRef(0);
   const [companies, setCompanies] = useState<ConnectorCompany[]>([]);
@@ -61,8 +61,8 @@ export default function LocalConnectorsPage() {
   }, [connectorAllowed]);
 
   useEffect(() => {
-    if (!organizationLoading && !connectorAllowed) void router.replace('/');
-  }, [connectorAllowed, organizationLoading, router]);
+    if (selectedOrganizationId !== null && !connectorAllowed) void router.replace('/');
+  }, [connectorAllowed, selectedOrganizationId, router]);
 
   useEffect(() => {
     generation.current += 1;
