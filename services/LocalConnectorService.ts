@@ -22,7 +22,7 @@ export interface ConnectorMasterStatus {
 }
 export interface ConnectorCompany { id: string; name: string; device: ConnectorDevice | null; masters: ConnectorMasterStatus | null }
 export interface ConnectorJob {
-  id: string; invoice_id: number; invoice_no: string; kind: string; status: string;
+  id: string; invoice_id: number | null; invoice_no: string; kind: string; status: string;
   total: string; created_at: string; error_code: string | null;
   result: { ubs_reference?: string; status?: string } | null;
 }
