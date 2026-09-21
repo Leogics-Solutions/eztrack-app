@@ -23,15 +23,21 @@ export interface ConnectorMasterStatus {
 export interface ConnectorCompany { id: string; name: string; device: ConnectorDevice | null; masters: ConnectorMasterStatus | null }
 export interface ConnectorJob {
   id: string; invoice_id: number | null; invoice_no: string; kind: string; status: string;
-  total: string; created_at: string; error_code: string | null;
+  total: string; created_at: string; error_code: string | null; can_retry: boolean;
   result: { ubs_reference?: string; status?: string } | null;
 }
 export interface InvoiceMappingLine { line_id: number; item_code: string; uom: string }
+export interface ConnectorMasterOption { code: string; name: string | null; name2: string | null; uom: string | null }
+export interface ConnectorMappingMatch {
+  status: 'matched' | 'unmatched' | 'ambiguous'; code: string | null;
+  name: string | null; name2: string | null; method: string | null;
+}
 export interface ConnectorPreview {
   invoice_id: number; invoice_no: string; status: string; direction: string;
   total: string; currency: string; party_name: string | null;
-  suggested_party_code: string | null;
-  lines: (InvoiceMappingLine & { description: string; quantity: string; unit_price: string; total: string })[];
+  suggested_party_code: string | null; party_match: ConnectorMappingMatch; masters_synced: boolean;
+  lines: (InvoiceMappingLine & { description: string; quantity: string; unit_price: string; total: string;
+    mapping_status: 'matched' | 'unmatched' | 'ambiguous' | 'manual'; match_method: string | null; matched_name: string | null })[];
 }
 
 async function request<T>(path: string, body?: unknown): Promise<T> {
@@ -53,6 +59,8 @@ export const createConnectorPairing = (id: string) => request<{ code: string; ex
 export const revokeConnector = (id: string) => request(`/devices/${encodeURIComponent(id)}/revoke`, {});
 export const connectorJobs = (id: string) => request<{ jobs: ConnectorJob[] }>(`/companies/${encodeURIComponent(id)}/jobs`);
 export const connectorPreview = (id: number, company?: string) => request<ConnectorPreview>(`/invoices/${id}/preview${company ? `?company_id=${encodeURIComponent(company)}` : ''}`);
+export const searchConnectorMasters = (company: string, kind: 'customer' | 'supplier' | 'item', query: string) =>
+  request<{ masters: ConnectorMasterOption[] }>(`/companies/${encodeURIComponent(company)}/masters?kind=${kind}&q=${encodeURIComponent(query)}&limit=20`);
 export async function importConnectorMasters(company: string, file: File) {
   const form = new FormData(); form.append('file', file);
   const response = await fetch(`${API}/companies/${encodeURIComponent(company)}/masters/import`, {
@@ -64,5 +72,7 @@ export async function importConnectorMasters(company: string, file: File) {
 }
 export const enqueueConnectorInvoice = (company: string, invoice: number, party: string, lines: InvoiceMappingLine[]) =>
   request<ConnectorJob>(`/companies/${encodeURIComponent(company)}/jobs`, { invoice_id: invoice, party_code: party, lines });
+export const retryConnectorInvoice = (job: string, invoice: number, party: string, lines: InvoiceMappingLine[]) =>
+  request<ConnectorJob>(`/jobs/${encodeURIComponent(job)}/retry`, { invoice_id: invoice, party_code: party, lines });
 export const cancelConnectorJob = (id: string) => request<ConnectorJob>(`/jobs/${encodeURIComponent(id)}/cancel`, {});
 export const closeConnectorReview = (id: string) => request<ConnectorJob>(`/jobs/${encodeURIComponent(id)}/close-review`, {});
