@@ -1260,6 +1260,16 @@ export async function updateInvoice(
   return response.json();
 }
 
+export interface ReclassifyAllInvoiceLinesResponse {
+  success: boolean;
+  data: {
+    invoice_id: number;
+    total_lines: number;
+    reclassified: number;
+  };
+  message: string;
+}
+
 /** Update only the current party's protected remark column. */
 export async function updateInvoicePartyRemark(
   invoiceId: number,
@@ -1408,6 +1418,26 @@ export async function deleteLineItem(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.message || error.error || 'Failed to delete line item');
+  }
+
+  return response.json();
+}
+
+/**
+ * Reclassify every line on an invoice against the active chart of accounts.
+ * POST /invoices/{invoice_id}/reclassify-all
+ */
+export async function reclassifyAllInvoiceLines(
+  invoiceId: number
+): Promise<ReclassifyAllInvoiceLinesResponse> {
+  const response = await fetch(`${BASE_URL}/invoices/${invoiceId}/reclassify-all`, {
+    method: 'POST',
+    headers: getScopedHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.message || error.error || 'Failed to auto-assign account codes');
   }
 
   return response.json();

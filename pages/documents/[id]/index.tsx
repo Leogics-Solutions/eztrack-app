@@ -15,6 +15,7 @@ import {
   addLineItem as apiAddLineItem,
   updateLineItem as apiUpdateLineItem,
   deleteLineItem as apiDeleteLineItem,
+  reclassifyAllInvoiceLines,
   validateInvoice,
   verifyInvoice,
   addPayment as apiAddPayment,
@@ -868,12 +869,20 @@ const InvoiceDetail = () => {
   };
 
   const handleAutoClassify = async () => {
+    if (!invoice) return;
     setIsClassifying(true);
     try {
-      // TODO: Implement API call
-      console.log('Auto-classifying line items');
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      const response = await reclassifyAllInvoiceLines(invoice.id);
       await loadInvoiceData();
+      showToast(
+        `Account codes assigned to ${response.data.reclassified} of ${response.data.total_lines} lines. Please review the suggestions.`,
+        { type: 'success', duration: 6000 }
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'Failed to auto-assign account codes',
+        { type: 'error', duration: 6000 }
+      );
     } finally {
       setIsClassifying(false);
     }
@@ -2814,6 +2823,7 @@ function LineItemsCard({
 
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [lineFilter, setLineFilter] = useState("");
 
   // Account selection modal state
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -3066,14 +3076,49 @@ function LineItemsCard({
     acc[account.account_type].push(account);
     return acc;
   }, {} as Record<string, ChartOfAccount[]>);
+  const normalizedLineFilter = lineFilter.trim().toLowerCase();
+  const visibleLineItems = normalizedLineFilter
+    ? lineItems.filter((item: LineItem) =>
+        [
+          item.description,
+          item.account_name,
+          item.account_type,
+          item.unit_price,
+          item.line_total,
+          item.line_number,
+        ].some((value) => String(value ?? "").toLowerCase().includes(normalizedLineFilter))
+      )
+    : lineItems;
   const actionColSpan = showPaymentProof ? 9 : 8;
 
   return (
     <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)] p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h3 className="text-lg font-semibold text-[var(--foreground)]">
           {t.documents.invoiceDetailPage.lineItems} ({lineItems?.length || 0})
         </h3>
+        <button
+          onClick={onAutoClassify}
+          disabled={isClassifying || lineItems.length === 0}
+          className="px-4 py-2 rounded-md bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isClassifying ? 'Assigning account codes...' : 'Auto-assign account codes'}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <input
+          type="search"
+          value={lineFilter}
+          onChange={(event) => setLineFilter(event.target.value)}
+          placeholder="Search description, receipt, page, amount or account..."
+          className="min-w-[260px] flex-1 px-3 py-2 border border-[var(--border)] rounded-md bg-white dark:bg-[var(--input)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+        />
+        {normalizedLineFilter && (
+          <span className="text-sm text-[var(--muted-foreground)]">
+            Showing {visibleLineItems.length} of {lineItems.length}
+          </span>
+        )}
       </div>
 
       <div className="overflow-x-auto mb-4">
@@ -3106,7 +3151,7 @@ function LineItemsCard({
                   Payment Proof
                 </th>
               )}
-              <th className="px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[120px]">
+              <th className="sticky right-0 z-10 px-4 py-3 text-right font-semibold text-sm text-[var(--foreground)] min-w-[120px] bg-[var(--muted)] shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.35)]">
                 Actions
               </th>
             </tr>
@@ -3119,7 +3164,14 @@ function LineItemsCard({
                 </td>
               </tr>
             )}
-            {lineItems.map((item: LineItem) => (
+            {lineItems.length > 0 && visibleLineItems.length === 0 && (
+              <tr>
+                <td colSpan={actionColSpan} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                  No lines match “{lineFilter}”.
+                </td>
+              </tr>
+            )}
+            {visibleLineItems.map((item: LineItem) => (
               <tr key={item.id} className="hover:bg-[var(--muted)]/30 transition-colors">
                 {editingItemId === item.id ? (
                   <>
@@ -3187,7 +3239,7 @@ function LineItemsCard({
                         <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
                       </td>
                     )}
-                    <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
+                    <td className="sticky right-0 z-[5] px-4 py-3 text-right space-x-2 align-top whitespace-nowrap bg-white dark:bg-[var(--card)] shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.35)]">
                       <button
                         onClick={handleUpdate}
                         disabled={isSaving}
@@ -3212,7 +3264,14 @@ function LineItemsCard({
                     </td>
                     <td className="px-4 py-3 text-sm align-top whitespace-nowrap text-[var(--foreground)]">{item.uom || <span className="text-[var(--muted-foreground)]">-</span>}</td>
                     <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-medium">
-                      {currency} {formatAmount(item.unit_price)}
+                      <button
+                        type="button"
+                        onClick={() => startEditing(item)}
+                        className="rounded px-2 py-1 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
+                        title="Click to edit this amount"
+                      >
+                        {currency} {formatAmount(item.unit_price)}
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)]">
                       {item.discount && item.discount > 0 ? (
@@ -3222,7 +3281,14 @@ function LineItemsCard({
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap text-[var(--foreground)] font-semibold">
-                      {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0, item.discount ?? 0))}
+                      <button
+                        type="button"
+                        onClick={() => startEditing(item)}
+                        className="rounded px-2 py-1 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
+                        title="Click to edit this amount"
+                      >
+                        {currency} {formatAmount(item.line_total ?? computeLineTotal(item.quantity ?? item.qty ?? 0, item.unit_price ?? 0, item.discount ?? 0))}
+                      </button>
                     </td>
                     <td
                       className="px-4 py-3 text-sm align-top cursor-pointer hover:bg-[var(--muted)] rounded-md transition-colors"
@@ -3242,7 +3308,7 @@ function LineItemsCard({
                         <PaymentProofLineMatch match={matchedByLineId?.get(item.id)} currency={currency} />
                       </td>
                     )}
-                    <td className="px-4 py-3 text-right space-x-2 align-top whitespace-nowrap">
+                    <td className="sticky right-0 z-[5] px-4 py-3 text-right space-x-2 align-top whitespace-nowrap bg-white dark:bg-[var(--card)] shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.35)]">
                       <button
                         onClick={() => startEditing(item)}
                         className="px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--border)] hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors"
@@ -3345,7 +3411,7 @@ function LineItemsCard({
                   <span className="text-[var(--muted-foreground)]">-</span>
                 </td>
               )}
-              <td className="px-4 py-3 text-sm text-right align-top whitespace-nowrap">
+              <td className="sticky right-0 z-[5] px-4 py-3 text-sm text-right align-top whitespace-nowrap bg-white dark:bg-[var(--card)] shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.35)]">
                 <button
                   onClick={handleCreate}
                   disabled={isSaving || !newItem.description.trim()}
@@ -3358,17 +3424,6 @@ function LineItemsCard({
           </tbody>
         </table>
       </div>
-
-      {/* AI Classify button hidden for now */}
-      {/* <div className="flex gap-3">
-        <button
-          onClick={onAutoClassify}
-          disabled={isClassifying}
-          className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg-light)] dark:hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 hover:text-white"
-        >
-          {isClassifying ? t.documents.invoiceDetailPage.aiThinking : t.documents.invoiceDetailPage.aiClassifyAccount}
-        </button>
-      </div> */}
 
       {/* Account Selection Modal */}
       {isAccountModalOpen && (
