@@ -3121,9 +3121,9 @@ function LineItemsCard({
         )}
       </div>
 
-      <div className="overflow-x-auto mb-4">
+      <div className="max-h-[65vh] overflow-auto overscroll-contain [scrollbar-gutter:stable] mb-4 rounded-md border border-[var(--border)]">
         <table className="w-full border-collapse min-w-[920px]">
-          <thead>
+          <thead className="sticky top-0 z-20">
             <tr className="border-b-2 border-[var(--border)] bg-[var(--muted)]/50">
               <th className="px-4 py-3 text-left font-semibold text-sm text-[var(--foreground)] min-w-[200px]">
                 {t.documents.invoiceDetailPage.description}
