@@ -1,4 +1,5 @@
 'use client';
+import { appendPaymentEvidence } from '../../../utils/paymentEvidenceFiles';
 
 import { CaptureShell } from '@/components/capture/CaptureShell';
 import { AppLayout } from '@/components/layout';
@@ -6,8 +7,10 @@ import { AutomationStatusBadge } from '@/components/automation/AutomationStatus'
 import { useOrganization } from '@/lib/OrganizationContext';
 import {
   createCapturePaymentReview,
+  linkCapturePayment,
   getCaptureAttachmentPreview,
   getCaptureEvent,
+  saveCaptureSenderName,
   uploadMissingCaptureAttachment,
   updateCaptureEventDecision,
   type CaptureAttachmentPreview,
@@ -40,9 +43,19 @@ export default function CaptureMessageDetailPage() {
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [creatingReview, setCreatingReview] = useState(false);
+  const [senderName, setSenderName] = useState('');
+  const [senderReason, setSenderReason] = useState('');
+  const [linkRunId, setLinkRunId] = useState('');
+  const [linkReason, setLinkReason] = useState('');
   const [missingFile, setMissingFile] = useState<File | null>(null);
   const [uploadingMissingFile, setUploadingMissingFile] = useState(false);
   const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, CaptureAttachmentPreview>>({});
+  const addEvidenceFiles = (incoming: File[]) => {
+    const selection = appendPaymentEvidence(evidenceFiles, incoming);
+    setEvidenceFiles(selection.files);
+    setError(selection.message);
+  };
+
 
   useEffect(() => {
     if (!eventId) return;
@@ -128,7 +141,7 @@ export default function CaptureMessageDetailPage() {
     }
   };
 
-  const failedAttachment = item?.attachments.find(
+  const failedAttachment = !item?.evidence_replaced && item?.attachments.find(
     (attachment) => String(attachment.download_status || '').toUpperCase() === 'FAILED'
   );
 
@@ -154,7 +167,9 @@ export default function CaptureMessageDetailPage() {
                   <h2 className="font-semibold">Message context</h2>
                 </div>
               </div>
+              {item.source_type === 'WECHAT' && item.sender && <details className="border-b border-[var(--border)] p-4 text-sm"><summary className="cursor-pointer font-semibold">Correct sender display name</summary><p className="mt-2 text-xs">Identity: {item.sender}. This changes the display name for this group, not the sender ID or Finance authorization.</p><input aria-label="Sender display name" value={senderName} onChange={e => setSenderName(e.target.value)} placeholder={item.sender_name || 'Confirmed display name'} className="mt-2 w-full rounded border border-[var(--border)] bg-[var(--background)] p-2" /><input aria-label="Reason for sender name correction" value={senderReason} onChange={e => setSenderReason(e.target.value)} placeholder="How was this person identified?" className="mt-2 w-full rounded border border-[var(--border)] bg-[var(--background)] p-2" /><button disabled={updating || !senderName.trim() || !senderReason.trim()} className="mt-2 rounded bg-cyan-700 px-3 py-2 text-white disabled:opacity-50" onClick={async () => { setUpdating(true); try { await saveCaptureSenderName(item.id, senderName, senderReason); setItem(await getCaptureEvent(item.id)); setError(null); } catch (e) { setError(e instanceof Error ? e.message : 'Unable to save sender name'); } finally { setUpdating(false); } }}>Save sender name</button></details>}
               <dl className="grid gap-4 p-5 text-sm sm:grid-cols-2">
+                {item.case_number && <div><dt className="text-xs text-[var(--muted-foreground)]">Case / Review</dt><dd>{item.case_number}{item.automation_run_id ? ` / #${item.automation_run_id}` : ''}</dd></div>}
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Source</dt><dd className="mt-1 font-medium">{item.source_type.replaceAll('_', ' ')}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Received</dt><dd className="mt-1 font-medium">{new Date(item.received_at || item.created_at).toLocaleString()}</dd></div>
                 <div><dt className="text-xs text-[var(--muted-foreground)]">Sender</dt><dd className="mt-1 break-all font-medium">{item.sender_name || item.sender || 'Not provided'}{item.sender_name && item.sender && item.sender_name !== item.sender ? <span className="mt-0.5 block text-xs font-normal text-[var(--muted-foreground)]">{item.sender}</span> : null}</dd></div>
@@ -187,7 +202,7 @@ export default function CaptureMessageDetailPage() {
                           {attachment.size_bytes ? ` · ${(attachment.size_bytes / 1024).toFixed(1)} KB` : ''}
                         </p>
                         {attachment.download_status === 'FAILED' && (
-                          <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">File download failed - upload required</p>
+                          <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">{item.evidence_replaced ? 'Original download failed — replacement linked to Review' : 'File download failed - upload required'}</p>
                         )}
                         </div>
                         {preview && <a href={preview.preview_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-semibold hover:bg-[var(--muted)]">Open <ExternalLink className="h-3.5 w-3.5" /></a>}
@@ -238,13 +253,26 @@ export default function CaptureMessageDetailPage() {
                   </button>
                 </section>
               )}
+              {failedAttachment && !item.automation_run_id && <section className="rounded-xl border border-cyan-300 p-4">
+                <h2 className="font-semibold">Replacement already uploaded?</h2>
+                <p className="mt-2 text-sm">Link this message to the existing payment Review after confirming it is the same payment. The original message is retained.</p>
+                <input aria-label="Existing payment Review number" type="number" min="1" value={linkRunId} onChange={e => setLinkRunId(e.target.value)} placeholder="Review number, e.g. 508" className="mt-3 w-full rounded border p-2 text-sm text-black" />
+                <input aria-label="Reason for linking payment evidence" value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="Why does this belong to that payment?" className="mt-2 w-full rounded border p-2 text-sm text-black" />
+                <button disabled={updating || !linkRunId || !linkReason.trim()} className="mt-3 rounded bg-cyan-700 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={async () => {
+                  setUpdating(true);setError(null);
+                  try { await linkCapturePayment(item.id,Number(linkRunId),linkReason);setItem(await getCaptureEvent(item.id)); }
+                  catch(e) { setError(e instanceof Error ? e.message : 'Unable to link evidence'); }
+                  finally { setUpdating(false); }
+                }}>Link to existing Review</button>
+              </section>}
+              {item.evidence_replaced && <section className="rounded-xl border border-emerald-300 p-4 text-sm">Replacement evidence is linked to Review #{item.automation_run_id}. No separate upload is needed. The original download failure is retained below for history.</section>}
               {item.can_create_payment_review && !item.automation_run_id && (
                 <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                   <h3 className="font-semibold">AI payment analysis available</h3>
                   <p className="mt-1 text-sm">Reanalyse the original message, quote and retained image/PDF with AI. A Receivable review is created only after the structured result is validated.</p>
-                  <label className="mt-4 flex cursor-pointer items-center gap-2 rounded-md border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900">
-                    <Upload className="h-4 w-4" /> Add clearer slip files (optional)
-                    <input type="file" accept="image/*,application/pdf" multiple className="sr-only" onChange={(event) => setEvidenceFiles(Array.from(event.target.files || []))} />
+                  <label onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!creatingReview) addEvidenceFiles(Array.from(event.dataTransfer.files)); }} className="mt-4 flex cursor-pointer items-center gap-2 rounded-md border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900">
+                    <Upload className="h-4 w-4" /> Drop or add clearer slip files (up to 20)
+                    <input type="file" accept="image/*,application/pdf" multiple className="sr-only" onChange={(event) => { addEvidenceFiles(Array.from(event.target.files || [])); event.target.value = ''; }} />
                   </label>
                   {evidenceFiles.length > 0 && <p className="mt-2 break-words text-xs">{evidenceFiles.map((file) => file.name).join(', ')}</p>}
                   <button type="button" disabled={creatingReview} onClick={() => void createPaymentReview()} className="mt-3 inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -257,15 +285,15 @@ export default function CaptureMessageDetailPage() {
                 <section className="rounded-xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-100">
                   <h3 className="font-semibold">Payment actions</h3>
                   <p className="mt-1 text-sm">This message is linked to payment review #{item.automation_run_id}{item.run_status ? ` (${item.run_status.replaceAll('_', ' ').toLowerCase()})` : ''}.</p>
-                  <Link href={item.review_url || `/review/${item.automation_run_id}`} className="mt-3 inline-flex items-center gap-2 rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white">
+                  <Link href={`${item.review_url || `/review/${item.automation_run_id}`}?returnTo=capture`} className="mt-3 inline-flex items-center gap-2 rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white">
                     Open payment review <ExternalLink className="h-4 w-4" />
                   </Link>
                   <div className="mt-4 border-t border-cyan-300 pt-4">
                     <p className="text-sm font-semibold">Add clearer slip photos or PDFs</p>
                     <p className="mt-1 text-xs opacity-75">Files are added to the same payment; the original WeChat audit record is retained.</p>
-                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-cyan-400 bg-white px-3 py-2 text-sm font-semibold text-cyan-800">
-                      <Upload className="h-4 w-4" /> Choose files
-                      <input type="file" accept="image/*,application/pdf" multiple className="sr-only" onChange={(event) => setEvidenceFiles(Array.from(event.target.files || []))} />
+                    <label onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!uploadingEvidence) addEvidenceFiles(Array.from(event.dataTransfer.files)); }} className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-cyan-400 bg-white px-3 py-2 text-sm font-semibold text-cyan-800">
+                      <Upload className="h-4 w-4" /> Drop or choose files (up to 20)
+                      <input type="file" accept="image/*,application/pdf" multiple className="sr-only" onChange={(event) => { addEvidenceFiles(Array.from(event.target.files || [])); event.target.value = ''; }} />
                     </label>
                     {evidenceFiles.length > 0 && <p className="mt-2 break-words text-xs">{evidenceFiles.map((file) => file.name).join(', ')}</p>}
                     <button type="button" disabled={uploadingEvidence || evidenceFiles.length === 0} onClick={() => void uploadPaymentEvidence()} className="mt-3 inline-flex items-center gap-2 rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">

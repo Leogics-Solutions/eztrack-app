@@ -76,6 +76,12 @@ export interface WhatsAppConnection {
 }
 
 export interface AgentRunLine {
+  sql_item_mode?: "free_text" | "stock";
+  sql_item_resolution?: { action: string; code: string };
+  source_part_no?: string | null;
+  source_description?: string | null;
+  line_mapping_mode?: string;
+  use_source_part_no_as_item_code?: boolean;
   name?: string;
   more_description?: string | null;
   model?: string;
@@ -83,7 +89,15 @@ export interface AgentRunLine {
   source_unit?: string | null;
   color?: string | null;
   source_color?: string | null;
+  remember_description_mapping?: boolean;
+  approved_description_mapping?: {
+    id: number;
+    revision: number;
+    state: string;
+    approved_run_id?: number;
+  };
   sql_account_uom?: string | null;
+  omit_document_uom?: boolean;
   qty?: number | null;
   category?: string | null;
   parent_group?: string | null;
@@ -98,11 +112,16 @@ export interface AgentRunLine {
     sku_code?: string | null;
     en_description?: string | null;
     matched_alias?: string | null;
+    match_method?: string;
     item_id?: number | null;
+    translation_source?: string | null;
   };
 }
 
 export interface AgentRunForex {
+  calculation_mode?: 'target' | 'rate' | null;
+  force_expected_total?: boolean;
+  document_total_override?: number | null;
   currency?: string | null;
   amount?: number | null;
   operator?: string | null;
@@ -123,6 +142,16 @@ export interface AgentRunData {
   code?: string | null;
   source_reference?: string | null;
   inv_date?: string | null;
+  payment_terms?: string | null;
+  sql_customer_validation?: {
+    status: 'MATCHED' | 'NOT_FOUND' | 'AMBIGUOUS' | 'UNAVAILABLE';
+    message: string;
+    review_customer?: string | null;
+    review_code?: string | null;
+    issuer_key?: string | null;
+    connection_id?: number | null;
+    checked_at?: string;
+  };
   currency?: string | null;
   no_conversion?: boolean;
   issuing_entity?: {
@@ -139,6 +168,7 @@ export interface AgentRunData {
     template_sources?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   } | null;
+  outsource_message_draft?: { body: string; subject?: string; filename?: string; destination?: { email_to?: string[]; group_jid?: string; group_name?: string } };
   fulfilment_route?: 'INTERNAL' | 'OUTSOURCED' | string | null;
   forex?: AgentRunForex | null;
   conversion?: {
@@ -228,6 +258,7 @@ export interface AgentRun {
   organization_id?: number | null;
   status: string;
   revision?: number;
+  updated_at?: string | null;
   po_label?: string | null;
   agent_name?: string | null;
   record_type?: string | null;
@@ -251,6 +282,11 @@ export interface AgentRun {
 }
 
 export interface AgentRunListItem {
+  payment_category?: string | null;
+  payment_flags?: string[];
+  funds_status?: string | null;
+  slip_status?: string | null;
+  invoice_status?: string | null;
   id: number;
   agent_id: number;
   status: string;
@@ -418,10 +454,11 @@ export async function deleteOutput(agentId: number, outputId: number): Promise<v
 
 // -------------------------------- Runs ----------------------------------
 
-export async function listRuns(params: { agentId?: number; status?: string; page?: number; pageSize?: number } = {}): Promise<AgentRunListResponse> {
+export async function listRuns(params: { agentId?: number; status?: string; templateKey?: 'order_to_invoice' | 'payment_knock_off'; page?: number; pageSize?: number } = {}): Promise<AgentRunListResponse> {
   const q = new URLSearchParams();
   if (params.agentId != null) q.set('agent_id', String(params.agentId));
   if (params.status) q.set('status', params.status);
+  if (params.templateKey) q.set('template_key', params.templateKey);
   if (params.page) q.set('page', String(params.page));
   if (params.pageSize) q.set('page_size', String(params.pageSize));
   const res = await fetch(`${BASE_URL}/agents/runs?${q.toString()}`, { headers: getScopedHeaders() });
@@ -441,6 +478,37 @@ export async function listAuditTrail(params: { eventType?: string; search?: stri
 export async function getRun(runId: number): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}`, { headers: getScopedHeaders() });
   return handle<AgentRun>(res);
+}
+
+export interface CaseEmailMessage {
+  id: number;
+  direction: string;
+  from: string | null;
+  to: string[];
+  subject: string | null;
+  body: string;
+  attachments: Array<{ filename: string; file_key?: string; role?: string; size?: number }>;
+  sent_at: string | null;
+}
+
+export interface CaseEmailConversation {
+  thread: null | { subject: string; to: string[]; cc: string[]; anchor_run_id: number; sender: string; status: string };
+  messages: CaseEmailMessage[];
+}
+
+export async function getCaseEmailConversation(runId: number): Promise<CaseEmailConversation> {
+  return handle<CaseEmailConversation>(await fetch(`${BASE_URL}/agents/runs/${runId}/email-conversation`, { headers: getScopedHeaders() }));
+}
+
+export async function replyToCaseEmail(runId: number, replyToId: number, body: string, requestId: string, files: File[]) {
+  const form = new FormData();
+  form.append('reply_to_id', String(replyToId));
+  form.append('body', body);
+  form.append('request_id', requestId);
+  files.forEach((file) => form.append('files', file));
+  return handle<{ status: string; message_id: string }>(await fetch(`${BASE_URL}/agents/runs/${runId}/email-conversation/reply`, {
+    method: 'POST', headers: getScopedHeadersForFormData(), body: form,
+  }));
 }
 
 /** Fetch the original intake attachment through the authenticated API. */
@@ -504,10 +572,80 @@ export async function reanalyzeRun(runId: number): Promise<AgentRun> {
 }
 
 export async function refreshPaymentPreview(runId: number): Promise<AgentRun> {
-  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/refresh-payment-preview`, {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/payment-sql-check`, {
     method: 'POST', headers: getScopedHeaders(),
   });
   return handle<AgentRun>(res);
+}
+
+export async function setInvoiceWaitApproval(runId: number, enabled: boolean): Promise<AgentRun> {
+  return handle<AgentRun>(await fetch(`${BASE_URL}/agents/runs/${runId}/invoice-wait-approval?enabled=${enabled}`, {
+    method: 'POST', headers: getScopedHeaders(),
+  }));
+}
+
+export async function paymentSqlCheckStatus(runId: number): Promise<import('../utils/paymentSqlJob').PaymentSqlJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-sql-check`, {headers:getScopedHeaders()}));
+}
+export async function resolvePayment(runId:number, body:Record<string,unknown>):Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-resolution`,{method:'POST',headers:getScopedHeaders(),body:JSON.stringify(body)}));
+}
+export async function linkPaymentCase(runId:number,source_case_id:number,reason:string):Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/link-payment-case`,{method:'POST',headers:getScopedHeaders(),body:JSON.stringify({source_case_id,reason})}));
+}
+
+export async function analyzePaymentEvidence(runId:number):Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/analyze-payment-evidence`,{method:'POST',headers:getScopedHeaders()}));
+}
+
+export interface PaymentFollowUp {
+  kind:string; reason:string; assignee?:string; due_at?:string; run_id?:number; case_id?:number;
+  delivery_mode?:string; interval_hours?:number; schedule_status?:string; last_sent_at?:string;
+}
+
+export type OutsourcedCaseState = 'ACTION' | 'WAITING' | 'COMPLETED';
+
+export interface OutsourcedSet {
+  run_id: number;
+  status: string;
+  label?: string;
+  issuing_company?: string;
+  customer?: string;
+  date?: string;
+  currency?: string;
+  amount?: number;
+  line_count: number;
+  verification_status?: string;
+  test_mode?: boolean;
+  delivered: boolean;
+  source_channel?: string | null;
+  outbound_channel?: string | null;
+  updated_at?: string | null;
+  received_at?: string | null;
+  set_index?: number;
+  set_count?: number;
+  state?: OutsourcedCaseState;
+}
+
+export interface OutsourcedCase {
+  case_id: number;
+  instruction?: string;
+  source_filename?: string;
+  sets: OutsourcedSet[];
+}
+
+export async function listOutsourcedCases(page = 1, pageSize = 100): Promise<{
+  cases: OutsourcedCase[];
+  total: number;
+  counts?: Record<OutsourcedCaseState, number>;
+}> {
+  return handle(await fetch(`${BASE_URL}/agents/outsourced-cases?page=${page}&page_size=${pageSize}`, { headers: getScopedHeaders() }));
+}
+export async function listPaymentFollowUps():Promise<{items:PaymentFollowUp[]}> {
+  return handle(await fetch(`${BASE_URL}/agents/payment-follow-ups`,{headers:getScopedHeaders()}));
+}
+export async function updatePaymentCaseTask(caseId:number,body:Record<string,unknown>):Promise<unknown> {
+  return handle(await fetch(`${BASE_URL}/agents/payment-cases/${caseId}/follow-up`,{method:'POST',headers:getScopedHeaders(),body:JSON.stringify(body)}));
 }
 
 export async function addPaymentEvidence(runId: number, files: File[]): Promise<AgentRun> {
@@ -533,16 +671,45 @@ export async function generateRun(runId: number): Promise<AgentRun> {
   return handle<AgentRun>(res);
 }
 
+export interface OrderSSTState {
+  applicable: boolean; required: boolean; ready: boolean;
+  status: 'GROUP_J' | 'NOT_GROUP_J' | 'UNVERIFIED'; source: string | null;
+  identity: Record<string, unknown>; configured_rate: number; rate: number; can_remember: boolean; message: string;
+  confirmation: { checked_on: string; note: string; confirmed_at: string; confirmed_by_user_id: number } | null;
+}
+export async function getOrderSST(runId: number): Promise<OrderSSTState> {
+  return handle<OrderSSTState>(await fetch(`${BASE_URL}/agents/runs/${runId}/sst-confirmation`, { headers: getScopedHeaders() }));
+}
+export async function saveOrderSST(runId: number, body: Record<string, unknown>): Promise<AgentRun> {
+  return handle<AgentRun>(await fetch(`${BASE_URL}/agents/runs/${runId}/sst-confirmation`, {
+    method:'POST', headers:getScopedHeaders(), body:JSON.stringify(body),
+  }));
+}
+
 export async function updateRunDocumentNumbers(
   runId: number,
   deliveryOrderNo: string,
   invoiceNo: string,
+  existingDoConfirmation?: string,
+  reservationOnly = false,
 ): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/document-numbers`, {
     method: 'PATCH', headers: getScopedHeaders(),
-    body: JSON.stringify({ delivery_order_no: deliveryOrderNo, invoice_no: invoiceNo }),
+    body: JSON.stringify({ delivery_order_no: deliveryOrderNo, invoice_no: invoiceNo, existing_do_confirmation: existingDoConfirmation, reservation_only: reservationOnly }),
   });
   return handle<AgentRun>(res);
+}
+
+export type ReservedDoPreview = {
+  confirmation: string;
+  snapshot: { found: boolean; truncated?: boolean; cancelled?: boolean; linked_invoice?: unknown;
+    document?: { document_no: string; customer_code: string; customer_name: string; document_amount: string; document_date: string };
+    lines: { description: string; more_description?: string; item_code: string; qty: number; uom: string; unit_price: number; amount: number }[];
+  };
+};
+export async function previewReservedDo(runId: number, documentNo: string): Promise<ReservedDoPreview> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/reserved-do-preview?document_no=${encodeURIComponent(documentNo)}`, { headers: getScopedHeaders() });
+  return handle<ReservedDoPreview>(res);
 }
 
 export async function approveRun(runId: number, correctedData?: AgentRunData): Promise<AgentRun> {
@@ -597,6 +764,24 @@ export interface SqlAccountStockItemProposal {
   uom?: string | null;
 }
 
+export interface SqlAccountStockItemChoice extends SqlAccountStockItemProposal {
+  action: 'match_existing' | 'create_new';
+}
+
+export async function resolveSqlAccountItems(runId: number, items: SqlAccountStockItemChoice[], expectedUpdatedAt: string): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/resolve-sql-account-items`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ items, expected_updated_at: expectedUpdatedAt }),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function checkSqlAccountItems(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/check-sql-account-items`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
 /** Create a reviewer-approved SQL Account customer, then retry only this run's SQL push. */
 export async function createSqlAccountCustomerAndRepush(runId: number, customer: SqlAccountCustomerProposal): Promise<AgentRun> {
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/create-sql-account-customer`, {
@@ -615,4 +800,71 @@ export async function rejectRun(runId: number, reason?: string): Promise<AgentRu
     method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ reason: reason ?? null }),
   });
   return handle<AgentRun>(res);
+}
+
+export interface OrderBatchJob {
+  id: string;
+  status: string;
+  action: 'PREPARE' | 'APPROVE' | 'EMAIL';
+  result: { items?: { run_id: number; status: string; message: string }[];
+    progress?: { run_id: number; stage: string; total_lines?: number; completed_orders?: number; total_orders?: number;
+      updated_at?: string; sdk_activity?: { stage?: string; stage_elapsed_seconds?: number; timed_out?: boolean } } };
+  queue_position?: number;
+  total_orders?: number;
+  estimated_wait_seconds?: number;
+  started_at?: string;
+  created_at?: string;
+  error?: string;
+  preview?: {
+    run_ids: number[]; set_count: number; subject: string; body: string;
+    route: { to: string[]; cc: string[]; test_mode: boolean; intended_to?: string[] };
+    files: { file_key: string; filename: string }[];
+  };
+}
+
+export async function getOrderBatch(runId: number): Promise<OrderBatchJob | null> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/batch`, { headers: getScopedHeaders() }));
+}
+
+export async function startOrderBatch(runId: number, action: 'PREPARE' | 'APPROVE', single = false, correctedData?: AgentRunData): Promise<OrderBatchJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/batch`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ action, single, corrected_data: correctedData }),
+  }));
+}
+
+export async function previewOrderBatchEmail(runId: number): Promise<OrderBatchJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/outsource-batch/preview`, {
+    method: 'POST', headers: getScopedHeaders(),
+  }));
+}
+
+export async function sendOrderBatchEmail(runId: number, previewId: string, subject: string, body: string): Promise<OrderBatchJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/outsource-batch/send`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ preview_id: previewId, subject, body }),
+  }));
+}
+
+export async function assignOrderBatchFiles(runId: number, fileKeys: string[]): Promise<{ status: string }> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/outsource-batch/files`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ file_keys: fileKeys }),
+  }));
+}
+
+export async function skipSupplierVerification(runId: number): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/skip-supplier-verification`, {
+    method: 'POST', headers: getScopedHeaders(),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function attachOrderSource(runId: number, file: File): Promise<{ run_id: number; filename: string }> {
+  const form = new FormData(); form.append('file', file);
+  const headers = new Headers(getScopedHeaders()); headers.delete('Content-Type');
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/source-attachment`, { method: 'POST', headers, body: form }));
+}
+
+export async function renameReturnedFile(runId: number, fileKey: string, filename: string): Promise<{ filename: string }> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/returned-filename`, {
+    method: 'PATCH', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, filename }),
+  }));
 }

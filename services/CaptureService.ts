@@ -92,6 +92,8 @@ export interface CaptureEvent {
   automation_run_id?: number | null;
   review_url?: string | null;
   run_status?: string | null;
+  case_number?: string | null;
+  evidence_replaced?: boolean;
   can_create_payment_review?: boolean;
   recipients: string[];
   subject?: string | null;
@@ -118,6 +120,7 @@ export type CaptureInboxStage = 'TO_REVIEW' | 'IN_PROGRESS' | 'COMPLETED';
 export type CaptureInboxView = 'ALL' | CaptureInboxStage;
 
 export interface CaptureWorkItem {
+  order_summaries?: Array<{ issuer?: string | null; customer?: string | null; document_date?: string | null; set_count?: number | null; review_ids: number[] }>;
   id: string;
   stage: CaptureInboxStage;
   status: string;
@@ -129,6 +132,11 @@ export interface CaptureWorkItem {
   group_name?: string | null;
   company_name?: string | null;
   case_number?: string | null;
+  payment_category?: string | null;
+  payment_flags?: string[];
+  funds_status?: string | null;
+  slip_status?: string | null;
+  invoice_status?: string | null;
   pic_note?: string | null;
   quoted_message_id?: string | null;
   quoted_type?: string | null;
@@ -157,6 +165,8 @@ export interface CaptureWorkItem {
 }
 
 export interface CaptureWorkInboxResponse {
+  payment_summary?: import('@/components/capture/PaymentQueueFilters').PaymentQueueSummary;
+  coverage_truncated?: boolean;
   items: CaptureWorkItem[];
   counts: {
     all: number;
@@ -354,8 +364,11 @@ export async function listCaptureWorkInbox(params: {
   status?: string;
   sourceType?: string;
   workflow?: string;
+  fulfilment?: string;
   search?: string;
   includeIgnored?: boolean;
+  paymentCategory?: string;
+  paymentFlags?: string[];
 } = {}): Promise<CaptureWorkInboxResponse> {
   const query = new URLSearchParams();
   query.set('view', params.view || 'TO_REVIEW');
@@ -364,7 +377,10 @@ export async function listCaptureWorkInbox(params: {
   if (params.status && params.status !== 'ALL') query.set('status', params.status);
   if (params.sourceType && params.sourceType !== 'ALL') query.set('source_type', params.sourceType);
   if (params.workflow && params.workflow !== 'ALL') query.set('workflow', params.workflow);
+  if (params.fulfilment) query.set('fulfilment', params.fulfilment);
   if (params.search) query.set('search', params.search);
+  if (params.paymentFlags?.length) query.set('payment_flags', params.paymentFlags.join(','));
+  if (params.paymentCategory && params.paymentCategory !== 'ALL') query.set('payment_category', params.paymentCategory);
   if (params.includeIgnored) query.set('include_ignored', 'true');
 
   const response = await fetch(`${BASE_URL}/capture/inbox/work-items?${query.toString()}`, {
@@ -393,6 +409,13 @@ export async function getCaptureEvent(eventId: number): Promise<CaptureEvent> {
   return handle<CaptureEvent>(response);
 }
 
+export async function saveCaptureSenderName(eventId: number, displayName: string, reason: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}/sender-name`, {
+    method: 'PATCH', headers: getScopedHeaders(), body: JSON.stringify({ display_name: displayName, reason }),
+  });
+  await handle(response);
+}
+
 export async function uploadMissingCaptureAttachment(
   eventId: number,
   file: File,
@@ -417,6 +440,13 @@ export async function createCapturePaymentReview(eventId: number): Promise<{
     headers: getScopedHeaders(),
   });
   return handle(response);
+}
+
+export async function linkCapturePayment(eventId: number, runId: number, reason: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}/link-payment`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({run_id: runId, reason}),
+  });
+  await handle(response);
 }
 
 export async function getCaptureAttachmentPreview(

@@ -4,6 +4,8 @@ const standaloneBuild = process.env.NEXT_STANDALONE_BUILD === 'true';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Build a candidate release without replacing files used by next start.
+  distDir: process.env.NEXT_BUILD_DIR || '.next',
 
   // The Maincell Windows deployment uses `next start`. Standalone output is
   // still available for container/Amplify packaging when explicitly enabled.

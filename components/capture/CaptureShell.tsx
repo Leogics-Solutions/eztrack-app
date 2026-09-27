@@ -28,7 +28,9 @@ export function CaptureShell({
 }) {
   const router = useRouter();
   const isTabActive = (tab: (typeof TABS)[number]) => tab.exact
-    ? router.pathname === tab.href || router.pathname.startsWith('/capture/messages/')
+    ? router.pathname === tab.href
+      || router.pathname.startsWith('/capture/messages/')
+      || router.pathname.startsWith('/capture/outsourced')
     : router.pathname.startsWith(tab.href);
   const activeIndex = Math.max(0, TABS.findIndex(isTabActive));
   const [visualActiveIndex, setVisualActiveIndex] = useState(activeIndex);

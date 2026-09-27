@@ -25,23 +25,24 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
   const { user, signOut } = useAuth();
-  const [recordsOpen, setRecordsOpen] = useState(true);
+  const [openItems, setOpenItems] = useState<Record<string, boolean>>({ '/records': true, '/settings': true });
   const primaryItems = getPrimaryNavigation(t);
   const settingsItem = getSettingsNavigation(t);
 
   const renderNavItem = (item: AppNavigationItem) => {
     const Icon = item.icon;
-    const isActive = isNavigationItemActive(router.pathname, item);
+    const isActive = isNavigationItemActive(router.pathname, item, router.asPath);
 
     if (item.children?.length) {
+      const isOpen = openItems[item.href] ?? isActive;
       return (
         <li key={item.href}>
-          <button type="button" onClick={() => setRecordsOpen((open) => !open)} aria-expanded={recordsOpen} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition-colors" style={{ background: isActive ? 'var(--secondary)' : 'transparent', color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>
+          <button type="button" onClick={() => setOpenItems((open) => ({ ...open, [item.href]: !isOpen }))} aria-expanded={isOpen} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition-colors" style={{ background: isActive ? 'var(--secondary)' : 'transparent', color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>
             <Icon className="h-5 w-5 shrink-0" />
             <span className="flex-1">{item.label}</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${recordsOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
-          {recordsOpen && (
+          {isOpen && (
             <ul className="mt-1 ml-5 space-y-1 border-l border-[var(--border)] pl-3">
               {item.children.map((child) => {
                 const childActive = isNavigationChildActive(router.pathname, router.asPath, child);

@@ -4,11 +4,13 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MobileHeader } from './MobileHeader';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSidebar } from './MobileSidebar';
+import { SqlHealthBanner } from './SqlHealthBanner';
 import { useState } from 'react';
 
 interface MobileAppLayoutProps {
   children: React.ReactNode;
   pageName?: string;
+  hideChrome?: boolean;
 }
 
 /**
@@ -20,8 +22,17 @@ interface MobileAppLayoutProps {
  *   <YourPageContent />
  * </MobileAppLayout>
  */
-export function MobileAppLayout({ children, pageName }: MobileAppLayoutProps) {
+export function MobileAppLayout({ children, pageName, hideChrome = false }: MobileAppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  if (hideChrome) {
+    return (
+      <div className="fixed inset-0 flex min-h-0 flex-col overflow-hidden" style={{ background: '#F5F7F7' }}>
+        <SqlHealthBanner />
+        {children}
+      </div>
+    );
+  }
 
   return (
     // <ProtectedRoute>
@@ -39,6 +50,7 @@ export function MobileAppLayout({ children, pageName }: MobileAppLayoutProps) {
         />
 
         {/* Main Content Area */}
+        <SqlHealthBanner />
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-20">
           {children}
         </main>

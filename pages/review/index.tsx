@@ -1,5 +1,6 @@
 'use client';
 
+import { PaymentQueueFilters, type PaymentQueueSummary } from '@/components/capture/PaymentQueueFilters';
 import { AppLayout } from '@/components/layout';
 import {
   AUTOMATION_STATUS_LEGEND,
@@ -17,6 +18,7 @@ import {
   type WorkstreamKey,
 } from '@/lib/workstreams';
 import { useStickyWorkstream } from '@/lib/useStickyWorkstream';
+import { useListReturnState } from '@/lib/useListReturnState';
 import {
   listCaptureWorkInbox,
   type CaptureWorkItem,
@@ -44,11 +46,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type ReviewKind = 'approval' | 'matching' | 'validation' | 'missing' | 'returned' | 'processing' | 'completed' | 'rejected';
 
 interface ReviewTask {
+  paymentCategory?: string | null;
+  paymentFacts?: string[];
+  paymentFlags?: string[];
   id: string;
   title: string;
   subtitle: string;
@@ -80,7 +85,7 @@ function automationTask(run: AgentRunListItem): ReviewTask {
   const readyToApprove = status === 'DRAFT_GENERATED';
   const deliveryPending = status === 'DELIVERY_PENDING';
   const rejected = status === 'REJECTED';
-  const completed = status === 'COMPLETED';
+  const completed = status === 'COMPLETED' || status === 'MERGED';
   const externalDocumentsReceived = status === 'EXTERNAL_DOCUMENTS_RECEIVED';
   const aiVerifying = status === 'AI_VERIFYING';
   const verificationPassed = status === 'VERIFICATION_PASSED';
@@ -101,6 +106,8 @@ function automationTask(run: AgentRunListItem): ReviewTask {
       ? 'Waiting for instruction / 待补文字资料 — the payment image is received; send the related payment or invoice details in the same chat to continue.'
       : rejected
       ? run.error_message || 'Rejected by reviewer.'
+      : status === 'MERGED'
+      ? 'Attached to another review. Open this record to continue in the linked review.'
       : completed
       ? 'This automation is completed. Open it to view its final documents and activity.'
       : externalDocumentsReceived
@@ -120,6 +127,9 @@ function automationTask(run: AgentRunListItem): ReviewTask {
           : 'Review the extracted data before the automation creates external records.',
     href: `/review/${run.id}`,
     updatedAt: run.updated_at || run.completed_at || run.received_at || new Date(0).toISOString(),
+    paymentCategory: run.payment_category,
+    paymentFlags: run.payment_flags,
+    paymentFacts: [run.funds_status, run.slip_status && `Slip: ${run.slip_status}`, run.invoice_status && `Invoices: ${run.invoice_status}`, ...(run.payment_flags || [])].filter(Boolean) as string[],
     source: 'automation',
     state: completed ? 'completed' : rejected ? 'rejected' : 'open',
     status: waitingForInstruction ? 'WAITING_FOR_INSTRUCTION' : status,
@@ -161,6 +171,9 @@ function captureTask(item: CaptureWorkItem): ReviewTask {
     reason: item.reason || (item.result_id ? 'Smartdok prepared a result that needs confirmation.' : 'This incoming item needs a decision before processing can continue.'),
     href: item.review_url || (item.capture_event_id ? `/capture/messages/${item.capture_event_id}` : '/capture'),
     updatedAt: item.updated_at,
+    paymentCategory: item.payment_category,
+    paymentFlags: item.payment_flags,
+    paymentFacts: [item.funds_status, item.slip_status && `Slip: ${item.slip_status}`, item.invoice_status && `Invoices: ${item.invoice_status}`, ...(item.payment_flags || [])].filter(Boolean) as string[],
     source: 'inbox',
     state: 'open',
     status: item.status,
@@ -209,30 +222,62 @@ function invoiceTask(invoice: Invoice): ReviewTask | null {
   };
 }
 
+// Review filters must include later pages, not just the first 100 items.
+async function allReviewRuns(params: Parameters<typeof listRuns>[0] = {}) {
+  const first = await listRuns({ ...params, page: 1, pageSize: 200 });
+  const runs = [...first.runs];
+  for (let page = 2; runs.length < first.total; page++) {
+    const next = await listRuns({ ...params, page, pageSize: 200 });
+    if (!next.runs.length) break;
+    runs.push(...next.runs);
+  }
+  return { ...first, runs };
+}
+async function allReviewCapture(params: Parameters<typeof listCaptureWorkInbox>[0]) {
+  const first = await listCaptureWorkInbox({ ...params, page: 1, pageSize: 100 });
+  const items = [...first.items];
+  for (let page = 2; items.length < first.total; page++) {
+    const next = await listCaptureWorkInbox({ ...params, page, pageSize: 100 });
+    if (!next.items.length) break;
+    items.push(...next.items);
+  }
+  return { ...first, items };
+}
+
 export default function ReviewPage() {
-  const { selectedOrganizationId } = useOrganization();
+  const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
+  const requestSequence = useRef(0);
   const router = useRouter();
+  const [paymentSummary, setPaymentSummary] = useState<PaymentQueueSummary>();
+  const [paymentCountsTruncated, setPaymentCountsTruncated] = useState(false);
   const [tasks, setTasks] = useState<ReviewTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [kind, setKind] = useState<'ALL' | ReviewKind>('ALL');
-  const [workflow, setWorkflow] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const listState = useListReturnState(selectedOrganizationId ? `smartdok.review.return.${selectedOrganizationId}` : null,
+    { paymentFlags: [] as string[], paymentCategory: 'ALL', search: '', kind: 'ALL' as 'ALL' | ReviewKind, workflow: 'ALL', statusFilter: 'ALL', view: 'OPEN' as 'OPEN' | 'COMPLETED' | 'REJECTED' }, loading);
+  const { search, kind, workflow, statusFilter, view, paymentCategory, paymentFlags } = listState.value;
+  const setSearch = (value: string) => listState.update('search', value);
+  const setKind = (value: 'ALL' | ReviewKind) => listState.update('kind', value);
+  const setWorkflow = (value: string) => listState.update('workflow', value);
+  const setStatusFilter = (value: string) => listState.update('statusFilter', value);
+  const setView = (value: 'OPEN' | 'COMPLETED' | 'REJECTED') => listState.update('view', value);
   const [workstream, setWorkstream] = useStickyWorkstream('smartdok.review.workstream');
-  const [view, setView] = useState<'OPEN' | 'COMPLETED' | 'REJECTED'>('OPEN');
 
   const load = useCallback(async () => {
-    const [captureResult, invoiceResult, runResult, completedRunResult, rejectedRunResult] = await Promise.allSettled([
-      listCaptureWorkInbox({ view: 'TO_REVIEW', page: 1, pageSize: 100, sourceType: 'ALL', search: '', includeIgnored: false }),
+    if (organizationLoading || !selectedOrganizationId) return;
+    const requestId = ++requestSequence.current;
+    const selectedWorkflow = workstream === 'payment_knock_off' || workstream === 'order_to_invoice' ? workstream : undefined;
+    const [captureResult, invoiceResult, runResult] = await Promise.allSettled([
+      allReviewCapture({ view: ['NOISE', 'PAYABLE', 'OTHERS'].includes(paymentCategory) ? 'ALL' : 'TO_REVIEW', page: 1, pageSize: 100, sourceType: 'ALL', workflow: selectedWorkflow, search: '', includeIgnored: ['NOISE', 'PAYABLE', 'OTHERS'].includes(paymentCategory), paymentCategory }),
       listInvoices({ page: 1, page_size: 100 }),
-      listRuns({ page: 1, pageSize: 100 }),
-      listRuns({ status: 'COMPLETED', page: 1, pageSize: 100 }),
-      listRuns({ status: 'REJECTED', page: 1, pageSize: 100 }),
+      allReviewRuns({ templateKey: selectedWorkflow }),
     ]);
 
+    if (requestId !== requestSequence.current) return;
     const next: ReviewTask[] = [];
     if (captureResult.status === 'fulfilled') {
+      setPaymentSummary(captureResult.value.payment_summary);
+      setPaymentCountsTruncated(Boolean(captureResult.value.coverage_truncated));
       next.push(...captureResult.value.items.filter((item) => item.result_type !== 'automation_run').map(captureTask));
     }
     if (invoiceResult.status === 'fulfilled') {
@@ -240,19 +285,29 @@ export default function ReviewPage() {
     }
     if (runResult.status === 'fulfilled') {
       next.push(...runResult.value.runs
-        .filter((run) => ['PENDING_REVIEW', 'DRAFT_GENERATED', 'DELIVERY_PENDING', 'EXTERNAL_DOCUMENTS_RECEIVED', 'AI_VERIFYING', 'VERIFICATION_FAILED', 'VERIFICATION_PASSED', 'FAILED', 'OUTPUT_FAILED'].includes(run.status.toUpperCase()))
+        .filter((run) => ['RECEIVED', 'EXTRACTING', 'PROCESSING', 'RUNNING', 'WAITING_FOR_INSTRUCTION', 'PENDING_REVIEW', 'DRAFT_GENERATED', 'DELIVERY_PENDING', 'WAITING_EXTERNAL_DOCUMENTS', 'EXTERNAL_DOCUMENTS_RECEIVED', 'AI_VERIFYING', 'VERIFICATION_FAILED', 'VERIFICATION_PASSED', 'FAILED', 'OUTPUT_FAILED', 'COMPLETED', 'REJECTED'].includes(run.status.toUpperCase()))
         .map(automationTask));
     }
-    if (rejectedRunResult.status === 'fulfilled') {
-      next.push(...rejectedRunResult.value.runs.map(automationTask));
-    }
-    if (completedRunResult.status === 'fulfilled') {
-      next.push(...completedRunResult.value.runs.map(automationTask));
+    // Capture has attachment failures and the latest bundle lifecycle. Carry
+    // those facts onto the existing Review row instead of dropping that row's flags.
+    if (captureResult.status === 'fulfilled') {
+      const byRun = new Map<number, CaptureWorkItem>();
+      for (const item of captureResult.value.items) {
+        if (item.result_type === 'automation_run' && item.result_id) byRun.set(Number(item.result_id), item);
+      }
+      for (const task of next) {
+        if (task.source !== 'automation') continue;
+        const item = byRun.get(Number(task.id.replace('automation-', '')));
+        if (!item || task.workflowKey !== 'payment_knock_off') continue;
+        task.paymentCategory = item.payment_category || task.paymentCategory;
+        task.paymentFlags = item.payment_flags || task.paymentFlags;
+        task.paymentFacts = [item.funds_status, item.slip_status && `Slip: ${item.slip_status}`, item.invoice_status && `Invoices: ${item.invoice_status}`, ...(item.payment_flags || [])].filter(Boolean) as string[];
+      }
     }
     next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    setTasks(next);
+    setTasks([...new Map(next.map(task => [task.id, task])).values()]);
 
-    const results = [captureResult, invoiceResult, runResult, completedRunResult, rejectedRunResult];
+    const results = [captureResult, invoiceResult, runResult];
     const rejectedSources = results.filter((result) => result.status === 'rejected').length;
     if (rejectedSources === results.length) {
       setError('Review items could not be loaded. Check the API connection and try again.');
@@ -262,12 +317,13 @@ export default function ReviewPage() {
       setError(null);
     }
     setLoading(false);
-  }, []);
+  }, [organizationLoading, selectedOrganizationId, paymentCategory, workstream]);
 
   useEffect(() => {
+    setLoading(true);
     const timer = window.setTimeout(() => void load(), 0);
     const refreshTimer = window.setInterval(() => void load(), 60_000);
-    return () => { window.clearTimeout(timer); window.clearInterval(refreshTimer); };
+    return () => { requestSequence.current += 1; window.clearTimeout(timer); window.clearInterval(refreshTimer); };
   }, [load, selectedOrganizationId]);
 
   useEffect(() => {
@@ -281,7 +337,11 @@ export default function ReviewPage() {
   }, [router.isReady, router.query.workflow]);
 
   const scopedTasks = useMemo(
-    () => tasks.filter((task) => workstream === 'ALL' || task.workflowKey === workstream),
+    () => tasks.filter((task) => {
+      if (workstream !== 'ALL' && task.workflowKey !== workstream) return false;
+      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+      return true;
+    }),
     [tasks, workstream],
   );
   const workflows = useMemo(() => Array.from(new Set(scopedTasks.map((task) => task.workflow))).sort(), [scopedTasks]);
@@ -295,11 +355,16 @@ export default function ReviewPage() {
   const workstreamCount = (value: WorkstreamKey) => (
     value === 'ALL'
       ? visibleStateTasks.length
-      : visibleStateTasks.filter((task) => task.workflowKey === value).length
+      : visibleStateTasks.filter((task) => {
+        if (task.workflowKey !== value) return false;
+        if (value === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+        return true;
+      }).length
   );
   const statusScopedTasks = useMemo(
     () => tasks.filter((task) => {
       if (task.state !== (view === 'OPEN' ? 'open' : view === 'COMPLETED' ? 'completed' : 'rejected')) return false;
+      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
       return workstream === 'ALL' || task.workflowKey === workstream;
     }),
     [tasks, view, workstream],
@@ -319,10 +384,15 @@ export default function ReviewPage() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return tasks.filter((task) => {
+      if (workstream !== 'order_to_invoice') {
+        if (!paymentFlags.every(flag => (task.paymentFlags || []).includes(flag))) return false;
+        if (paymentCategory !== 'ALL' && task.paymentCategory !== paymentCategory) return false;
+      }
       if (view === 'OPEN' && task.state !== 'open') return false;
       if (view === 'COMPLETED' && task.state !== 'completed') return false;
       if (view === 'REJECTED' && task.state !== 'rejected') return false;
       if (workstream !== 'ALL' && task.workflowKey !== workstream) return false;
+      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
       if (kind !== 'ALL' && task.kind !== kind) return false;
       if (workflow !== 'ALL' && task.workflow !== workflow) return false;
       if (statusFilter !== 'ALL' && resolveAutomationStatus(task.status, task.approvalDestination).key !== statusFilter) return false;
@@ -331,7 +401,7 @@ export default function ReviewPage() {
       return values.some((value) => value.includes(query))
         || (query.startsWith('#') && values.some((value) => value.includes(query.slice(1))));
     });
-  }, [kind, search, statusFilter, tasks, view, workflow, workstream]);
+  }, [kind, search, statusFilter, tasks, view, workflow, workstream, paymentCategory, paymentFlags]);
 
   const metric = (value: ReviewKind) => openTasks.filter((task) => task.kind === value).length;
 
@@ -346,15 +416,26 @@ export default function ReviewPage() {
     void router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
   };
 
+  const pageTitle = workstream === 'payment_knock_off'
+    ? 'Payment knock-off'
+    : workstream === 'order_to_invoice'
+      ? 'Internal DO & Invoice'
+      : 'Review';
+  const pageDescription = workstream === 'payment_knock_off'
+    ? 'Payment messages, linked evidence, receipt status, SQL matching and the cases that still need action.'
+    : workstream === 'order_to_invoice'
+      ? 'Internal orders routed to company SQL Accounting. Outsourced PO / DO & Invoice work has its own inbox.'
+      : 'Approvals, matching questions, missing information, and exceptions across every workflow.';
+
   return (
-    <AppLayout pageName="Review">
+    <AppLayout pageName={pageTitle}>
       <div className="space-y-6">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">Human decisions</p>
-            <h1 className="text-2xl font-bold text-[var(--foreground)]">Review</h1>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">{workstream === 'ALL' ? 'Human decisions' : 'Work'}</p>
+            <h1 className="text-2xl font-bold text-[var(--foreground)]">{pageTitle}</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted-foreground)]">
-              Approvals, matching questions, missing information, and exceptions across every workflow. Work that passes automatically does not appear here.
+              {pageDescription} Work that passes automatically remains available under Completed and Records.
             </p>
           </div>
           <button type="button" onClick={() => { setLoading(true); void load(); }} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm font-semibold hover:bg-[var(--muted)] disabled:opacity-50">
@@ -362,7 +443,12 @@ export default function ReviewPage() {
           </button>
         </header>
 
+        {(workstream === 'payment_knock_off' || workstream === 'ALL') && <PaymentQueueFilters category={paymentCategory} flags={paymentFlags} onCategory={value => listState.update('paymentCategory', value)} onFlags={value => listState.update('paymentFlags', value)} summary={paymentSummary} truncated={paymentCountsTruncated} countScope="Inbox cases in this organization" />}
+
         <AutomationStatusLegend selectedStatus={statusFilter} statusCounts={statusCounts} onStatusSelect={setStatusFilter} />
+
+        {(workstream === 'payment_knock_off' || workstream === 'ALL') && <Link href="/review/payment-follow-ups" className="inline-block rounded-lg border border-[var(--border)] px-4 py-2 text-cyan-700">付款待办 / Payment follow-ups</Link>}
+        {workstream === 'ALL' && <Link href="/capture/outsourced" className="inline-block rounded-lg border border-[var(--border)] px-4 py-2 text-cyan-700">外包开单 Inbox / Outsourced orders</Link>}
 
         <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3">
@@ -407,7 +493,7 @@ export default function ReviewPage() {
           <div className="grid gap-3 border-b border-[var(--border)] p-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_200px_220px]">
             <label className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search task, company, workflow, or reason" className="w-full rounded-lg border border-[var(--border)] bg-transparent py-2.5 pl-9 pr-3 text-sm outline-none focus:border-cyan-600" />
+              <input disabled={!listState.restored} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search task, company, workflow, or reason" className="w-full rounded-lg border border-[var(--border)] bg-transparent py-2.5 pl-9 pr-3 text-sm outline-none focus:border-cyan-600" />
             </label>
             <select value={workflow} onChange={(event) => setWorkflow(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)]">
               <option value="ALL">All automations in this workflow</option>
@@ -428,6 +514,10 @@ export default function ReviewPage() {
           ) : filtered.length === 0 ? (
             <div className="p-14 text-center">
               <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
+              <button type="button" className="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 text-sm" onClick={() => {
+                setSearch(''); setKind('ALL'); setWorkflow('ALL'); setStatusFilter('ALL');
+                listState.update('paymentCategory', 'ALL'); listState.update('paymentFlags', []);
+              }}>Clear filters in this workflow</button>
               <h2 className="mt-3 font-semibold text-[var(--foreground)]">{view === 'REJECTED' && rejectedTasks.length === 0 ? 'No rejected items' : view === 'COMPLETED' && completedTasks.length === 0 ? 'No completed items' : openTasks.length === 0 && view === 'OPEN' ? 'You are all caught up' : 'No tasks match these filters'}</h2>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">{view === 'REJECTED' && rejectedTasks.length === 0 ? 'Rejected automation reviews will be retained and listed here.' : view === 'COMPLETED' && completedTasks.length === 0 ? 'Completed automation reviews will be retained and searchable here.' : openTasks.length === 0 && view === 'OPEN' ? 'New approvals and exceptions will appear here automatically.' : 'Try another workflow, task type, or search.'}</p>
             </div>
@@ -462,6 +552,7 @@ function ReviewRow({ task }: { task: ReviewTask }) {
         <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[var(--foreground)]">{task.title}</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${meta.style}`}>{meta.label}</span></div>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">{task.subtitle}</p>
         <p className="mt-2 line-clamp-2 text-sm text-[var(--foreground)]">{task.reason}</p>
+        {task.paymentCategory && <div className="mt-2 flex flex-wrap gap-1 text-xs"><b>{humanize(task.paymentCategory)}</b>{task.paymentFacts?.map((fact, index) => <span key={index} className="rounded bg-cyan-50 px-2 py-1 text-cyan-950">{humanize(fact)}</span>)}</div>}
       </div>
       <div>
         <div className="flex flex-wrap gap-2">

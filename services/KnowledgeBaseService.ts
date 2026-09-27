@@ -105,7 +105,7 @@ export async function uploadKnowledgeSource(input: {
   entityName?: string;
   documentType?: "DELIVERY_ORDER" | "SALES_INVOICE" | "QUOTATION";
   templateVariant?: string;
-  templateRenderMode?: "REFERENCE_EXAMPLE" | "BACKGROUND";
+  templateRenderMode?: "REFERENCE_EXAMPLE" | "BACKGROUND" | "FORM_OVERLAY" | "WORD_TEMPLATE";
 }): Promise<KnowledgeSource> {
   const intent = await json<{ source: KnowledgeSource; upload_url: string }>(
     await fetch(`${BASE_URL}/knowledge-base/upload-intent`, {

@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 const yahooDefaults: EmailConnectionInput = {
   name: 'Outsourced fulfilment mailbox', provider: 'YAHOO', email_address: '', username: '', password: '',
   imap_host: 'imap.mail.yahoo.com', imap_port: 993, imap_security: 'SSL_TLS', imap_folder: 'INBOX',
-  smtp_host: 'smtp.mail.yahoo.com', smtp_port: 465, smtp_security: 'SSL_TLS', poll_interval_minutes: 5,
+  smtp_host: 'smtp.mail.yahoo.com', smtp_port: 465, smtp_security: 'SSL_TLS', poll_interval_minutes: 1,
 };
 
 export default function EmailConnectionsPage() {

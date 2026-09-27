@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLanguage } from '@/lib/i18n';
 import { ChevronDown } from 'lucide-react';
 import { CompanySwitcher } from './CompanySwitcher';
@@ -22,13 +22,19 @@ interface SidebarProps {
 export function Sidebar({ isCollapsed }: SidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
-  const [recordsOpen, setRecordsOpen] = useState(true);
+  // Start each expandable navigation group closed on every fresh page load.
+  // The current section still opens automatically through `isActive` below.
+  const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
   const primaryItems = getPrimaryNavigation(t);
   const settingsItem = getSettingsNavigation(t);
 
+  useEffect(() => {
+    setOpenItems({});
+  }, [router.asPath]);
+
   const renderNavItem = (item: AppNavigationItem) => {
     const Icon = item.icon;
-    const isActive = isNavigationItemActive(router.pathname, item);
+    const isActive = isNavigationItemActive(router.pathname, item, router.asPath);
 
     if (item.children?.length) {
       if (isCollapsed) {
@@ -40,14 +46,15 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
           </li>
         );
       }
+      const isOpen = openItems[item.href] ?? isActive;
       return (
         <li key={item.href}>
-          <button type="button" onClick={() => setRecordsOpen((open) => !open)} aria-expanded={recordsOpen} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors" style={{ background: isActive ? 'var(--secondary)' : 'transparent', color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>
+          <button type="button" onClick={() => setOpenItems((open) => ({ ...open, [item.href]: !isOpen }))} aria-expanded={isOpen} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors" style={{ background: isActive ? 'var(--secondary)' : 'transparent', color: isActive ? 'var(--secondary-foreground)' : 'var(--muted-foreground)' }}>
             <Icon className="h-5 w-5 shrink-0" />
             <span className="flex-1">{item.label}</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${recordsOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
-          {recordsOpen && (
+          {isOpen && (
             <ul className="mt-1 space-y-1 border-l border-[var(--border)] pl-3 ml-5">
               {item.children.map((child) => {
                 const childActive = isNavigationChildActive(router.pathname, router.asPath, child);

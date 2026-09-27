@@ -23,7 +23,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface IntegrationCardProps {
   icon: LucideIcon;
@@ -36,7 +36,8 @@ interface IntegrationCardProps {
 }
 
 export default function IntegrationsPage() {
-  const { selectedOrganizationId } = useOrganization();
+  const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
+  const requestSequence = useRef(0);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +47,12 @@ export default function IntegrationsPage() {
   const [emailCount, setEmailCount] = useState(0);
 
   const load = useCallback(async () => {
+    if (organizationLoading || selectedOrganizationId === null) return;
+    const requestId = ++requestSequence.current;
     setLoading(true);
     try {
       const [nextSettings, whatsapp, wechat, sqlAccounts, emailConnections] = await Promise.all([getSettings(), listWhatsAppConnections(), listWeChatConnections(), listSqlAccountConnections(), listEmailConnections()]);
+      if (requestId !== requestSequence.current) return;
       setSettings(nextSettings);
       setWhatsappCount(whatsapp.length);
       setWechatCount(wechat.length);
@@ -56,14 +60,17 @@ export default function IntegrationsPage() {
       setEmailCount(emailConnections.length);
       setError(null);
     } catch (reason) {
+      if (requestId !== requestSequence.current) return;
       setError(reason instanceof Error ? reason.message : 'Could not load integration status.');
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
-  }, []);
+  }, [organizationLoading, selectedOrganizationId]);
 
   useEffect(() => {
+    setSettings(null);
     void load();
+    return () => { requestSequence.current += 1; };
   }, [load, selectedOrganizationId]);
 
   const gmailCount = settings?.integrations.gmail?.connection_count || 0;

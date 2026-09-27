@@ -40,7 +40,10 @@ export interface SqlAccountNumberSeries {
   delivery_order: SqlAccountNumberSeriesItem;
   invoice: SqlAccountNumberSeriesItem;
   pair_source: 'INDEPENDENT' | 'DO' | 'INVOICE';
+  delivery_order_source: 'SMARTDOK' | 'SQL_AUTO';
   invoice_source: 'SMARTDOK' | 'SQL_AUTO';
+  delivery_order_doc_no_set_key: number | null;
+  invoice_doc_no_set_key: number | null;
 }
 
 export async function listSqlAccountConnections(): Promise<SqlAccountConnectionListResponse> {
@@ -75,7 +78,7 @@ export async function getSqlAccountNumberSeries(id: number): Promise<SqlAccountN
 
 export async function saveSqlAccountNumberSeries(
   id: number,
-  input: Pick<SqlAccountNumberSeries, 'delivery_order' | 'invoice' | 'pair_source' | 'invoice_source'>,
+  input: Pick<SqlAccountNumberSeries, 'delivery_order' | 'invoice' | 'pair_source' | 'delivery_order_source' | 'invoice_source' | 'delivery_order_doc_no_set_key' | 'invoice_doc_no_set_key'>,
 ): Promise<SqlAccountNumberSeries> {
   return handle(await fetch(`${BASE_URL}/sql-account/connections/${id}/number-series`, {
     method: 'PUT', headers: getScopedHeaders(), body: JSON.stringify(input),

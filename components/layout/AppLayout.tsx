@@ -4,11 +4,13 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileAppLayout } from './MobileAppLayout';
+import { SqlHealthBanner } from './SqlHealthBanner';
 import { useState, useEffect } from 'react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
   pageName?: string;
+  hideChrome?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface AppLayoutProps {
  *   <YourPageContent />
  * </AppLayout>
  */
-export function AppLayout({ children, pageName }: AppLayoutProps) {
+export function AppLayout({ children, pageName, hideChrome = false }: AppLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -44,7 +46,16 @@ export function AppLayout({ children, pageName }: AppLayoutProps) {
 
   // Render mobile layout for screens smaller than 768px
   if (isMobile) {
-    return <MobileAppLayout pageName={pageName}>{children}</MobileAppLayout>;
+    return <MobileAppLayout pageName={pageName} hideChrome={hideChrome}>{children}</MobileAppLayout>;
+  }
+
+  if (hideChrome) {
+    return (
+      <div className="fixed inset-0 flex min-h-0 flex-col overflow-hidden" style={{ background: '#F5F7F7' }}>
+        <SqlHealthBanner />
+        {children}
+      </div>
+    );
   }
 
   // Desktop layout
@@ -66,6 +77,7 @@ export function AppLayout({ children, pageName }: AppLayoutProps) {
           />
 
           {/* Page Content */}
+          <SqlHealthBanner />
           <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-6">
             {children}
           </main>

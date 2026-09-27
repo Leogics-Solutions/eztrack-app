@@ -33,6 +33,7 @@ const SOURCES: Array<{ value: CaptureSource; label: string }> = [
   { value: 'INBOUND_EMAIL', label: 'Inbound email' },
   { value: 'GMAIL', label: 'Gmail' },
   { value: 'WHATSAPP', label: 'WhatsApp' },
+  { value: 'WECHAT', label: 'WeChat' },
   { value: 'DRIVE', label: 'Google Drive' },
   { value: 'TELEGRAM', label: 'Telegram' },
 ];
@@ -195,6 +196,7 @@ export default function CaptureRulesPage() {
           </div>
         )}
 
+        <p className="rounded-lg border border-cyan-300 bg-cyan-50 p-3 text-sm text-cyan-950">For WhatsApp and WeChat payment workflows, AI reads the active AI-rule guidance and the Global / channel guidance below. Simple keyword conditions do not override the payment agent's case association or receipt decision.</p>
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <div className="flex flex-col gap-4 border-b border-[var(--border)] p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>

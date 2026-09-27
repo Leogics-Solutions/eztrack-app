@@ -1,13 +1,12 @@
 import {
-  BookOpen,
+  ArrowLeftRight,
   Database,
-  Inbox,
+  FileCheck2,
   LayoutDashboard,
   ListChecks,
+  Send,
   ScrollText,
-  Plug,
   Settings,
-  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 import type { Translations } from '@/lib/i18n/types';
@@ -18,6 +17,7 @@ export interface AppNavigationItem {
   icon: LucideIcon;
   relatedRoutes?: string[];
   children?: AppNavigationChild[];
+  excludeQueryKeys?: string[];
 }
 
 export interface AppNavigationChild {
@@ -44,10 +44,10 @@ const RECORD_ROUTES = [
 export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
   return [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
-    { href: '/capture', label: t.nav.capture, icon: Inbox },
-    { href: '/automations', label: t.nav.automations, icon: Workflow },
-    { href: '/review', label: t.nav.review, icon: ListChecks },
-    { href: '/audit-trail', label: 'Audit Trail', icon: ScrollText },
+    { href: '/capture?workflow=payment_knock_off', label: 'Payment knock-off', icon: ArrowLeftRight },
+    { href: '/capture?workflow=order_to_invoice', label: 'Internal DO & Invoice', icon: FileCheck2 },
+    { href: '/capture/outsourced', label: 'Outsource DO & Invoice', icon: Send },
+    { href: '/review', label: t.nav.review, icon: ListChecks, excludeQueryKeys: ['workflow'] },
     {
       href: '/records',
       label: t.nav.records,
@@ -61,24 +61,33 @@ export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
         { href: '/records?section=operations', label: 'Operations', relatedRoutes: ['/project-gp'] },
       ],
     },
-    { href: '/knowledge-base', label: t.nav.knowledgeBase, icon: BookOpen },
-    {
-      href: '/integrations',
-      label: t.nav.integrations,
-      icon: Plug,
-      relatedRoutes: ['/capture/channels'],
-    },
+    { href: '/audit-trail', label: 'Audit Trail', icon: ScrollText },
   ];
 }
 
 export function getSettingsNavigation(t: Translations): AppNavigationItem {
-  return { href: '/settings', label: t.nav.settings, icon: Settings };
+  return {
+    href: '/settings',
+    label: t.nav.settings,
+    icon: Settings,
+    relatedRoutes: ['/automations', '/integrations', '/capture/rules', '/capture/playground', '/knowledge-base'],
+    children: [
+      { href: '/automations', label: t.nav.automations },
+      { href: '/integrations', label: t.nav.integrations, relatedRoutes: ['/capture/channels'] },
+      { href: '/capture/rules', label: 'Filtering rules' },
+      { href: '/capture/playground', label: 'Playground' },
+      { href: '/knowledge-base', label: t.nav.knowledgeBase },
+      { href: '/settings', label: 'Company' },
+    ],
+  };
 }
 
-export function isNavigationItemActive(pathname: string, item: AppNavigationItem) {
+export function isNavigationItemActive(pathname: string, item: AppNavigationItem, asPath = pathname) {
   if (item.href === '/') return pathname === '/';
-  const routes = [item.href, ...(item.relatedRoutes || [])];
-  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  if ((item.excludeQueryKeys || []).some((key) => asPath.includes(`${key}=`))) return false;
+  const [itemPath, query] = item.href.split('?');
+  if (pathname === itemPath && (!query || asPath.includes(query))) return true;
+  return (item.relatedRoutes || []).some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
 export function isNavigationChildActive(pathname: string, asPath: string, item: AppNavigationChild) {

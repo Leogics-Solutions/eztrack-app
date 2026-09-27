@@ -21,7 +21,7 @@ function sourceSummary(automation: Automation) {
 
 export default function AutomationsPage() {
   const router = useRouter();
-  const { selectedOrganizationId } = useOrganization();
+  const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
   const [data, setData] = useState<AutomationListResponse>(EMPTY);
   const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -31,6 +31,7 @@ export default function AutomationsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (organizationLoading || selectedOrganizationId === null) return;
     let active = true;
     setLoading(true);
     Promise.all([listAutomations(), listAutomationTemplates()])
@@ -38,7 +39,7 @@ export default function AutomationsPage() {
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Could not load automations.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [selectedOrganizationId]);
+  }, [selectedOrganizationId, organizationLoading]);
 
   const create = async (templateKey: AutomationTemplateKey) => {
     setCreating(true); setError(null);

@@ -26,9 +26,9 @@ const NEEDS_REVIEW: AutomationStatusDefinition = {
 
 const WAITING_FOR_INSTRUCTION: AutomationStatusDefinition = {
   key: 'WAITING_FOR_INSTRUCTION',
-  label: 'Waiting for instruction / 待补文字资料',
+  label: 'Waiting for confirmation / 待财务确认',
   color: '#D97706',
-  meaning: 'The payment image is safely received. Send the related payment or invoice details in the same chat to continue.',
+  meaning: 'Payment evidence is saved. Waiting for Finance to confirm receipt; provide additional details only if missing.',
 };
 
 const AI_VERIFYING: AutomationStatusDefinition = {
@@ -87,6 +87,13 @@ const FAILED: AutomationStatusDefinition = {
   meaning: 'Needs human intervention and must not remain silently stuck.',
 };
 
+const DELIVERY_PENDING: AutomationStatusDefinition = {
+  key: 'DELIVERY_PENDING',
+  label: 'Delivery pending',
+  color: '#D97706',
+  meaning: 'Documents or acknowledgement are awaiting delivery. Check the delivery step; do not post the accounting transaction again.',
+};
+
 const MISSING_FILE: AutomationStatusDefinition = {
   key: 'MISSING_FILE',
   label: 'File download failed',
@@ -118,6 +125,7 @@ export const AUTOMATION_STATUS_LEGEND = [
   PENDING_SQL,
   PENDING_EMAIL,
   PENDING_WHATSAPP,
+  DELIVERY_PENDING,
   COMPLETED,
   FAILED,
 ];
@@ -127,6 +135,14 @@ export function resolveAutomationStatus(
   destination: ApprovalDestination = 'SQL',
 ): AutomationStatusDefinition {
   const status = String(rawStatus || '').trim().toUpperCase();
+  if (status === 'MANUALLY_CLOSED') return {
+    key: 'MANUALLY_CLOSED', label: 'Closed / manually handled', color: '#64748B',
+    meaning: 'Customer confirmed manual handling. The original order is archived and cannot be submitted again.',
+  };
+  if (status === 'EXTERNALLY_HANDLED') return {
+    key:'EXTERNALLY_HANDLED', label:'PIC handled / OR verification pending', color:'#64748B',
+    meaning:'PIC reported manual knock-off. Do not create another OR; verify the existing SQL record.',
+  };
   if (status === 'WAITING_FOR_INSTRUCTION') return WAITING_FOR_INSTRUCTION;
   if (status === 'AI_VERIFYING') return AI_VERIFYING;
   if (status === 'VERIFICATION_FAILED') return VERIFICATION_FAILED;
@@ -134,7 +150,12 @@ export function resolveAutomationStatus(
   if (status === 'INCOMPLETE') return MISSING_FILE;
   if (status === 'FILTERED') return EXCLUDED;
   if (status === 'IGNORED') return HIDDEN;
-  if (['FAILED', 'OUTPUT_FAILED', 'DELIVERY_PENDING', 'REJECTED', 'ERROR'].includes(status)) return FAILED;
+  if (status === 'MERGED') return {
+    key: 'MERGED', label: 'Attached to another review', color: '#64748B',
+    meaning: 'The evidence is now in the linked review. This record is retained for history.',
+  };
+  if (status === 'DELIVERY_PENDING') return DELIVERY_PENDING;
+  if (['FAILED', 'OUTPUT_FAILED', 'REJECTED', 'ERROR'].includes(status)) return FAILED;
   if (status.includes('FAILED') || status.includes('ERROR')) return FAILED;
   if (['COMPLETED', 'APPROVED', 'POSTED', 'CREATED', 'SENT', 'DELIVERED'].includes(status)) return COMPLETED;
   if (status === 'DRAFT_GENERATED') {
