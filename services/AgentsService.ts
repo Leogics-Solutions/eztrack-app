@@ -6,6 +6,23 @@
 import { BASE_URL } from './config';
 import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
+export type PaymentAutoMode = 'OFF' | 'PREVIEW' | 'ENABLED';
+export interface PaymentAutoStatus {
+  policy: { mode: PaymentAutoMode; after_run_id?: number };
+  assessment: { eligible: boolean; reasons: { code: string; detail: string }[] };
+  last_result?: { status: string; reasons: { code: string; detail: string }[] };
+  can_configure: boolean;
+  job_id?: string;
+}
+export async function getPaymentAutoStatus(runId: number): Promise<PaymentAutoStatus> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-auto`, { headers: getScopedHeaders() }));
+}
+export async function setPaymentAutoPolicy(runId: number, mode: PaymentAutoMode): Promise<void> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-auto`, {
+    method: 'PUT', headers: getScopedHeaders(), body: JSON.stringify({ mode }),
+  }));
+}
+
 // ------------------------------- Types ---------------------------------
 
 export interface AgentChannel {
@@ -886,5 +903,20 @@ export async function attachOrderSource(runId: number, file: File): Promise<{ ru
 export async function renameReturnedFile(runId: number, fileKey: string, filename: string): Promise<{ filename: string }> {
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/returned-filename`, {
     method: 'PATCH', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, filename }),
+  }));
+}
+
+export async function addReturnedDocuments(runId: number, files: File[], expectedFileKeys: string[]): Promise<AgentRun> {
+  const form = new FormData();
+  files.forEach(file => form.append('files', file));
+  form.append('expected_file_keys', JSON.stringify(expectedFileKeys));
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/returned-documents`, {
+    method: 'POST', headers: getScopedHeadersForFormData(), body: form,
+  }));
+}
+
+export async function removeReturnedDocument(runId: number, fileKey: string, expectedFileKeys: string[]): Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/returned-documents/remove`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, expected_file_keys: expectedFileKeys }),
   }));
 }

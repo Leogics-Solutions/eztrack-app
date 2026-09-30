@@ -8,6 +8,7 @@ import { appendPaymentEvidence, paymentFilesForMessage } from '../../../utils/pa
 import { AppLayout } from '@/components/layout';
 import { PaymentResolutionActions } from '@/components/automation/PaymentResolutionActions';
 import { PaymentSubmitProgress } from '@/components/automation/PaymentSubmitProgress';
+import { PaymentAutoKnockoff } from '@/components/automation/PaymentAutoKnockoff';
 import { submitPayment } from '@/services/AgentsService';
 import { PaymentInvoiceFollowup } from '@/components/automation/PaymentInvoiceFollowup';
 import { PaymentInvoiceIssuance } from '@/components/automation/PaymentInvoiceIssuance';
@@ -1396,6 +1397,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
       invoice_number_as_printed: candidate.invoice_number,
       stated_amount: null,
       requested_amount: candidate.requested_amount ?? candidate.open_balance,
+      requested_amount_source: 'MANUAL',
     })),
     allocations: [],
     allocation_override: [],
@@ -1492,6 +1494,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     {loading && <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading payment bundle…</div>}
     {error && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">{error}</div>}
     <PaymentSubmitProgress runId={run.id} jobId={submitJobId} onFinished={() => { if (submitActive) void act(() => getRun(run.id)); }} />
+    <PaymentAutoKnockoff runId={run.id} jobId={submitJobId} onJob={() => { void act(() => getRun(run.id)); }} />
     {busy && !submitActive && <div role="status" className="flex items-center gap-3 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm font-semibold text-cyan-950"><LoaderCircle className="h-5 w-5 animate-spin" /> {sqlCheckRunning ? 'Checking SQL Accounting. You can leave this page and return. No OR is created by this check.' : 'Processing your request. Please wait...'}</div>}
 
     <header className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-start gap-2"><StatusPill status={submitActive ? "PAYMENT_PROCESSING" : run.display_status || run.status} destination="SQL" showMeaning /><span className="pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Payment knock-off</span></div><h1 className="mt-3 text-2xl font-bold">{draft.customer ? String(draft.customer) : 'Customer payment'}</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">{draft.customer_code ? `SQL customer ${String(draft.customer_code)}` : 'Customer still needs a live SQL match'} · {slips.length} payment slip{slips.length === 1 ? '' : 's'}</p></div><div className="text-right text-xs text-[var(--muted-foreground)]"><p>Run #{run.id}</p><p>{formatDateTime(run.received_at)}</p></div></div>{paymentCompany.sql_connection_id && <div className="mt-4 grid gap-2 rounded-xl border border-cyan-300 bg-cyan-50 p-4 text-sm text-cyan-950 sm:grid-cols-3"><div><span className="block text-xs font-semibold uppercase opacity-70">Payment company</span><b>{paymentCompany.company_name || paymentCompany.company_key}</b></div><div><span className="block text-xs font-semibold uppercase opacity-70">SQL connection</span><b>Connection #{paymentCompany.sql_connection_id}</b></div><div><span className="block text-xs font-semibold uppercase opacity-70">Source group</span><b>{paymentCompany.group_name || paymentCompany.group_id}</b></div></div>}{source.message && <div className="mt-4 rounded-xl bg-[var(--muted)] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">SLIP UPDATE instruction</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.message}</p></div>}</header>

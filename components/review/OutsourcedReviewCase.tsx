@@ -1,10 +1,13 @@
 'use client';
 
 import { AppLayout } from '@/components/layout';
+import { ReturnedFileUpload } from './ReturnedFileUpload';
+import { returnedFilesEditable } from '@/utils/returnedAttachments';
 import {
   approveRun,
   attachOrderSource,
   renameReturnedFile,
+  removeReturnedDocument,
   assignOrderBatchFiles,
   generateRun,
   getRun,
@@ -314,6 +317,7 @@ export function OutsourcedReviewCase() {
   const whatsappChannel = outboundChannel === 'WHATSAPP';
   const hasReturned = externalDocuments.length > 0;
   const posted = notify?.status === 'sent' || status === 'COMPLETED';
+  const canEditReturned = whatsappChannel && returnedFilesEditable(status, notify?.status, Boolean(refs.order_batch_active));
   const steps = stepState(status, hasReturned, posted);
   const badge = statusBadge(status);
   const captureId = run ? captureEventId(run) : null;
@@ -664,7 +668,7 @@ export function OutsourcedReviewCase() {
                       {outsourcedEmail?.sent_at ? ` · ${formatMalaysiaShort(outsourcedEmail.sent_at)} · email` : ''}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-2.5 p-4 sm:flex-row">
+                  <div className="flex flex-col gap-2.5 p-4">
                     {hasReturned ? externalDocuments.map((document) => (
                       <div key={document.file_key} className="flex min-w-0 flex-1 items-center gap-3 rounded-[9px] border border-[#EDF1F2] bg-[#FAFBFB] px-3.5 py-3">
                         <FileText className="h-[18px] w-[18px] shrink-0 text-[#8F1F18]" />
@@ -677,11 +681,17 @@ export function OutsourcedReviewCase() {
                           if (name?.trim()) void act(() => renameReturnedFile(runId, document.file_key, name.trim()), 'Saving filename...');
                         }} className="rounded border px-3 py-1 text-xs">Rename</button>}
                         <button type="button" disabled={busy} onClick={() => void openFile(document)} className="inline-flex h-[30px] items-center rounded-lg border border-[#DCE3E5] bg-white px-3 text-[12.5px] font-semibold">View</button>
+                        {whatsappChannel && <button type="button" disabled={busy || !canEditReturned} onClick={() => {
+                          if (window.confirm(`Remove ${document.filename} from this Review's outgoing files? The original is retained in the audit history. You will need to verify the remaining files again.`))
+                            void act(() => removeReturnedDocument(runId, document.file_key, externalDocuments.map(file => file.file_key)), 'Removing attachment…');
+                        }} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-40">Remove</button>}
                       </div>
                     )) : (
                       <p className="text-sm text-[#5E6E75]">The original PO above is received. No returned DO or invoice is linked to this set yet.</p>
                     )}
                   </div>
+                  {whatsappChannel && <ReturnedFileUpload key={runId} runId={runId} fileKeys={externalDocuments.map(file => file.file_key)} disabled={busy || !canEditReturned} onSaved={load} onBusy={setBusy} />}
+                  {whatsappChannel && !canEditReturned && <p className="px-4 pb-3 text-xs text-[#5E6E75]">Attachments can be changed while waiting for returned files or reviewing them. During verification or after a delivery attempt, check the result first.</p>}
                   {batchReply?.files?.length ? (
                     <div className="border-t border-[#EDF1F2] px-4 py-3 text-sm">
                       <p className="font-medium">Shared partner reply — choose the files for this set</p>
