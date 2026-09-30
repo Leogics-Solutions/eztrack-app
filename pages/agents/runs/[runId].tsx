@@ -1396,6 +1396,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
       invoice_number_as_printed: candidate.invoice_number,
       stated_amount: null,
       requested_amount: candidate.requested_amount ?? candidate.open_balance,
+      requested_amount_source: 'MANUAL',
     })),
     allocations: [],
     allocation_override: [],
