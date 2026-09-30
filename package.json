@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:payment": "node --experimental-strip-types --test tests/paymentEvidenceFiles.test.mjs"
+    "test:payment": "node --experimental-strip-types --test tests/paymentEvidenceFiles.test.mjs",
+    "test:ci": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "chart.js": "^4.5.1",

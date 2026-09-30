@@ -3,25 +3,13 @@ frontend:
   phases:
     preBuild:
       commands:
+        - nvm use 22
         - npm ci --cache .npm --prefer-offline
     build:
       commands:
-        # Critical Next.js fix for Amplify
-        - echo "__NEXT_PRIVATE_PREBUNDLED_REACT=next" >> .env.production
-        
-        # Inject environment variables from Amplify Console if they exist
-        - |
-          if [ -n "$NEXT_PUBLIC_API_URL" ]; then
-            echo "NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" >> .env.production
-          fi
-        - |
-          if [ -n "$NEXT_PUBLIC_AUTH_URL" ]; then
-            echo "NEXT_PUBLIC_AUTH_URL=$NEXT_PUBLIC_AUTH_URL" >> .env.production
-          fi
-        # Add any other environment variables you need here
-        # Example:
-        # - echo "NEXT_PUBLIC_ANOTHER_VAR=$NEXT_PUBLIC_ANOTHER_VAR" >> .env.production
-        
+        - test "$NEXT_PUBLIC_API_URL" = "https://maincellapi.smartdok.ai"
+        - export NEXT_BUILD_DIR=.next
+        - npm run test:ci
         - npm run build
   artifacts:
     baseDirectory: .next
@@ -29,39 +17,5 @@ frontend:
       - '**/*'
   cache:
     paths:
+      - .npm/**/*
       - .next/cache/**/*
-      - node_modules/**/*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

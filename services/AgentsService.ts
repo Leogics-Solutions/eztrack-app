@@ -251,6 +251,7 @@ export interface AgentRunBundle {
 }
 
 export interface AgentRun {
+  display_status?: string | null;
   bundle?: AgentRunBundle | null;
   id: number;
   agent_id: number;
@@ -282,6 +283,7 @@ export interface AgentRun {
 }
 
 export interface AgentRunListItem {
+  display_status?: string | null;
   payment_category?: string | null;
   payment_flags?: string[];
   funds_status?: string | null;
@@ -718,6 +720,24 @@ export async function approveRun(runId: number, correctedData?: AgentRunData): P
     body: JSON.stringify({ corrected_data: correctedData ?? null }),
   });
   return handle<AgentRun>(res);
+}
+
+export type PaymentSubmitJob = {
+  id?: string; status: string; error_message?: string;
+  created_at?: string; started_at?: string;
+  result?: { stage?: string; detail?: string; run_status?: string };
+};
+
+export async function submitPayment(run: AgentRun, correctedData: AgentRunData, requestId: string): Promise<AgentRun> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${run.id}/payment-submit`, {
+    method: 'POST', headers: getScopedHeaders(),
+    body: JSON.stringify({ request_id: requestId, expected_updated_at: run.updated_at, corrected_data: correctedData }),
+  });
+  return handle<AgentRun>(res);
+}
+
+export async function paymentSubmitStatus(runId: number): Promise<PaymentSubmitJob> {
+  return handle<PaymentSubmitJob>(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-submit`, { headers: getScopedHeaders() }));
 }
 
 export async function sendRunToWhatsApp(runId: number): Promise<AgentRun> {

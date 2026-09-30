@@ -104,6 +104,8 @@ function primaryDescription(item: CaptureWorkItem) {
 function displayStatus(item: CaptureWorkItem) {
   const raw = String(item.status || '').toUpperCase();
   if (raw === 'DELIVERY_PENDING') return raw;
+  if (item.status_label === 'Complete - Pending Invoice Number') return 'COMPLETE_PENDING_INVOICE_NUMBER';
+  if (item.status_label === 'Complete - Awaiting Invoice Issue') return 'COMPLETE_AWAITING_INVOICE_ISSUE';
   if (['FILTERED', 'IGNORED', 'INCOMPLETE'].includes(raw) || raw.includes('FAILED') || raw.includes('ERROR')) {
     return raw;
   }

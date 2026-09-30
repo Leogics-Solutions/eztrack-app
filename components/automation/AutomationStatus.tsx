@@ -135,6 +135,15 @@ export function resolveAutomationStatus(
   destination: ApprovalDestination = 'SQL',
 ): AutomationStatusDefinition {
   const status = String(rawStatus || '').trim().toUpperCase();
+  if (status === 'PAYMENT_PROCESSING') return {
+    key: status, label: 'Payment processing', color: '#0891B2',
+    meaning: 'Checking SQL, posting the receipt and sending confirmation in the background. Open the review to see progress.',
+  };
+  if (status === 'COMPLETE_PENDING_INVOICE_NUMBER' || status === 'COMPLETE_AWAITING_INVOICE_ISSUE') return {
+    key: status, color: '#22C55E',
+    label: status === 'COMPLETE_PENDING_INVOICE_NUMBER' ? 'Complete - Pending Invoice Number' : 'Complete - Awaiting Invoice Issue',
+    meaning: 'OR created. Invoice follow-up remains open; do not create another receipt.',
+  };
   if (status === 'MANUALLY_CLOSED') return {
     key: 'MANUALLY_CLOSED', label: 'Closed / manually handled', color: '#64748B',
     meaning: 'Customer confirmed manual handling. The original order is archived and cannot be submitted again.',

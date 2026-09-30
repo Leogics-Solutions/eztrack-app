@@ -158,7 +158,7 @@ export default function AgentDetailPage() {
                       <td className="px-4 py-2">{r.id}</td>
                       <td className="px-4 py-2">{r.source_channel}</td>
                       <td className="px-4 py-2">{r.source_filename || '—'}</td>
-                      <td className="px-4 py-2"><AutomationStatusBadge status={r.status} destination={r.approval_destination || 'SQL'} /></td>
+                      <td className="px-4 py-2"><AutomationStatusBadge status={r.display_status || r.status} destination={r.approval_destination || 'SQL'} /></td>
                       <td className="px-4 py-2">{r.received_at ? new Date(r.received_at).toLocaleString() : '—'}</td>
                     </tr>
                   ))}

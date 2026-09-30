@@ -132,7 +132,7 @@ function automationTask(run: AgentRunListItem): ReviewTask {
     paymentFacts: [run.funds_status, run.slip_status && `Slip: ${run.slip_status}`, run.invoice_status && `Invoices: ${run.invoice_status}`, ...(run.payment_flags || [])].filter(Boolean) as string[],
     source: 'automation',
     state: completed ? 'completed' : rejected ? 'rejected' : 'open',
-    status: waitingForInstruction ? 'WAITING_FOR_INSTRUCTION' : status,
+    status: waitingForInstruction ? 'WAITING_FOR_INSTRUCTION' : (run.display_status || status),
     approvalDestination: run.approval_destination || 'SQL',
   };
 }

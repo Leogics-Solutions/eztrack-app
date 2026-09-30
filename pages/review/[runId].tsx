@@ -16,7 +16,7 @@ function isOutsourcedOrder(run: AgentRun) {
 export default function ReviewItemPage() {
   const router = useRouter();
   const runId = Number(router.query.runId);
-  const [ready, setReady] = useState(false);
+  const [readyRunId, setReadyRunId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!runId) return;
@@ -30,15 +30,15 @@ export default function ReviewItemPage() {
           void router.replace({ pathname: `/review/outsourced/${run.id}`, query });
           return;
         }
-        setReady(true);
+        setReadyRunId(runId);
       })
       .catch(() => {
-        if (active) setReady(true);
+        if (active) setReadyRunId(runId);
       });
     return () => { active = false; };
   }, [runId, router]);
 
-  if (!ready) {
+  if (!runId || readyRunId !== runId) {
     return (
       <AppLayout pageName="Review">
         <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
