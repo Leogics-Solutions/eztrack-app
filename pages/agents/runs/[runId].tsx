@@ -21,7 +21,7 @@ import { OrderBatchActions } from '@/components/automation/OrderBatchActions';
 import { startOrderBatch } from '@/services/AgentsService';
 import { requiresOrderCustomerSelection } from '@/utils/orderCustomerConfirmation';
 import { paymentSqlCheckStatus } from '@/services/AgentsService';
-import { paymentSqlJobNotice, paymentSqlJobRunning } from '@/utils/paymentSqlJob';
+import { readPaymentSqlProgress, paymentSqlJobRunning } from '@/utils/paymentSqlJob';
 import {
   AutomationStatusBadge,
   inferApprovalDestination,
@@ -202,32 +202,23 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
     let active=true;
     let timer:ReturnType<typeof setTimeout>;
     const initial=JSON.stringify(liveDraftRef.current);
+    let unavailableAttempts=0;
     const poll=async()=>{
-      try {
-        const job=await paymentSqlCheckStatus(runId);
-        if(!active)return;
-        if(job.id && job.id!==sqlJobId){
-          // Another tab queued a newer check. Follow its ID before displaying a result.
-          const updated=await getRun(runId);
-          if(active)setRun(updated);
-          return;
-        }
-        if(['PENDING','RUNNING'].includes(job.status)){
-          setSqlJobState({id:sqlJobId,status:job.status,notice:paymentSqlJobNotice(job)});
-          timer=setTimeout(poll,2000);return;
-        }
-        const updated=await getRun(runId);
-        if(active){
-          if(JSON.stringify(liveDraftRef.current)===initial)hydrate(updated);
-          else setRun(updated);
-          setSqlJobState({id:sqlJobId,status:job.status,notice:paymentSqlJobNotice(job)
-            +(JSON.stringify(liveDraftRef.current)!==initial ? ' Your unsaved edits are preserved; save them before checking again.' : '')});
-        }
-      }catch(e){
-        if(active){
-          setSqlJobState({id:sqlJobId,status:'RUNNING',notice:'Waiting for check status. Reconnecting automatically; this does not mean SQL failed.'});
-          timer=setTimeout(poll,3000);
-        }
+      const result=await readPaymentSqlProgress(sqlJobId,()=>paymentSqlCheckStatus(runId),()=>getRun(runId));
+      if(!active)return;
+      if(result.follow && result.updated){setRun(result.updated);return;}
+      const unsaved=JSON.stringify(liveDraftRef.current)!==initial;
+      if(result.updated){
+        if(!unsaved)hydrate(result.updated);else setRun(result.updated);
+      }
+      const unavailable=result.job.status==='UNAVAILABLE';
+      unavailableAttempts=unavailable ? unavailableAttempts+1 : 0;
+      const exhausted=unavailableAttempts>=3;
+      setSqlJobState({id:sqlJobId,status:result.job.status,notice:result.notice
+        +(exhausted ? ' Automatic status retries stopped. Reload or retry the read-only check.' : '')
+        +(result.updated && unsaved ? ' Your unsaved edits are preserved; save them before checking again.' : '')});
+      if(result.retry && !exhausted){
+        timer=setTimeout(poll,unavailable ? 3000 : 2000);
       }
     };
     void poll();
@@ -1569,7 +1560,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     {sqlPreview.open_invoice_search?.status === 'FAILED' && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Additional invoices could not be checked. Your selected invoices are retained. Use Search SQL again to retry.</p>}
     {sqlPreview.open_invoice_search?.has_more && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Only part of this customer's open invoices is shown. Add any missing invoice number and use Search SQL again to check it. <button type="button" disabled={!editable || busy} onClick={() => updateInvoices([...invoices, { invoice_number: '', requested_amount: 0, requested_amount_source: 'MANUAL' }])} className="ml-2 rounded-md border border-amber-400 px-2 py-1 font-semibold disabled:opacity-50">Add invoice number</button></p>}
 
-    {availableInvoiceCandidates.length > 0 && <section className="rounded-2xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Open invoices for this SQL customer</h2><p className="mt-1 text-sm">These invoices come from SQL Accounting. Select an invoice when you need to correct the payment instructions.</p></div>{invoiceSuggestions.length > 0 && !sqlPreview.open_invoice_search?.has_more && <button type="button" disabled={!editable} onClick={applyOldestInvoiceSuggestions} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Use oldest open invoice(s)</button>}</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{availableInvoiceCandidates.map((candidate) => { const recommended = suggestedInvoiceKeys.has(invoiceKey(candidate.invoice_number)); return <div key={candidate.invoice_number || candidate.document_date} className={`flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-sm ${recommended ? 'ring-2 ring-emerald-400' : ''}`}><div><p className="font-semibold">{candidate.invoice_number}{recommended && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">Recommended: oldest first</span>}</p><p className="text-xs opacity-70">{candidate.document_date || 'No date'} · Open {moneyText(candidate.open_balance)}</p></div><button type="button" disabled={!editable} onClick={() => addInvoiceCandidate(candidate)} className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add</button></div>; })}</div></section>}
+    {(availableInvoiceCandidates.length > 0 || invoiceSuggestions.length > 0) && <section className="rounded-2xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Open invoices for this SQL customer</h2><p className="mt-1 text-sm">These invoices come from SQL Accounting. Select an invoice when you need to correct the payment instructions.</p></div>{invoiceSuggestions.length > 0 && !sqlPreview.open_invoice_search?.has_more && <button type="button" disabled={!editable} onClick={applyOldestInvoiceSuggestions} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Use oldest open invoice(s)</button>}</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{availableInvoiceCandidates.map((candidate) => { const recommended = suggestedInvoiceKeys.has(invoiceKey(candidate.invoice_number)); return <div key={candidate.invoice_number || candidate.document_date} className={`flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-sm ${recommended ? 'ring-2 ring-emerald-400' : ''}`}><div><p className="font-semibold">{candidate.invoice_number}{recommended && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">Recommended: oldest first</span>}</p><p className="text-xs opacity-70">{candidate.document_date || 'No date'} · Open {moneyText(candidate.open_balance)}</p></div><button type="button" disabled={!editable} onClick={() => addInvoiceCandidate(candidate)} className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add</button></div>; })}</div></section>}
 
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Live invoices and requested amounts</h2><p className="mt-1 text-xs text-[var(--muted-foreground)]">Correct an invoice number, then search SQL again. The original reading is retained.</p></div>{editable && <button type="button" disabled={busy || invoices.some((invoice) => !invoice.invoice_number?.trim())} onClick={() => saveCustomerAndRefresh()} className="rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Search SQL again</button>}</div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[var(--muted)]"><tr><th className="px-3 py-2 text-left">Invoice</th><th className="px-3 py-2 text-right">Message amount</th><th className="px-3 py-2 text-right">Live open balance</th><th className="px-3 py-2 text-right">Proposed amount</th><th className="px-3 py-2 text-left">Action</th></tr></thead><tbody>{invoices.map((invoice, index) => { const sqlStatus = invoiceSqlStatus(invoice); return <tr key={index} className="border-t border-[var(--border)]"><td className="px-3 py-3 font-semibold"><input aria-label={`Invoice number ${index + 1}`} value={invoice.invoice_number || ''} maxLength={100} disabled={!editable || busy} placeholder="Enter invoice number" onChange={(event) => editInvoiceNumber(index, event.target.value)} className="w-full min-w-[220px] rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 font-semibold" />{invoice.invoice_number_as_printed && invoice.invoice_number_as_printed !== invoice.invoice_number && <span className="mt-1 block text-xs font-normal text-[var(--muted-foreground)]">Original reading: {invoice.invoice_number_as_printed}</span>}</td><td className="px-3 py-3 text-right">{moneyText(invoice.stated_amount)}</td><td className="px-3 py-3 text-right">{sqlStatus ? <span className={`font-semibold ${sqlStatus.tone === 'red' ? 'text-red-700' : 'text-amber-700'}`} title={sqlStatus.title}>{sqlStatus.label}</span> : moneyText(invoice.open_balance)}</td><td className="px-2 py-2"><GenericInput value={invoice.requested_amount} type="MONEY" disabled={!editable} onChange={(value) => updateInvoices(invoices.map((row, position) => position === index ? { ...row, requested_amount: Number(value || 0), requested_amount_source: 'MANUAL' } : row))} /></td><td className="px-2 py-2"><button type="button" disabled={!editable} onClick={() => removeInvoice(index)} title="Remove this wrongly detected invoice from the proposal" className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Remove</button></td></tr>; })}</tbody></table></div></section>
 
