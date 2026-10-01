@@ -22,6 +22,7 @@ import { startOrderBatch } from '@/services/AgentsService';
 import { requiresOrderCustomerSelection } from '@/utils/orderCustomerConfirmation';
 import { paymentSqlCheckStatus } from '@/services/AgentsService';
 import { readPaymentSqlProgress, paymentSqlJobRunning } from '@/utils/paymentSqlJob';
+import { paymentAllocationNeedsRefresh } from '@/utils/paymentAllocationReview';
 import {
   AutomationStatusBadge,
   inferApprovalDestination,
@@ -1322,6 +1323,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   const displayedInvoiceTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.requested_amount ?? invoice.stated_amount ?? 0), 0);
   const displayedAllocatedTotal = allocations.reduce((sum, allocation) => sum + Number(allocation.amount_to_allocate || 0), 0);
   const displayedUnappliedTotal = displayedSlipTotal - displayedAllocatedTotal;
+  const allocationNeedsRefresh = paymentAllocationNeedsRefresh(invoices, allocations);
   const nonReceivable = ['NOT_RECEIVABLE', 'PAYABLE'].includes(paymentState.display_status || '') || (excludedSlips.length > 0 && slips.length === 0);
   const missingInvoiceNumbers = invoices.length === 0 && !nonReceivable;
   const paymentMethodFor = (slip: PaymentSlip) => {
@@ -1401,7 +1403,10 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     return submitPayment(run, value as AgentRunData, submitRequest.current.id);
   };
   const requestPrepare = () => {
-    if (displayedUnappliedTotal > 0.005 && !((draft.review_override as Record<string, unknown> | undefined)?.accept_unapplied)) setVarianceModal(true);
+    // A changed split must first become a checked, visible OR plan. It is not
+    // permission to create an unapplied receipt using the obsolete empty plan.
+    if (allocationNeedsRefresh) saveCustomerAndRefresh();
+    else if (displayedUnappliedTotal > 0.005 && !((draft.review_override as Record<string, unknown> | undefined)?.accept_unapplied)) setVarianceModal(true);
     else void act(() => needsExistingReceiptFlow ? prepare() : startSubmit());
   };
   const acceptVariance = () => {
@@ -1582,7 +1587,8 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     </section>}
     <section className="sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-4 shadow-lg backdrop-blur">
       {['PENDING_REVIEW', 'DRAFT_GENERATED'].includes(run.status) && <>
-        <button disabled={busy} onClick={() => void act(() => reviewRun(run.id, draft as AgentRunData))} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold disabled:opacity-50">Save corrections</button>
+        <button disabled={busy} onClick={() => saveCustomerAndRefresh()} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold disabled:opacity-50">Save corrections</button>
+        {allocationNeedsRefresh && <span role="status" className="text-sm text-amber-800">Invoice amounts changed. Save corrections to refresh the OR allocation before confirming.</span>}
         {needsExistingReceiptFlow ? <>
           {run.status === 'PENDING_REVIEW' && <button disabled={busy || !sqlReady} onClick={requestPrepare} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Validate existing receipt</button>}
           {canApprove && <button disabled={busy || !sqlReady} onClick={() => void act(() => approveRun(run.id, draft as AgentRunData))} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Approve reviewed receipt recovery</button>}
