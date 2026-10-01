@@ -552,12 +552,13 @@ function ReviewRow({ task }: { task: ReviewTask }) {
         <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[var(--foreground)]">{task.title}</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${meta.style}`}>{meta.label}</span></div>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">{task.subtitle}</p>
         <p className="mt-2 line-clamp-2 text-sm text-[var(--foreground)]">{task.reason}</p>
+        {task.approvalDestination === 'UNRESOLVED' && <p className="mt-1 text-sm text-amber-700">Issuing company route needs review / 开单公司路由待确认</p>}
         {task.paymentCategory && <div className="mt-2 flex flex-wrap gap-1 text-xs"><b>{humanize(task.paymentCategory)}</b>{task.paymentFacts?.map((fact, index) => <span key={index} className="rounded bg-cyan-50 px-2 py-1 text-cyan-950">{humanize(fact)}</span>)}</div>}
       </div>
       <div>
         <div className="flex flex-wrap gap-2">
           <AutomationStatusBadge status={task.status} destination={task.approvalDestination} />
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${WORKSTREAM_BADGE_STYLES[task.workflowKey]}`}>{WORKSTREAM_LABELS[task.workflowKey]}</span>
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${WORKSTREAM_BADGE_STYLES[task.workflowKey]}`}>{task.workflowKey === 'order_to_invoice' && task.approvalDestination === 'UNRESOLVED' ? 'DO & Invoice · Route pending' : WORKSTREAM_LABELS[task.workflowKey]}</span>
         </div>
         <p className="text-sm font-medium text-[var(--foreground)]">{task.workflow}</p>
         {task.amount && <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-[var(--foreground)]"><CircleDollarSign className="h-4 w-4" />{task.amount}</p>}

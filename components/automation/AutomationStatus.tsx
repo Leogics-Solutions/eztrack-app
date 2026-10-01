@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useSyncExternalStore, type CSSProperties } from 'react';
 
-export type ApprovalDestination = 'SQL' | 'EMAIL' | 'WHATSAPP';
+export type ApprovalDestination = 'SQL' | 'EMAIL' | 'WHATSAPP' | 'UNRESOLVED';
 
 export interface AutomationStatusDefinition {
   key: string;
@@ -168,6 +168,10 @@ export function resolveAutomationStatus(
   if (status.includes('FAILED') || status.includes('ERROR')) return FAILED;
   if (['COMPLETED', 'APPROVED', 'POSTED', 'CREATED', 'SENT', 'DELIVERED'].includes(status)) return COMPLETED;
   if (status === 'DRAFT_GENERATED') {
+    if (destination === 'UNRESOLVED') return {
+      ...NEEDS_REVIEW, label: 'Issuing company route needs review',
+      meaning: 'The issuing company route is not resolved. Open Review to check the source and company.',
+    };
     if (destination === 'EMAIL') return PENDING_EMAIL;
     if (destination === 'WHATSAPP') return PENDING_WHATSAPP;
     return PENDING_SQL;
@@ -191,7 +195,8 @@ export function inferApprovalDestination(
     ? data.issuing_entity as Record<string, unknown>
     : {};
   const route = String(data?.fulfilment_route || issuer.fulfilment_mode || issuer.route || '').toUpperCase();
-  if (route !== 'OUTSOURCED') return 'SQL';
+  if (route === 'INTERNAL') return 'SQL';
+  if (route !== 'OUTSOURCED') return 'UNRESOLVED';
   return String(issuer.outbound_channel || '').toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : 'EMAIL';
 }
 

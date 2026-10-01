@@ -146,7 +146,7 @@ export interface CaptureWorkItem {
   reason?: string | null;
   workflow_name: string;
   workflow_key?: string;
-  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | null;
+  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | 'UNRESOLVED' | null;
   capture_event_id?: number | null;
   job_id?: string | null;
   result_type?: string | null;

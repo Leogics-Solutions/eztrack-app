@@ -317,7 +317,7 @@ export interface AgentRunListItem {
   agent_name?: string | null;
   template_key?: string | null;
   issuing_company?: string | null;
-  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | null;
+  approval_destination?: 'SQL' | 'EMAIL' | 'WHATSAPP' | 'UNRESOLVED' | null;
   source_bundle_index?: number | null;
   source_bundle_count?: number | null;
   awaiting_instruction?: boolean;
