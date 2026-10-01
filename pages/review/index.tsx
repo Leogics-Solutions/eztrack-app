@@ -82,7 +82,8 @@ function automationTask(run: AgentRunListItem): ReviewTask {
   const status = run.status.toUpperCase();
   const waitingForInstruction = Boolean(run.awaiting_instruction);
   const failed = status === 'FAILED' || status === 'OUTPUT_FAILED' || status === 'VERIFICATION_FAILED';
-  const readyToApprove = status === 'DRAFT_GENERATED';
+  const unresolvedOrderRoute = run.approval_destination === 'UNRESOLVED';
+  const readyToApprove = status === 'DRAFT_GENERATED' && !unresolvedOrderRoute;
   const deliveryPending = status === 'DELIVERY_PENDING';
   const rejected = status === 'REJECTED';
   const completed = status === 'COMPLETED' || status === 'MERGED';
@@ -120,6 +121,8 @@ function automationTask(run: AgentRunListItem): ReviewTask {
       ? 'Supplier document discrepancies were found. Review the failed checks and request corrections before sending.'
       : failed
       ? 'The automation could not finish. Open it to inspect the error and retry.'
+      : unresolvedOrderRoute
+        ? 'The issuing company route needs to be resolved before this order can proceed.'
       : readyToApprove
         ? 'The extracted data is ready for approval.'
         : deliveryPending
@@ -339,7 +342,7 @@ export default function ReviewPage() {
   const scopedTasks = useMemo(
     () => tasks.filter((task) => {
       if (workstream !== 'ALL' && task.workflowKey !== workstream) return false;
-      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+      if (workstream === 'order_to_invoice' && !['SQL', 'UNRESOLVED'].includes(task.approvalDestination)) return false;
       return true;
     }),
     [tasks, workstream],
@@ -357,14 +360,14 @@ export default function ReviewPage() {
       ? visibleStateTasks.length
       : visibleStateTasks.filter((task) => {
         if (task.workflowKey !== value) return false;
-        if (value === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+        if (value === 'order_to_invoice' && !['SQL', 'UNRESOLVED'].includes(task.approvalDestination)) return false;
         return true;
       }).length
   );
   const statusScopedTasks = useMemo(
     () => tasks.filter((task) => {
       if (task.state !== (view === 'OPEN' ? 'open' : view === 'COMPLETED' ? 'completed' : 'rejected')) return false;
-      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+      if (workstream === 'order_to_invoice' && !['SQL', 'UNRESOLVED'].includes(task.approvalDestination)) return false;
       return workstream === 'ALL' || task.workflowKey === workstream;
     }),
     [tasks, view, workstream],
@@ -392,7 +395,7 @@ export default function ReviewPage() {
       if (view === 'COMPLETED' && task.state !== 'completed') return false;
       if (view === 'REJECTED' && task.state !== 'rejected') return false;
       if (workstream !== 'ALL' && task.workflowKey !== workstream) return false;
-      if (workstream === 'order_to_invoice' && task.approvalDestination !== 'SQL') return false;
+      if (workstream === 'order_to_invoice' && !['SQL', 'UNRESOLVED'].includes(task.approvalDestination)) return false;
       if (kind !== 'ALL' && task.kind !== kind) return false;
       if (workflow !== 'ALL' && task.workflow !== workflow) return false;
       if (statusFilter !== 'ALL' && resolveAutomationStatus(task.status, task.approvalDestination).key !== statusFilter) return false;
