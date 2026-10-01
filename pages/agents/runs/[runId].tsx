@@ -22,7 +22,7 @@ import { startOrderBatch } from '@/services/AgentsService';
 import { requiresOrderCustomerSelection } from '@/utils/orderCustomerConfirmation';
 import { paymentSqlCheckStatus } from '@/services/AgentsService';
 import { readPaymentSqlProgress, paymentSqlJobRunning } from '@/utils/paymentSqlJob';
-import { paymentAllocationNeedsRefresh } from '@/utils/paymentAllocationReview';
+import { paymentAllocationNeedsRefresh, paymentAllocationEdits, paymentPlanChanged, paymentInvoiceNumberEdit } from '@/utils/paymentAllocationReview';
 import {
   AutomationStatusBadge,
   inferApprovalDestination,
@@ -1323,34 +1323,37 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   const displayedInvoiceTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.requested_amount ?? invoice.stated_amount ?? 0), 0);
   const displayedAllocatedTotal = allocations.reduce((sum, allocation) => sum + Number(allocation.amount_to_allocate || 0), 0);
   const displayedUnappliedTotal = displayedSlipTotal - displayedAllocatedTotal;
-  const allocationNeedsRefresh = paymentAllocationNeedsRefresh(invoices, allocations);
+  const allocationNeedsRefresh = sqlPreview.status === 'stale' || paymentAllocationNeedsRefresh(invoices, allocations);
   const nonReceivable = ['NOT_RECEIVABLE', 'PAYABLE'].includes(paymentState.display_status || '') || (excludedSlips.length > 0 && slips.length === 0);
   const missingInvoiceNumbers = invoices.length === 0 && !nonReceivable;
   const paymentMethodFor = (slip: PaymentSlip) => {
     const code = slip.payment_method_code || '';
     return methods.find((item) => item.code === code);
   };
-  const updateSlips = (next: PaymentSlip[]) => setDraft({ ...draft, payment_slips: next.map((s,i) =>
+  const changedPlan = () => paymentPlanChanged(draft.review_override as Record<string, unknown> | undefined);
+  const updateSlips = (next: PaymentSlip[]) => setDraft({ ...draft, ...changedPlan(), payment_slips: next.map((s,i) =>
     s.payment_method_code !== slips[i]?.payment_method_code ? { ...s, payment_method_match: {status:'MANUAL',reason:'PIC selected this SQL payment method.'} } : s) });
-  const updateInvoices = (next: PaymentInvoice[]) => setDraft({ ...draft, requested_invoices: next });
+  const updateInvoices = (next: PaymentInvoice[]) => setDraft({ ...draft, ...changedPlan(), requested_invoices: next });
   const editInvoiceNumber = (index: number, value: string) => setDraft({
     ...draft,
-    requested_invoices: invoices.map((row, position) => ({ ...row, open_balance: null, requested_amount: 0,
-      ...(position === index ? { invoice_number: value, invoice_number_as_printed: row.invoice_number_as_printed || row.invoice_number } : {}),
-    })),
+    ...changedPlan(),
+    requested_invoices: paymentInvoiceNumberEdit(invoices, index, value),
     sql_preview: { status: 'stale', detail: 'Invoice number changed. Search SQL again to verify it.' },
     open_invoice_candidates: [], invoice_suggestions: [], allocations: [], allocation_override: [],
     payment_state: { ...paymentState, display_status: 'SQL_CHECK_REQUIRED', invoice_status: 'NOT_VERIFIED', knock_off_status: 'NOT_ALLOCATED' },
   });
-  const updateAllocations = (next: PaymentAllocation[]) => setDraft({ ...draft, allocations: next, allocation_override: next });
+  const updateAllocations = (next: PaymentAllocation[]) => setDraft({ ...draft,
+    ...paymentAllocationEdits(invoices, next, draft.review_override as Record<string, unknown> | undefined) });
   const removeSlip = (index: number) => setDraft({
     ...draft,
+    ...changedPlan(),
     payment_slips: slips.filter((_row, position) => position !== index),
     allocations: [],
     allocation_override: [],
   });
   const removeInvoice = (index: number) => setDraft({
     ...draft,
+    ...changedPlan(),
     requested_invoices: invoices.filter((_row, position) => position !== index),
     allocations: [],
     allocation_override: [],
@@ -1380,11 +1383,13 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     .sort((left, right) => Number(suggestedInvoiceKeys.has(invoiceKey(right.invoice_number))) - Number(suggestedInvoiceKeys.has(invoiceKey(left.invoice_number))));
   const addInvoiceCandidate = (candidate: PaymentInvoice) => setDraft({
     ...draft,
-    requested_invoices: [...invoices, { ...candidate, invoice_number_as_printed: candidate.invoice_number, stated_amount: null, requested_amount: candidate.open_balance }],
+    ...changedPlan(),
+    requested_invoices: [...invoices, { ...candidate, invoice_number_as_printed: candidate.invoice_number, stated_amount: null, requested_amount: candidate.open_balance, requested_amount_source: 'MANUAL' }],
     allocation_override: [],
   });
   const applyOldestInvoiceSuggestions = () => setDraft({
     ...draft,
+    ...changedPlan(),
     requested_invoices: invoiceSuggestions.map((candidate) => ({
       ...candidate,
       invoice_number_as_printed: candidate.invoice_number,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { paymentAllocationNeedsRefresh } from '../utils/paymentAllocationReview.ts';
+import { paymentAllocationNeedsRefresh, paymentAllocationEdits, paymentPlanChanged, paymentInvoiceNumberEdit } from '../utils/paymentAllocationReview.ts';
 
 const invoices = [
   {invoice_number:'MMIV250529-08', requested_amount:37457.6, requested_amount_source:'MANUAL'},
@@ -34,4 +34,38 @@ test('removed invoice allocations, duplicates and malformed manual amounts need 
 });
 test('an intentionally invoice-free payment retains its separate credit approval flow', () => {
   assert.equal(paymentAllocationNeedsRefresh([], []), false);
+});
+
+test('editing OR allocations updates requested totals and does not create a permanent mismatch', () => {
+  const edited = paymentAllocationEdits(invoices, [
+    {...allocated[0], or_index:1, amount_to_allocate:30000},
+    {...allocated[0], or_index:2, amount_to_allocate:1000},
+    {...allocated[1], or_index:2, amount_to_allocate:14357.4},
+  ], {accept_unapplied:true, accept_customer_mismatch:true});
+  assert.deepEqual(edited.requested_invoices.map(r=>r.requested_amount), [31000,14357.4]);
+  assert.equal(paymentAllocationNeedsRefresh(edited.requested_invoices, edited.allocations), false);
+  assert.equal(edited.sql_preview.status, 'stale');
+  assert.equal(edited.review_override.accept_unapplied, false);
+  assert.equal(edited.review_override.accept_customer_mismatch, true);
+  assert.deepEqual(edited.allocation_override, edited.allocations);
+});
+
+test('a later invoice/slip edit invalidates an earlier manual OR split and credit approval', () => {
+  const lowerEdit = paymentAllocationEdits(invoices, allocated, {accept_unapplied:true});
+  const upperEdit = {...lowerEdit, ...paymentPlanChanged(lowerEdit.review_override), requested_invoices:invoices};
+  assert.deepEqual(upperEdit.allocations, []);
+  assert.deepEqual(upperEdit.allocation_override, []);
+  assert.equal(upperEdit.review_override.accept_unapplied, false);
+  assert.equal(paymentAllocationNeedsRefresh(upperEdit.requested_invoices, upperEdit.allocations), true);
+});
+
+test('correcting one invoice number preserves every requested amount and other verified rows', () => {
+  const rows = invoices.map(row=>({...row,open_balance:40000,stated_amount:100}));
+  const edited = paymentInvoiceNumberEdit(rows, 1, 'CORRECTED');
+  assert.deepEqual(edited[0], rows[0]);
+  assert.equal(edited[1].invoice_number,'CORRECTED');
+  assert.equal(edited[1].invoice_number_as_printed, rows[1].invoice_number);
+  assert.equal(edited[1].open_balance,null);
+  assert.equal(edited[1].requested_amount,14357.4);
+  assert.equal(edited[1].stated_amount,100);
 });
