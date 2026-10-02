@@ -137,6 +137,7 @@ export default function CaptureInboxPage() {
   const setPageSize = (value: number) => listState.update('pageSize', value);
   const setIncludeIgnored = (value: boolean) => listState.update('includeIgnored', value);
   const [workstream, setWorkstream] = useStickyWorkstream('smartdok.inbox.workstream');
+  const [orderRoute, setOrderRoute] = useState<'INTERNAL' | 'UNRESOLVED'>('INTERNAL');
   const deferredSearch = useDeferredValue(search.trim());
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -155,7 +156,7 @@ export default function CaptureInboxPage() {
         pageSize,
         sourceType: sourceFilter,
         workflow: workstream,
-        fulfilment: workstream === 'order_to_invoice' ? 'INTERNAL' : undefined,
+        fulfilment: workstream === 'order_to_invoice' ? orderRoute : undefined,
         search: deferredSearch,
         includeIgnored: (view === 'COMPLETED' && includeIgnored) || ['NOISE', 'PAYABLE', 'OTHERS'].includes(paymentCategory),
         paymentCategory,
@@ -171,7 +172,7 @@ export default function CaptureInboxPage() {
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [deferredSearch, includeIgnored, paymentCategory, paymentFlags, executionStatus, page, pageSize, sourceFilter, view, workstream, organizationLoading, selectedOrganizationId, listState.restored]);
+  }, [deferredSearch, includeIgnored, paymentCategory, paymentFlags, executionStatus, page, pageSize, sourceFilter, view, workstream, orderRoute, organizationLoading, selectedOrganizationId, listState.restored]);
 
   useEffect(() => {
     void load();
@@ -307,6 +308,20 @@ export default function CaptureInboxPage() {
         )}
       >
         <div className="space-y-6">
+        {workstream === 'order_to_invoice' && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-slate-900">
+            <p className="mb-2 text-sm">Orders with an unconfirmed issuing company remain available under “Company needs review”.</p>
+            <label className="flex items-center gap-3 text-sm font-medium">
+              Issuing company / 开单公司
+              <select aria-label="Order company route" value={orderRoute}
+                onChange={event => { setOrderRoute(event.target.value as 'INTERNAL' | 'UNRESOLVED'); setPage(1); setSelectedEventIds(new Set()); }}
+                className="rounded border border-amber-300 bg-white px-3 py-2">
+                <option value="INTERNAL">Internal / 内部开单</option>
+                <option value="UNRESOLVED">Company needs review / 公司待确认</option>
+              </select>
+            </label>
+          </div>
+        )}
         {workstream === 'payment_knock_off' && (
           <PaymentQueueFilters category={paymentCategory} flags={paymentFlags} onCategory={value => { listState.update('paymentCategory', value); setPage(1); }} onFlags={value => { listState.update('paymentFlags', value); setPage(1); }} summary={response.payment_summary} truncated={response.coverage_truncated} />
         )}
@@ -553,6 +568,9 @@ export default function CaptureInboxPage() {
                         </div>
                       </div>
                     ))}
+                    {itemWorkstream === 'order_to_invoice' && approvalDestination === 'UNRESOLVED' && (
+                      <p className="mt-2 text-sm font-semibold text-amber-700">Company needs review / 已收到，开单公司待确认。Open Review to select the issuing company.</p>
+                    )}
                     <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--muted-foreground)]">
                       {primaryDescription(item)}
                     </p>
