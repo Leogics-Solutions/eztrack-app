@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, LoaderCircle, AlertTriangle } from 'lucide-react';
 import { paymentSubmitStatus, type PaymentSubmitJob } from '@/services/AgentsService';
 import { paymentSubmitProgress } from '@/utils/paymentSubmitProgress';
+import { sqlQueueNotice } from '@/utils/sqlQueueNotice';
 
 export function PaymentSubmitProgress({ runId, jobId, onFinished }: {
   runId: number; jobId: string; onFinished: () => void;
@@ -41,6 +42,7 @@ export function PaymentSubmitProgress({ runId, jobId, onFinished }: {
       {running ? 'Payment processing in the background' : job.status === 'SUCCESS' ? 'Payment completed' : 'Payment needs attention'}
       {running && <span className="ml-auto text-sm">{Math.floor(elapsed / 60)}m {elapsed % 60}s elapsed</span>}
     </div>
+    {job.status === 'PENDING' && <p className="mt-2 text-sm">{sqlQueueNotice(job, now)}</p>}
     <ol className="my-3 grid gap-2 sm:grid-cols-3">{steps.map(step => <li key={step.key} className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${step.state === 'active' ? 'border-cyan-600 bg-white font-semibold' : ''}`}>
       {step.state === 'done' ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : step.state === 'active' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : step.state === 'stopped' ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <Clock3 className="h-4 w-4" />}
       {step.label}

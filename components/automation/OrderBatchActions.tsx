@@ -3,7 +3,9 @@ import Link from 'next/link';
 import {
   getOrderBatch, startOrderBatch, previewOrderBatchEmail, sendOrderBatchEmail,
   assignOrderBatchFiles, getRunFile, type OrderBatchJob,
+  getSqlDispatchPolicy,
 } from '@/services/AgentsService';
+import { sqlQueueNotice } from '@/utils/sqlQueueNotice';
 
 type Reply = { anchor_run_id: number; files: { file_key: string; filename?: string }[] };
 type Props = {
@@ -21,6 +23,8 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [batchMinutes, setBatchMinutes] = useState(0);
+  const [dispatchMode, setDispatchMode] = useState<'AUTO' | 'IMMEDIATE' | 'BATCH'>('AUTO');
   const refresh = useRef(onRefresh);
   refresh.current = onRefresh;
   const running = job?.status === 'PENDING' || job?.status === 'RUNNING';
@@ -30,6 +34,14 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
     saving_invoice: 'Saving Invoice in SQL', saving_transferred_invoice: 'Saving Invoice in SQL',
     invoice_save_returned: 'Invoice saved', transferred_invoice_save_returned: 'Invoice saved',
   };
+  useEffect(() => {
+    let active = true;
+    getSqlDispatchPolicy().then(p => { if (active) {
+      setBatchMinutes(p.batch_interval_minutes);
+      setDispatchMode(p.batch_interval_minutes > 0 ? 'BATCH' : 'AUTO');
+    } }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -64,7 +76,7 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
     {error && <p role="alert" className="my-2 text-sm text-red-700">{error}</p>}
     {running && <p role="status" className="my-2 text-sm">Processing in the background, one set at a time. You can leave this page and return to check progress.</p>}
     {running && <div role="status" className="my-2 rounded border border-cyan-300 p-3 text-sm">
-      {job?.status === 'PENDING' && <p>Queue position: {job.queue_position || 'Checking…'}{job.estimated_wait_seconds != null ? ` · estimated wait ${Math.ceil(job.estimated_wait_seconds / 60)} min (estimate)` : ' · waiting time depends on current SQL work'}</p>}
+      {job?.status === 'PENDING' && <p>{sqlQueueNotice(job)}</p>}
       <p>{lineProgress ? `${lineProgress[1] === 'delivery_order' ? 'Delivery Order' : 'Invoice'}: ${lineProgress[2]} / ${lineProgress[3]} rows prepared` : stageLabels[job?.result.progress?.stage || ''] || job?.result.progress?.stage || 'Queued — waiting to start'}</p>
       {lineProgress && <><progress className="w-full" value={Number(lineProgress[2])} max={Number(lineProgress[3])} aria-label="SQL document rows prepared" /><p>Rows are prepared in SQL. Posting completes only after SQL confirms Save.</p></>}
       {job?.result.progress?.total_lines != null && <p>{job.result.progress.total_lines} order lines submitted. Completion is confirmed after SQL returns.</p>}
@@ -85,9 +97,16 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
     {!outsourced && total > 1 && <p className="mt-2 text-sm">To submit the whole order: save each set, use Prepare all sets, then Post all {total} sets to SQL. The individual approval button submits only the current set. SQL processes queued sets one at a time; you can leave this page.</p>}
     {confirmApprove && <div className="mt-3 rounded border border-amber-300 p-3 text-sm">
       <p>Approve the prepared sets listed above and create their DO/Invoice in accounting. Check each draft before continuing. Unprepared or blocked sets will show their own error; existing SQL documents will be retained.</p>
+      {batchMinutes > 0 && total > 1 && <label className="mt-2 block">Processing time
+        <select aria-label="SQL processing time" value={dispatchMode} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
+          <option value="BATCH">Next batch (every {batchMinutes} minutes)</option>
+          <option value="IMMEDIATE">Urgent — join the ready queue now</option>
+        </select>
+        <p className="mt-1">Immediate processing still waits for current SQL work. It does not start a second SDK session.</p>
+      </label>}
       <div className="mt-2 flex gap-2">
         <button disabled={busy || running} className={`${button} bg-[var(--primary)] text-white`} onClick={() => act(async () => {
-          setJob(await startOrderBatch(runId, 'APPROVE')); setConfirmApprove(false); refresh.current();
+          setJob(await startOrderBatch(runId, 'APPROVE', false, undefined, total > 1 ? dispatchMode : 'AUTO')); setConfirmApprove(false); refresh.current();
         })}>Approve all prepared sets</button>
         <button className={button} onClick={() => setConfirmApprove(false)}>Cancel</button>
       </div>

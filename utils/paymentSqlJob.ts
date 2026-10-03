@@ -1,6 +1,9 @@
+import { sqlQueueNotice } from './sqlQueueNotice.ts';
+
 export type PaymentSqlJob = {
   id?: string;
   status: string;
+  queue_position?: number | null; dispatch_mode?: 'IMMEDIATE' | 'BATCH'; scheduled_for?: string;
   error_message?: string;
   result?: { sql_status?: string; detail?: string };
 };
@@ -10,6 +13,7 @@ export function paymentSqlJobRunning(jobId: string, observed: { id: string; stat
 }
 
 export function paymentSqlJobNotice(job: PaymentSqlJob): string {
+  if (job.status === 'PENDING' && job.scheduled_for) return sqlQueueNotice(job) + ' You can leave this page and return.';
   if (['PENDING', 'RUNNING'].includes(job.status)) return 'Checking SQL in the background. You can leave this page and return.';
   if (job.result?.sql_status === 'needs_customer') return 'SQL check completed: customer confirmation needed. ' + (job.result.detail || job.error_message || 'Select the correct SQL customer before continuing.');
   if (job.status === 'SUCCESS') return 'SQL check completed. Review the refreshed payment details.';
