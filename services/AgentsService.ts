@@ -7,19 +7,32 @@ import { BASE_URL } from './config';
 import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
 
 export type PaymentAutoMode = 'OFF' | 'PREVIEW' | 'ENABLED';
+export interface PaymentCustomerAutoRule {
+  connection_id: number; customer_code: string; oldest_open_first: boolean;
+  default_payment_method: string | null;
+}
+export interface PaymentAutomationRules {
+  version: 2; name_suffix_tolerance: boolean; partial_payments: boolean;
+  foreign_invoices: boolean; unapplied_balance: boolean; receipt_before_invoice: boolean;
+  finance_receipt_date: boolean; chase_missing_slip: boolean;
+  reminder_interval_hours: number; sql_refresh_seconds: number;
+  customer_rules: PaymentCustomerAutoRule[];
+}
 export interface PaymentAutoStatus {
-  policy: { mode: PaymentAutoMode; after_run_id?: number };
+  policy: { mode: PaymentAutoMode; after_run_id?: number; rules?: PaymentAutomationRules; include_run_ids?: number[] };
   assessment: { eligible: boolean; reasons: { code: string; detail: string }[] };
   last_result?: { status: string; reasons: { code: string; detail: string }[] };
   can_configure: boolean;
   job_id?: string;
+  classification?: { status: string; reason: string[]; evidence: { review_id: number; capture_ids: number[]; sql_connection_id?: number; customer_code?: string }; responsible_role: string; next_action: string };
+  customer_scope?: { connection_id?: number; customer_code?: string; company_name?: string; customer_name?: string; payment_methods: { code: string; description?: string }[] };
 }
 export async function getPaymentAutoStatus(runId: number): Promise<PaymentAutoStatus> {
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-auto`, { headers: getScopedHeaders() }));
 }
-export async function setPaymentAutoPolicy(runId: number, mode: PaymentAutoMode): Promise<void> {
+export async function setPaymentAutoPolicy(runId: number, mode: PaymentAutoMode, options?: { rules?: PaymentAutomationRules; include_run_ids?: number[]; use_original_rules?: boolean }): Promise<void> {
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-auto`, {
-    method: 'PUT', headers: getScopedHeaders(), body: JSON.stringify({ mode }),
+    method: 'PUT', headers: getScopedHeaders(), body: JSON.stringify({ mode, ...options }),
   }));
 }
 
