@@ -160,7 +160,7 @@ export function resolveAutomationStatus(
   if (status === 'FILTERED') return EXCLUDED;
   if (status === 'IGNORED') return HIDDEN;
   if (status === 'MERGED') return {
-    key: 'MERGED', label: 'Attached to another review', color: '#64748B',
+    key: 'MERGED', label: 'Closed / linked reviews', color: '#64748B',
     meaning: 'The evidence is now in the linked review. This record is retained for history.',
   };
   if (status === 'DELIVERY_PENDING') return DELIVERY_PENDING;
@@ -176,10 +176,15 @@ export function resolveAutomationStatus(
     if (destination === 'WHATSAPP') return PENDING_WHATSAPP;
     return PENDING_SQL;
   }
-  if (['PENDING_REVIEW', 'EXTERNAL_DOCUMENTS_RECEIVED', 'REPLY_RECEIVED', 'DOCUMENTS_COMPLETE', 'SUCCESS', 'TO_REVIEW'].includes(status)) return NEEDS_REVIEW;
+  if (status === 'EXTERNAL_DOCUMENTS_RECEIVED') return {
+    ...NEEDS_REVIEW, key: status, label: 'Returned documents — verify files',
+    meaning: 'The supplier replied with documents. Select the files for this set and verify them before delivery.',
+  };
+  if (['PENDING_REVIEW', 'REPLY_RECEIVED', 'DOCUMENTS_COMPLETE', 'SUCCESS', 'TO_REVIEW'].includes(status)) return NEEDS_REVIEW;
   if (status === 'WAITING_EXTERNAL_DOCUMENTS') {
     return {
       ...RECEIVED_PROCESSING,
+      key: status, label: 'Request sent — waiting for supplier',
       meaning: `Request sent via ${destination === 'SQL' ? 'the external channel' : destination === 'EMAIL' ? 'Email' : 'WhatsApp'}; waiting for the provider reply. No action is needed yet.`,
     };
   }

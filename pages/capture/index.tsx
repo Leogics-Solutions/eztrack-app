@@ -109,9 +109,7 @@ function displayStatus(item: CaptureWorkItem) {
   if (['FILTERED', 'IGNORED', 'INCOMPLETE'].includes(raw) || raw.includes('FAILED') || raw.includes('ERROR')) {
     return raw;
   }
-  if (item.stage === 'TO_REVIEW') return 'PENDING_REVIEW';
-  if (item.stage === 'COMPLETED') return 'COMPLETED';
-  return raw;
+  return raw || (item.stage === 'TO_REVIEW' ? 'PENDING_REVIEW' : item.stage === 'COMPLETED' ? 'COMPLETED' : 'RECEIVED');
 }
 
 function formatMalaysiaDateTime(value: string) {
@@ -264,11 +262,13 @@ export default function CaptureInboxPage() {
     }
   };
 
-  const decide = async (eventId: number, action: 'IGNORE' | 'RESTORE') => {
-    const reason = action === 'IGNORE'
-      ? window.prompt('Why is this message being ignored? This note will be kept for the PIC audit trail.')?.trim()
+  const decide = async (eventId: number, action: 'IGNORE' | 'RESTORE' | 'MANUALLY_HANDLED') => {
+    const reason = action !== 'RESTORE'
+      ? window.prompt(action === 'MANUALLY_HANDLED'
+        ? 'Confirm that the PIC already handled ALL sets from this source. Enter the existing document numbers and note. This closes the related reviews and prevents posting them again.'
+        : 'Why is this message being ignored? This note will be kept for the PIC audit trail.')?.trim()
       : undefined;
-    if (action === 'IGNORE' && !reason) return;
+    if (action !== 'RESTORE' && !reason) return;
     setUpdatingId(eventId);
     try {
       await updateCaptureEventDecision(eventId, action, reason);
@@ -566,6 +566,16 @@ export default function CaptureInboxPage() {
                           <span>Date: {order.document_date || 'Not confirmed'}</span>
                           <span className="rounded bg-cyan-100 px-2 dark:bg-cyan-900">{order.set_count == null ? 'Sets not confirmed' : `${order.set_count} ${order.set_count === 1 ? 'set' : 'sets'}`}</span>
                         </div>
+                        <ul className="mt-2 space-y-2">
+                          {(order.reviews || []).map((review) => (
+                            <li key={review.run_id} className="flex flex-wrap items-center gap-2 text-sm">
+                              <Link href={`/review/${review.run_id}?returnTo=capture`} className="font-semibold underline">Review #{review.run_id}</Link>
+                              <AutomationStatusBadge status={review.status} destination={approvalDestination} />
+                              {review.sql_posted && <span>SQL saved{review.invoice_no ? ` · Invoice ${review.invoice_no}` : ''}{review.delivery_order_no ? ` · DO ${review.delivery_order_no}` : ''}</span>}
+                              {review.reason && <span className="w-full break-words text-xs text-amber-800 dark:text-amber-300">{review.reason}</span>}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ))}
                     {itemWorkstream === 'order_to_invoice' && approvalDestination === 'UNRESOLVED' && (
@@ -653,6 +663,7 @@ export default function CaptureInboxPage() {
                       </Link>
                     )}
                     {item.capture_event_id && item.stage !== 'COMPLETED' && (
+                      <>
                       <button
                         type="button"
                         disabled={updatingId === item.capture_event_id}
@@ -661,6 +672,11 @@ export default function CaptureInboxPage() {
                       >
                         Ignore
                       </button>
+                      {itemWorkstream === 'order_to_invoice' && (
+                        <button type="button" className="text-xs font-semibold text-slate-600 hover:underline" disabled={updatingId === item.capture_event_id}
+                          onClick={() => void decide(item.capture_event_id!, 'MANUALLY_HANDLED')}>PIC handled all sets</button>
+                      )}
+                      </>
                     )}
                     {item.capture_event_id && ['IGNORED', 'FILTERED'].includes(item.status) && (
                       <button

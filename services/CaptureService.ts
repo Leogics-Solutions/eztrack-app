@@ -120,7 +120,8 @@ export type CaptureInboxStage = 'TO_REVIEW' | 'IN_PROGRESS' | 'COMPLETED';
 export type CaptureInboxView = 'ALL' | CaptureInboxStage;
 
 export interface CaptureWorkItem {
-  order_summaries?: Array<{ issuer?: string | null; customer?: string | null; document_date?: string | null; set_count?: number | null; review_ids: number[] }>;
+  order_summaries?: Array<{ issuer?: string | null; customer?: string | null; document_date?: string | null; set_count?: number | null; review_ids: number[];
+    reviews?: Array<{ run_id: number; status: string; sql_posted: boolean; invoice_no?: string | null; delivery_order_no?: string | null; reason?: string | null }> }>;
   id: string;
   stage: CaptureInboxStage;
   status: string;
@@ -462,7 +463,7 @@ export async function getCaptureAttachmentPreview(
 
 export async function updateCaptureEventDecision(
   eventId: number,
-  action: 'IGNORE' | 'RESTORE',
+  action: 'IGNORE' | 'RESTORE' | 'MANUALLY_HANDLED',
   reason?: string,
 ): Promise<CaptureEvent> {
   const response = await fetch(`${BASE_URL}/capture/inbox/${eventId}`, {
