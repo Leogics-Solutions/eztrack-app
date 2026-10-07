@@ -1,3 +1,4 @@
+import { SqlQueuePanel } from './SqlQueuePanel';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -94,6 +95,7 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
       <p>{job?.result.items?.length || 0} / {job?.total_orders || total} sets processed</p>
       {job?.result.progress?.updated_at && <p>Last update: {new Date(job.result.progress.updated_at).toLocaleTimeString()}</p>}
     </div>}
+    {!outsourced && <SqlQueuePanel runId={runId} />}
     {editable && <div className="flex flex-wrap gap-2">
       {outsourced ? <button className={button} disabled={busy || running} onClick={() => act(async () => {
         const p = await previewOrderBatchEmail(runId); setPreview(p);

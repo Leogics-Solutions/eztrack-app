@@ -1,3 +1,4 @@
+import { SqlQueuePanel } from './SqlQueuePanel';
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, LoaderCircle, AlertTriangle } from 'lucide-react';
 import { paymentSubmitStatus, type PaymentSubmitJob } from '@/services/AgentsService';
@@ -49,5 +50,6 @@ export function PaymentSubmitProgress({ runId, jobId, onFinished }: {
     </li>)}</ol>
     <p className="text-sm">{reconnecting ? 'Reconnecting to progress updates. The task may still be running; do not submit again.' : job.error_message || job.result?.detail || 'Waiting for background processing.'}</p>
     {running && <p className="mt-2 text-sm">You can leave this page and return. SQL and message delivery may take time; progress updates automatically.</p>}
+    <SqlQueuePanel runId={runId} />
   </section>;
 }

@@ -940,3 +940,22 @@ export async function removeReturnedDocument(runId: number, fileKey: string, exp
     method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, expected_file_keys: expectedFileKeys }),
   }));
 }
+
+
+export interface SqlQueueItem {
+  id: string | null; restricted: boolean; state: string; status?: string;
+  queue_position: number | null; job_type?: string; action?: string | null;
+  review_ids?: number[]; current_review_id?: number | null; set_count?: number;
+  submitted_by?: string; automatic?: boolean; company?: string | null; customer?: string | null;
+  submitted_at?: string; started_at?: string | null; completed_at?: string | null;
+  scheduled_for?: string | null; stage?: string | null;
+}
+export interface SqlQueueSnapshot {
+  updated_at: string; running_count: number; queued_count: number; scheduled_count: number;
+  attention_count: number; total_active: number; offset: number; limit: number; has_more: boolean;
+  items: SqlQueueItem[]; recent: SqlQueueItem[];
+}
+export async function getSqlQueue(offset = 0, signal?: AbortSignal): Promise<SqlQueueSnapshot> {
+  return handle<SqlQueueSnapshot>(await fetch(`${BASE_URL}/agents/sql-queue?offset=${offset}&limit=50`,
+    {headers: getScopedHeaders(), signal}));
+}
