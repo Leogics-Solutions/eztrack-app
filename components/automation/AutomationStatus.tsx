@@ -145,8 +145,8 @@ export function resolveAutomationStatus(
     meaning: 'OR created. Invoice follow-up remains open; do not create another receipt.',
   };
   if (status === 'MANUALLY_CLOSED') return {
-    key: 'MANUALLY_CLOSED', label: 'Closed / manually handled', color: '#64748B',
-    meaning: 'Customer confirmed manual handling. The original order is archived and cannot be submitted again.',
+    key: 'MANUALLY_CLOSED', label: 'Closed / 已关闭', color: '#64748B',
+    meaning: 'This order is closed. Open Review to check the recorded reason; do not submit it again.',
   };
   if (status === 'EXTERNALLY_HANDLED') return {
     key:'EXTERNALLY_HANDLED', label:'PIC handled / OR verification pending', color:'#64748B',
