@@ -856,7 +856,7 @@ export async function rejectRun(runId: number, reason?: string): Promise<AgentRu
 export interface OrderBatchJob {
   id: string;
   status: string;
-  action: 'PREPARE' | 'APPROVE' | 'EMAIL';
+  action: 'PREPARE' | 'APPROVE' | 'SUBMIT' | 'EMAIL';
   result: { items?: { run_id: number; status: string; message: string }[];
     progress?: { run_id: number; stage: string; total_lines?: number; completed_orders?: number; total_orders?: number;
       updated_at?: string; sdk_activity?: { stage?: string; stage_elapsed_seconds?: number; timed_out?: boolean } } };
@@ -883,7 +883,7 @@ export async function getSqlDispatchPolicy(): Promise<{ batch_interval_minutes: 
   return handle(await fetch(`${BASE_URL}/agents/sql-dispatch-policy`, { headers: getScopedHeaders() }));
 }
 
-export async function startOrderBatch(runId: number, action: 'PREPARE' | 'APPROVE', single = false, correctedData?: AgentRunData, dispatchMode: 'AUTO' | 'IMMEDIATE' | 'BATCH' = 'AUTO'): Promise<OrderBatchJob> {
+export async function startOrderBatch(runId: number, action: 'PREPARE' | 'APPROVE' | 'SUBMIT', single = false, correctedData?: AgentRunData, dispatchMode: 'AUTO' | 'IMMEDIATE' | 'BATCH' = 'AUTO'): Promise<OrderBatchJob> {
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/batch`, {
     method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ action, single, corrected_data: correctedData, dispatch_mode: dispatchMode }),
   }));

@@ -1052,7 +1052,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
               <p className="mt-1">
                 {bundle.all_ready
                   ? 'Every set in this order has been reviewed.'
-                  : `${bundle.pending_count} of ${bundle.total} still need review. ${isOutsourced ? 'Use the combined supplier request below to preview one email for these sets.' : 'Use Prepare all sets below, check the results, then approve the prepared sets together.'}`}
+                  : `${bundle.pending_count} of ${bundle.total} still need review. ${isOutsourced ? 'Use the combined supplier request below to preview one email for these sets.' : 'Check the details of each set, then use Submit all sets to SQL below. Preparation and posting run in one task.'}`}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {bundle.members.map((member) => (
@@ -1069,8 +1069,8 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
           )}
           {isOrderWorkflow && <OrderBatchActions
             key={`${runId}:${String(run.output_refs?.order_batch_job_id || '')}`} runId={runId} total={bundle?.total || 1} outsourced={isOutsourced}
-            unpreparedCount={(bundle?.members || [{status: run.status}]).filter(member => ['PENDING_REVIEW', 'RECEIVED', 'EXTRACTING'].includes(member.status)).length}
-            editable={canReview} onRefresh={() => getRun(runId).then((updated) => {
+            getCorrectedData={buildCorrected}
+            editable={canReview && !busy && !approvalRecorded && !sqlDocumentsCreated} onRefresh={() => getRun(runId).then((updated) => {
               setRun(updated);
               // A rejected click during a batch is transient. Clear only that
               // local error when the durable job has finished; retain real errors.
@@ -1085,16 +1085,17 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             {canReanalyze && !aiExtractionNeedsAttention && <button disabled={busy} onClick={reanalyzeWithAi} className="inline-flex items-center gap-2 rounded-md border border-cyan-400 px-4 py-2 text-cyan-800 hover:bg-cyan-50 disabled:opacity-50 dark:text-cyan-200 dark:hover:bg-cyan-950/30"><RefreshCw className={`h-4 w-4 ${busy && busyMessage?.startsWith('Re-analyzing') ? 'animate-spin' : ''}`} /> Re-analyze with AI</button>}
             {status === 'PENDING_REVIEW' && <>
               <button disabled={busy} onClick={() => act(() => reviewRun(runId, buildCorrected()))} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Save corrections</button>
-              <button disabled={busy} title={preparationBlocker || undefined} onClick={prepareForSql} className={`px-4 py-2 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${preparationBlocker ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)]'}`}><FileText className="h-4 w-4" /> {isOutsourced ? 'Prepare external request' : 'Prepare for accounting approval'}</button>
+              {(isOutsourced || !isOrderWorkflow) && <button disabled={busy} title={preparationBlocker || undefined} onClick={prepareForSql} className={`px-4 py-2 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${preparationBlocker ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)]'}`}><FileText className="h-4 w-4" /> {isOutsourced ? 'Prepare external request' : 'Prepare for accounting approval'}</button>}
+              {preparationBlocker && isOrderWorkflow && !isOutsourced && <button disabled={busy} onClick={() => setShowProceedModal(true)} className="rounded-md border border-amber-600 px-4 py-2 text-amber-800 disabled:opacity-50">Review source discrepancy</button>}
               {preparationBlocker && <p className="basis-full text-sm font-medium text-amber-800"><AlertTriangle className="mr-1.5 inline h-4 w-4" />{preparationBlocker}</p>}
             </>}
             {status === 'DRAFT_GENERATED' && <>
-              {!sqlDocumentsCreated && <button disabled={busy || !canGenerateDocuments} onClick={() => act(async () => { await reviewRun(runId, buildCorrected()); return generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Update prepared data</button>}
+              {!sqlDocumentsCreated && <button disabled={busy || !canGenerateDocuments} onClick={() => act(async () => { const updated = await reviewRun(runId, buildCorrected()); return isOrderWorkflow && !isOutsourced ? updated : generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">{isOrderWorkflow && !isOutsourced ? 'Save corrections' : 'Update prepared data'}</button>}
               {isOutsourced
                 ? <button disabled={busy} onClick={() => act(() => approveRun(runId, buildCorrected()), 'Sending request to the external provider...')} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Sending request') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Sending request') ? `Sending ${outsourcedChannel === 'WHATSAPP' ? 'WhatsApp request' : 'email'}...` : `Approve & ${outsourcedChannel === 'WHATSAPP' ? 'send WhatsApp request' : 'email external provider'}`}</button>
                 : approvalRecorded
                   ? <button disabled={busy} onClick={() => act(() => repushRunToSqlAccount(runId), 'Reconciling the approved SQL result and delivery...')} className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2"><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Resume SQL result & delivery</button>
-                  : (!sqlAccountDelivery || sqlAccountDelivery.status === 'failed' ? <button disabled={busy} onClick={() => void approveInternalAccounting()} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Creating DO') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Creating DO') ? 'Creating in accounting...' : 'Approve & create in accounting'}</button> : null)}
+                  : (!isOrderWorkflow && (!sqlAccountDelivery || sqlAccountDelivery.status === 'failed') ? <button disabled={busy} onClick={() => void approveInternalAccounting()} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:cursor-wait disabled:opacity-70 flex items-center gap-2">{busy && busyMessage?.startsWith('Creating DO') ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {busy && busyMessage?.startsWith('Creating DO') ? 'Creating in accounting...' : 'Approve & create in accounting'}</button> : null)}
             </>}
             {(status === 'PENDING_REVIEW' || status === 'DRAFT_GENERATED') && <button disabled={busy} onClick={() => act(() => rejectRun(runId, 'Rejected by reviewer'))} className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50">Reject</button>}
             {status === 'EXTERNAL_DOCUMENTS_RECEIVED' && (

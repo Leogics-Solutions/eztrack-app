@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   getOrderBatch, startOrderBatch, previewOrderBatchEmail, sendOrderBatchEmail,
-  assignOrderBatchFiles, getRunFile, type OrderBatchJob,
+  assignOrderBatchFiles, getRunFile, type OrderBatchJob, type AgentRunData,
   getSqlDispatchPolicy,
 } from '@/services/AgentsService';
 import { sqlQueueNotice } from '@/utils/sqlQueueNotice';
@@ -10,17 +10,16 @@ import { sqlQueueNotice } from '@/utils/sqlQueueNotice';
 type Reply = { anchor_run_id: number; files: { file_key: string; filename?: string }[] };
 type Props = {
   runId: number; total: number; outsourced: boolean; editable: boolean;
-  unpreparedCount?: number;
+  getCorrectedData?: () => AgentRunData;
   onRefresh: () => void; reply?: Reply; selectedFiles?: string[];
 };
 
-export function OrderBatchActions({ runId, total, outsourced, editable, onRefresh, reply, selectedFiles, unpreparedCount = 0 }: Props) {
+export function OrderBatchActions({ runId, total, outsourced, editable, onRefresh, reply, selectedFiles, getCorrectedData }: Props) {
   const [job, setJob] = useState<OrderBatchJob | null>(null);
   const [preview, setPreview] = useState<OrderBatchJob | null>(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [checked, setChecked] = useState<string[]>(selectedFiles || []);
-  const [confirmApprove, setConfirmApprove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [batchMinutes, setBatchMinutes] = useState(0);
@@ -66,13 +65,24 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
 
   async function act(task: () => Promise<void>) {
     setBusy(true); setError('');
-    try { await task(); } catch (e) { setError(e instanceof Error ? e.message : 'The action could not be completed.'); }
+    try { await task(); } catch (e) {
+      const message = e instanceof Error ? e.message : 'The action could not be completed.';
+      setError(message);
+      if (!outsourced && /failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+        // A lost POST response is not proof that the durable submission failed.
+        try {
+          const saved = await getOrderBatch(runId);
+          if (saved) { setJob(saved); refresh.current(); }
+        } catch { /* Retain the error; reload checks the original saved task. */ }
+        setError('Connection interrupted. Check the saved task below or refresh this page before retrying; the SQL result may still be pending.');
+      }
+    }
     finally { setBusy(false); }
   }
   const button = 'rounded border px-3 py-2 text-sm font-medium disabled:opacity-50';
   return <section className="my-4 rounded-lg border border-cyan-300 bg-cyan-50/50 p-4 dark:bg-cyan-950/20">
     <h3 className="font-semibold">{outsourced ? 'Supplier request' : 'Order processing'} · {total} set{total === 1 ? '' : 's'}</h3>
-    <p className="my-2 text-sm">Uses saved details for every set. Save corrections first. Each set keeps its own Review number.</p>
+    <p className="my-2 text-sm">{outsourced ? 'Uses saved details for every set. Save corrections first.' : 'Submit saves the current set and prepares and posts the order in the background. Save any changes to other sets first.'} Each set keeps its own Review number.</p>
     {error && <p role="alert" className="my-2 text-sm text-red-700">{error}</p>}
     {running && <p role="status" className="my-2 text-sm">Processing in the background, one set at a time. You can leave this page and return to check progress.</p>}
     {running && <div role="status" className="my-2 rounded border border-cyan-300 p-3 text-sm">
@@ -88,29 +98,20 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
       {outsourced ? <button className={button} disabled={busy || running} onClick={() => act(async () => {
         const p = await previewOrderBatchEmail(runId); setPreview(p);
         setSubject(p.preview?.subject || ''); setBody(p.preview?.body || '');
-      })}>Preview one email for all sets</button> : <>
-        <button className={button} disabled={busy || running} onClick={() => act(async () => { setJob(await startOrderBatch(runId, 'PREPARE')); refresh.current(); })}>1. Prepare all {total} sets</button>
-        <button className={`${button} bg-[var(--primary)] text-white`} disabled={busy || running || unpreparedCount > 0} onClick={() => setConfirmApprove(true)}>2. Post all {total} sets to SQL</button>
-      </>}
+      })}>Preview one email for all sets</button> : <button className={`${button} bg-[var(--primary)] text-white`} disabled={busy || running} onClick={() => act(async () => {
+        setJob(await startOrderBatch(runId, 'SUBMIT', false, getCorrectedData?.(), total > 1 ? dispatchMode : 'AUTO'));
+        refresh.current();
+      })}>{busy ? 'Submitting…' : total > 1 ? `Submit all ${total} sets to SQL / 提交全部 ${total} 份` : 'Submit to SQL / 提交到 SQL'}</button>}
     </div>}
-    {!outsourced && editable && unpreparedCount > 0 && <p className="mt-2 font-medium text-sm text-amber-800">{unpreparedCount} sets are not prepared. Click Prepare all sets once, check the results, then post the whole batch. You do not need to prepare each Review separately.</p>}
-    {!outsourced && total > 1 && <p className="mt-2 text-sm">To submit the whole order: save each set, use Prepare all sets, then Post all {total} sets to SQL. The individual approval button submits only the current set. SQL processes queued sets one at a time; you can leave this page.</p>}
-    {confirmApprove && <div className="mt-3 rounded border border-amber-300 p-3 text-sm">
-      <p>Approve the prepared sets listed above and create their DO/Invoice in accounting. Check each draft before continuing. Unprepared or blocked sets will show their own error; existing SQL documents will be retained.</p>
-      {batchMinutes > 0 && total > 1 && <label className="mt-2 block">Processing time
-        <select aria-label="SQL processing time" value={dispatchMode} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
+    {!outsourced && editable && <p className="mt-2 text-sm">One submission authorizes preparation and SQL posting. No separate Approve click is needed. Each set must pass validation; existing SQL documents are retained. 点击即提交准备及过账，无需再按 Approve。</p>}
+    {!outsourced && total > 1 && <p className="mt-2 text-sm">SQL processes queued sets one at a time. A blocked set shows its own error; you can leave this page and return to check the results.</p>}
+    {!outsourced && editable && batchMinutes > 0 && total > 1 && <label className="mt-2 block text-sm">Processing time
+        <select aria-label="SQL processing time" value={dispatchMode} disabled={busy || running} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
           <option value="BATCH">Next batch (every {batchMinutes} minutes)</option>
           <option value="IMMEDIATE">Urgent — join the ready queue now</option>
         </select>
         <p className="mt-1">Immediate processing still waits for current SQL work. It does not start a second SDK session.</p>
       </label>}
-      <div className="mt-2 flex gap-2">
-        <button disabled={busy || running} className={`${button} bg-[var(--primary)] text-white`} onClick={() => act(async () => {
-          setJob(await startOrderBatch(runId, 'APPROVE', false, undefined, total > 1 ? dispatchMode : 'AUTO')); setConfirmApprove(false); refresh.current();
-        })}>Approve all prepared sets</button>
-        <button className={button} onClick={() => setConfirmApprove(false)}>Cancel</button>
-      </div>
-    </div>}
     {preview?.preview && <div className="mt-3 space-y-3 rounded border bg-[var(--card)] p-3 text-sm">
       <p><strong>{preview.preview.set_count} sets:</strong> {preview.preview.run_ids.map(id => `#${id}`).join(', ')}</p>
       <p><strong>To:</strong> {preview.preview.route.to.join(', ')}{preview.preview.route.cc.length > 0 && <><br /><strong>Cc:</strong> {preview.preview.route.cc.join(', ')}</>}</p>
@@ -123,11 +124,12 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
         setJob(await sendOrderBatchEmail(runId, preview.id, subject, body)); setPreview(null); refresh.current();
       })}>Approve and send one email</button><button className={button} onClick={() => setPreview(null)}>Close preview</button></div>
     </div>}
-    {job && <div className="mt-3 text-sm"><p className="font-medium">{job.action === 'PREPARE' ? 'Preparation' : job.action === 'EMAIL' ? 'Combined email' : 'Batch approval'}: {job.status}</p>
+    {job && <div className="mt-3 text-sm"><p className="font-medium">{job.action === 'PREPARE' ? 'Preparation' : job.action === 'EMAIL' ? 'Combined email' : 'SQL submission'}: {job.status}</p>
+      {!outsourced && job.action === 'PREPARE' && job.status === 'SUCCESS' && <p>Preparation is complete. Use Submit to SQL above to post; no separate Approve step is required.</p>}
       {!outsourced && job.status === 'FAILED' && <div className="my-2">
         <p>Retry checks the original SQL outcome first. Existing documents are retained; an uncertain posting is held for reconciliation.</p>
         <button className={button} disabled={busy} onClick={() => act(async () => {
-          setJob(await startOrderBatch(runId, job.action === 'PREPARE' ? 'PREPARE' : 'APPROVE', job.total_orders === 1));
+          setJob(await startOrderBatch(runId, job.action === 'SUBMIT' ? 'SUBMIT' : job.action === 'PREPARE' ? 'PREPARE' : 'APPROVE', job.total_orders === 1));
           refresh.current();
         })}>Check result and safely resume</button>
       </div>}
