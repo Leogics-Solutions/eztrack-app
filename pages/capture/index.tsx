@@ -618,6 +618,7 @@ export default function CaptureInboxPage() {
                     )}
                   </div>
                   <div>
+                    <p className="mb-1 text-xs font-semibold text-[var(--muted-foreground)]">Current status / 当前状态</p>
                     <AutomationStatusBadge status={effectiveStatus} destination={approvalDestination} />
                     {item.status_label !== statusDefinition.label && (
                       <p className="mt-1 text-xs font-semibold leading-5 text-[var(--foreground)]">{item.status_label}</p>
@@ -663,32 +664,38 @@ export default function CaptureInboxPage() {
                       </Link>
                     )}
                     {item.capture_event_id && item.stage !== 'COMPLETED' && (
-                      <>
-                      <button
-                        type="button"
-                        disabled={updatingId === item.capture_event_id}
-                        onClick={() => void decide(item.capture_event_id!, 'IGNORE')}
-                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:bg-[var(--card)] disabled:opacity-50"
-                      >
-                        Ignore
-                      </button>
-                      {itemWorkstream === 'order_to_invoice' && (
-                        <div className="w-full space-y-1 lg:max-w-64">
+                      <details className="w-full rounded-md border border-[var(--border)] text-xs">
+                        <summary className="cursor-pointer px-2.5 py-2 font-medium text-[var(--muted-foreground)] hover:bg-[var(--card)]">
+                          More actions / 更多操作
+                        </summary>
+                        <div className="space-y-3 border-t border-[var(--border)] p-2.5">
+                          <p className="leading-5 text-[var(--muted-foreground)]">Choose an action below. / 以下是操作选项。</p>
+                          <button
+                            type="button"
+                            disabled={updatingId === item.capture_event_id}
+                            onClick={() => void decide(item.capture_event_id!, 'IGNORE')}
+                            className="block rounded-md px-2 py-1.5 font-medium text-[var(--muted-foreground)] hover:bg-[var(--card)] disabled:opacity-50"
+                          >
+                            Ignore / 忽略
+                          </button>
+                          {itemWorkstream === 'order_to_invoice' && (
+                          <div className="space-y-1">
                           <button
                             type="button"
                             className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--card)] disabled:opacity-50"
                             disabled={updatingId === item.capture_event_id}
                             onClick={() => void decide(item.capture_event_id!, 'MANUALLY_HANDLED')}
                           >
-                            <span className="block">Close manually issued sets</span>
-                            <span className="block">关闭已人工开完的单</span>
+                            <span className="block">Record manual issuing…</span>
+                            <span className="block">登记人工开单并关闭…</span>
                           </button>
                           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-                            仅在全部 sets 已人工开单后使用。未开单请打开 Review。
+                            仅当全部 sets 已在其他系统人工开单，才登记并关闭。尚未开单请打开 Review 继续处理。
                           </p>
+                          </div>
+                          )}
                         </div>
-                      )}
-                      </>
+                      </details>
                     )}
                     {item.capture_event_id && ['IGNORED', 'FILTERED'].includes(item.status) && (
                       <button
