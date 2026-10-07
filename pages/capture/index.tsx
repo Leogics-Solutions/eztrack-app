@@ -12,6 +12,8 @@ import {
 } from '@/lib/workstreams';
 import { useStickyWorkstream } from '@/lib/useStickyWorkstream';
 import { useListReturnState } from '@/lib/useListReturnState';
+import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
+import { reanalyzeRun, retryRunDelivery } from '@/services/AgentsService';
 import {
   listCaptureWorkInbox,
   updateCaptureEventDecision,
@@ -112,14 +114,6 @@ function displayStatus(item: CaptureWorkItem) {
   return raw || (item.stage === 'TO_REVIEW' ? 'PENDING_REVIEW' : item.stage === 'COMPLETED' ? 'COMPLETED' : 'RECEIVED');
 }
 
-function formatMalaysiaDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-MY', {
-    timeZone: 'Asia/Kuala_Lumpur',
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).format(new Date(value));
-}
-
 export default function CaptureInboxPage() {
   const router = useRouter();
   const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
@@ -139,6 +133,7 @@ export default function CaptureInboxPage() {
   const deferredSearch = useDeferredValue(search.trim());
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [retryingRunId, setRetryingRunId] = useState<number | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const requestSequence = useRef(0);
@@ -573,6 +568,20 @@ export default function CaptureInboxPage() {
                               <AutomationStatusBadge status={review.status} destination={approvalDestination} />
                               {review.sql_posted && <span>SQL saved{review.invoice_no ? ` · Invoice ${review.invoice_no}` : ''}{review.delivery_order_no ? ` · DO ${review.delivery_order_no}` : ''}</span>}
                               {review.reason && <span className="w-full break-words text-xs text-amber-800 dark:text-amber-300">{review.reason}</span>}
+                              {review.replacement_run_ids?.map((id) => <Link key={id} href={`/review/${id}?returnTo=capture`} className="text-xs underline">Recovered under Review #{id}</Link>)}
+                              {review.recovery_kind && <button type="button" disabled={retryingRunId !== null}
+                                className="rounded border border-cyan-600 px-2 py-1 text-xs font-semibold text-cyan-700 disabled:opacity-50"
+                                onClick={async () => {
+                                  setRetryingRunId(review.run_id); setError(null);
+                                  try {
+                                    if (review.recovery_kind === 'DELIVERY') await retryRunDelivery(review.run_id);
+                                    else await reanalyzeRun(review.run_id);
+                                    await load();
+                                  } catch (cause) { setError(cause instanceof Error ? cause.message : 'Retry failed. Open Review for details.'); }
+                                  finally { setRetryingRunId(null); }
+                                }}>
+                                {retryingRunId === review.run_id ? 'Retrying…' : review.recovery_kind === 'DELIVERY' ? 'Retry delivery / 重发文件' : 'Retry analysis / 重跑'}
+                              </button>}
                             </li>
                           ))}
                         </ul>

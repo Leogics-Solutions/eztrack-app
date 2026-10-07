@@ -121,7 +121,8 @@ export type CaptureInboxView = 'ALL' | CaptureInboxStage;
 
 export interface CaptureWorkItem {
   order_summaries?: Array<{ issuer?: string | null; customer?: string | null; document_date?: string | null; set_count?: number | null; review_ids: number[];
-    reviews?: Array<{ run_id: number; status: string; sql_posted: boolean; invoice_no?: string | null; delivery_order_no?: string | null; reason?: string | null }> }>;
+    reviews?: Array<{ run_id: number; status: string; sql_posted: boolean; invoice_no?: string | null; delivery_order_no?: string | null; reason?: string | null;
+      failure_code?: string | null; recovery_kind?: 'ANALYSIS' | 'DELIVERY' | null; replacement_run_ids?: number[] }> }>;
   id: string;
   stage: CaptureInboxStage;
   status: string;

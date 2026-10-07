@@ -28,6 +28,7 @@ import {
 } from '@/components/automation/AutomationStatus';
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useListReturnState } from '@/lib/useListReturnState';
+import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
 import {
   listOutsourcedCases,
   type OutsourcedCase,
@@ -90,19 +91,6 @@ function money(value?: number | null, currency?: string | null) {
   return `${currency || 'RM'} ${value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatMalaysiaDateTime(value?: string | null) {
-  if (!value) return null;
-  return new Intl.DateTimeFormat('en-MY', {
-    timeZone: 'Asia/Kuala_Lumpur',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(value));
-}
 
 function itemTitle(item: OutsourcedWorkItem) {
   const setLabel = item.set.label?.trim();
