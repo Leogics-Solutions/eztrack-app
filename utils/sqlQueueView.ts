@@ -6,7 +6,7 @@ export function sqlQueueType(item: SqlQueueItem): string {
   return item.action === 'PREPARE' ? 'Prepare DO & Invoice / 准备单据' : 'Post DO & Invoice / 开单过账';
 }
 export function sqlQueueState(state: string): string {
-  return ({RUNNING:'Processing / 正在处理',QUEUED:'Queued / 排队中',SCHEDULED:'Scheduled / 等待批次',
+  return ({RUNNING:'Processing / 正在处理',QUEUED:'Queued / 排队中',SCHEDULED:'Scheduled / 等待处理时间',
     NEEDS_ATTENTION:'Needs attention / 需检查',SUCCESS:'Completed / 已处理',FAILED:'Failed / 失败',
     INTERRUPTED:'Interrupted / 已中断'} as Record<string,string>)[state] || state;
 }
