@@ -265,7 +265,7 @@ export default function CaptureInboxPage() {
   const decide = async (eventId: number, action: 'IGNORE' | 'RESTORE' | 'MANUALLY_HANDLED') => {
     const reason = action !== 'RESTORE'
       ? window.prompt(action === 'MANUALLY_HANDLED'
-        ? 'Confirm that the PIC already handled ALL sets from this source. Enter the existing document numbers and note. This closes the related reviews and prevents posting them again.'
+        ? '仅当这批全部 sets 已在 Smartdok 外人工开单，才可关闭记录。尚未开单请取消，并打开 Review 继续处理。请输入已有单号及备注；关闭后系统不会再为这批开单。\n\nOnly close this record if ALL sets have already been issued manually outside Smartdok. If they have not been issued, cancel and open Review. Enter the existing document numbers and note. Closing prevents further posting for these sets.'
         : 'Why is this message being ignored? This note will be kept for the PIC audit trail.')?.trim()
       : undefined;
     if (action !== 'RESTORE' && !reason) return;
@@ -673,8 +673,20 @@ export default function CaptureInboxPage() {
                         Ignore
                       </button>
                       {itemWorkstream === 'order_to_invoice' && (
-                        <button type="button" className="text-xs font-semibold text-slate-600 hover:underline" disabled={updatingId === item.capture_event_id}
-                          onClick={() => void decide(item.capture_event_id!, 'MANUALLY_HANDLED')}>PIC handled all sets</button>
+                        <div className="w-full space-y-1 lg:max-w-64">
+                          <button
+                            type="button"
+                            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--card)] disabled:opacity-50"
+                            disabled={updatingId === item.capture_event_id}
+                            onClick={() => void decide(item.capture_event_id!, 'MANUALLY_HANDLED')}
+                          >
+                            <span className="block">Close manually issued sets</span>
+                            <span className="block">关闭已人工开完的单</span>
+                          </button>
+                          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                            仅在全部 sets 已人工开单后使用。未开单请打开 Review。
+                          </p>
+                        </div>
                       )}
                       </>
                     )}
