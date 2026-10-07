@@ -371,6 +371,7 @@ export async function listCaptureWorkInbox(params: {
   includeIgnored?: boolean;
   paymentCategory?: string;
   paymentFlags?: string[];
+  signal?: AbortSignal;
 } = {}): Promise<CaptureWorkInboxResponse> {
   const query = new URLSearchParams();
   query.set('view', params.view || 'TO_REVIEW');
@@ -387,6 +388,7 @@ export async function listCaptureWorkInbox(params: {
 
   const response = await fetch(`${BASE_URL}/capture/inbox/work-items?${query.toString()}`, {
     headers: getScopedHeaders(),
+    signal: params.signal,
   });
   return handle<CaptureWorkInboxResponse>(response);
 }

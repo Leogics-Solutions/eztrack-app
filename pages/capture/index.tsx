@@ -12,6 +12,7 @@ import {
 } from '@/lib/workstreams';
 import { useStickyWorkstream } from '@/lib/useStickyWorkstream';
 import { useListReturnState } from '@/lib/useListReturnState';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
 import { reanalyzeRun, retryRunDelivery } from '@/services/AgentsService';
 import {
@@ -45,7 +46,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -130,18 +130,27 @@ export default function CaptureInboxPage() {
   const setIncludeIgnored = (value: boolean) => listState.update('includeIgnored', value);
   const [workstream, setWorkstream] = useStickyWorkstream('smartdok.inbox.workstream');
   const [orderRoute, setOrderRoute] = useState<'INTERNAL' | 'UNRESOLVED'>('INTERNAL');
-  const deferredSearch = useDeferredValue(search.trim());
+  const deferredSearch = useDebouncedValue(search.trim());
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<number | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const requestSequence = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+  const [responseSearch, setResponseSearch] = useState<string | null>(null);
+  const [responseOrganization, setResponseOrganization] = useState<number | null>(null);
+  const searchPending = search.trim() !== deferredSearch || responseSearch !== search.trim() || responseOrganization !== selectedOrganizationId;
 
   const load = useCallback(async () => {
     if (organizationLoading || !selectedOrganizationId || !listState.restored) return;
+    if (search.trim() !== deferredSearch) return;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     const requestId = ++requestSequence.current;
     setLoading(true);
+    setError(null);
     try {
       const next = await listCaptureWorkInbox({
         view,
@@ -155,21 +164,24 @@ export default function CaptureInboxPage() {
         paymentCategory,
         paymentFlags,
         status: executionStatus,
+        signal: controller.signal,
       });
       if (requestId !== requestSequence.current) return;
       setResponse(next);
+      setResponseSearch(deferredSearch);
+      setResponseOrganization(selectedOrganizationId);
       setError(null);
     } catch (reason) {
-      if (requestId !== requestSequence.current) return;
+      if (controller.signal.aborted || requestId !== requestSequence.current) return;
       setError(reason instanceof Error ? reason.message : 'Could not load the Inbox.');
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [deferredSearch, includeIgnored, paymentCategory, paymentFlags, executionStatus, page, pageSize, sourceFilter, view, workstream, orderRoute, organizationLoading, selectedOrganizationId, listState.restored]);
+  }, [search, deferredSearch, includeIgnored, paymentCategory, paymentFlags, executionStatus, page, pageSize, sourceFilter, view, workstream, orderRoute, organizationLoading, selectedOrganizationId, listState.restored]);
 
   useEffect(() => {
     void load();
-    return () => { requestSequence.current += 1; };
+    return () => { requestSequence.current += 1; requestController.current?.abort(); };
   }, [load, selectedOrganizationId]);
 
   useEffect(() => {
@@ -405,7 +417,8 @@ export default function CaptureInboxPage() {
                   setPage(1);
                   setSelectedEventIds(new Set());
                 }}
-                placeholder="Search sender, workflow, subject or filename"
+                aria-label="Search Inbox"
+                placeholder="Search Review #, sender, subject or filename"
                 className="w-full rounded-lg border border-[var(--border)] bg-transparent py-2 pl-9 pr-3 text-sm outline-none focus:border-cyan-500"
               />
             </label>
@@ -460,7 +473,7 @@ export default function CaptureInboxPage() {
             </div>
           )}
 
-          {view === 'ALL' && selectableEventIds.length > 0 && (
+          {!searchPending && view === 'ALL' && selectableEventIds.length > 0 && (
             <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[var(--muted)]/35 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input
@@ -487,8 +500,8 @@ export default function CaptureInboxPage() {
             </div>
           )}
 
-          {loading && visibleItems.length === 0 ? (
-            <div className="p-12 text-center text-sm text-[var(--muted-foreground)]">Loading Inbox…</div>
+          {searchPending || (loading && visibleItems.length === 0) ? (
+            <div role="status" className="p-12 text-center text-sm text-[var(--muted-foreground)]">{error ? 'Search could not complete. Please refresh to try again.' : search.trim() ? 'Searching Inbox…' : 'Loading Inbox…'}</div>
           ) : visibleItems.length === 0 ? (
             <div className="p-12 text-center">
               <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
