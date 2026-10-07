@@ -6,6 +6,7 @@ import { PaymentMessageAttachment, PaymentMessageAnalysisDetails, type PaymentMe
 import { ReservedDoReview } from '@/components/automation/ReservedDoReview';
 
 import { editOrderLine } from '../../../utils/orderLineEdit';
+import { orderUnitPlaces, formatOrderUnit, changedSourceAmountIssue, orderMoneyScope } from '../../../utils/orderAmountPolicy';
 
 import { appendPaymentEvidence, paymentFilesForMessage } from '../../../utils/paymentEvidenceFiles';
 import { AppLayout } from '@/components/layout';
@@ -379,15 +380,27 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
   const hasAllMyrAmounts = orderLines.length > 0 && orderLines.every((line) => line.amount_myr != null);
   const hasEffectiveMyrAmounts = hasAllMyrAmounts || (noConversion && hasAllSourceAmounts);
   const waitingForDocuments = ['WAITING_FOR_DOCUMENTS', 'NEEDS_REVIEW'].includes(workPackage?.status || '');
-  const canGenerateDocuments = (isOutsourced || hasEffectiveMyrAmounts) && !waitingForDocuments;
+  const unitPlaces = orderUnitPlaces(selectedIssuingEntity || data?.issuing_entity);
+  const sourceAmountIssues = lines.map((line, index) => changedSourceAmountIssue(line,
+    run?.extracted_data?.lines?.find(original => original.qty === line.qty && original.unit_price_foreign === line.unit_price_foreign && original.amount_foreign === line.amount_foreign)
+      || run?.extracted_data?.lines?.[index], index, data?.currency || 'source'));
+  const sourceArithmeticIssue = sourceAmountIssues.filter(Boolean).join(' ');
+  const sourceScopeChanged = orderMoneyScope(lines, noConversion ? null : forex, noConversion, issuingEntityKey)
+    !== orderMoneyScope(data?.lines || [], data?.no_conversion ? null : data?.forex, Boolean(data?.no_conversion), String(data?.issuing_entity?.entity_key || data?.issuing_entity?.key || ''));
+  const sourceNeedsConfirmation = reconciliation?.requires_review && (sourceScopeChanged || !(data?.review_override as {accepted_fingerprint?: string} | undefined)?.accepted_fingerprint);
+  const canGenerateDocuments = (isOutsourced || hasEffectiveMyrAmounts) && !waitingForDocuments && !sourceArithmeticIssue && !sourceNeedsConfirmation;
   const historicalLookup = data?.source?.latest_invoice_lookup as {status?: string; note?: string} | undefined;
-  const preparationBlocker = lines.length === 0
+  const preparationBlocker = sourceArithmeticIssue || (lines.length === 0
     ? (historicalLookup?.note || 'No order lines were retrieved. Check the source description or retry the historical invoice lookup; no exchange rate is needed to fix missing lines.')
+    : sourceNeedsConfirmation
+    ? `Source amount needs confirmation: ${data?.currency || ''} current ${fmt(reconciliation?.extracted_foreign_total)}, target ${fmt(reconciliation?.expected_foreign_total)}, difference ${fmt(reconciliation?.variance_foreign)}. Verify this current version or correct the amount; this does not mean a file is missing.`
     : waitingForDocuments
-    ? `Check the source grouping: the message expects ${workPackage?.expected_set_count || 'separate'} document sets; ${workPackage?.received_primary_document_count || 1} transaction(s) were identified. ${Number(workPackage?.remaining_foreign_total || 0) > 0 ? `${data?.currency || ''} ${fmt(workPackage?.remaining_foreign_total)} is still missing. ` : 'A matching total does not confirm the grouping. '}Re-analyze the source or review the discrepancy before proceeding.`
+    ? workPackage?.expected_set_count
+      ? `Check the source grouping: expected ${workPackage.expected_set_count} sets; ${workPackage.received_primary_document_count || 1} identified. Supply missing documents or verify the grouping.`
+      : `Order details need review: ${(workPackage as {reason?: string} | undefined)?.reason || 'Check the unresolved business questions and source amounts.'}`
     : !isOutsourced && !hasEffectiveMyrAmounts
       ? 'Cannot prepare this transaction yet: one or more order lines has no MYR amount. Add or correct the exchange-rate conversion first.'
-      : null;
+      : null);
   const sourceName = run?.source_filename || 'received document';
   const sourceExt = sourceName.split('.').pop()?.toLowerCase() || '';
   const sourceIsPdf = sourceMime === 'application/pdf' || sourceExt === 'pdf';
@@ -598,6 +611,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
   };
 
   const prepareForSql = () => {
+    if (sourceArithmeticIssue) { setError(sourceArithmeticIssue); return; }
     if (preparationBlocker) {
       setShowProceedModal(true);
       return;
@@ -933,6 +947,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                 <div>
                   <h2 className="font-semibold">Conversion details</h2>
                   <p className="text-sm text-[var(--muted-foreground)]">Review the rate extracted from the WhatsApp message. Saving recalculates every MYR line value.</p>
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">Source prices keep their original precision. SQL MYR unit prices use {unitPlaces} decimal places, rounded half up; amounts use 2. Save after changing the company or rate to recalculate.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => { setNoConversion(true); setForexDraft(null); }} className={`rounded-md border px-3 py-2 text-sm font-medium ${noConversion ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-[var(--border)] hover:bg-[var(--hover-bg)]'}`}>
@@ -973,8 +988,8 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-[var(--muted-foreground)]">
                   <th className="px-3 py-2">Product (source)</th><th className="px-3 py-2">More description</th><th className="px-3 py-2">Item code / Internal SKU</th><th className="px-3 py-2">English description</th>
-                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2">Colour</th><th className="px-3 py-2 text-right">Unit price ({originalCurrency})</th><th className="px-3 py-2 text-right">Amount ({originalCurrency})</th>
-                  <th className="px-3 py-2 text-right">Unit (MYR)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="w-14 px-3 py-2"><span className="sr-only">Actions</span></th>
+                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2">Colour</th><th className="px-3 py-2 text-right">Source unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Source amount ({originalCurrency})</th>
+                  <th className="px-3 py-2 text-right">SQL unit (MYR · {unitPlaces}dp)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="w-14 px-3 py-2"><span className="sr-only">Actions</span></th>
                 </tr></thead>
                 <tbody>{lines.map((line, index) => {
                   const descriptiveOnly = ['header', 'included_component'].includes(line.category || '');
@@ -996,8 +1011,8 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                     <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.omit_document_uom ? '' : line.unit || ''} onChange={(e) => updateLine(index, { unit: e.target.value.toUpperCase(), sql_account_uom: null, omit_document_uom: !e.target.value.trim() })} placeholder="Blank" aria-label={`UOM for ${line.name || `row ${index + 1}`}`} className="w-20 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
                     <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.color || ''} onChange={(e) => updateLine(index, { color: e.target.value.toUpperCase() })} placeholder="Blank" aria-label={`Colour for ${line.name || `row ${index + 1}`}`} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.unit_price_foreign ?? ''} onChange={(e) => updateLine(index, { unit_price_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
-                    <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.amount_foreign ?? ''} onChange={(e) => updateLine(index, { amount_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
-                    <td className="px-3 py-2 text-right">{fmt(noConversion ? line.unit_price_foreign : line.unit_price_myr)}</td><td className="px-3 py-2 text-right">{fmt(noConversion ? line.amount_foreign : line.amount_myr)}</td>
+                    <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.amount_foreign ?? ''} onChange={(e) => updateLine(index, { amount_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" />{sourceAmountIssues[index] && <p role="alert" className="mt-1 w-64 text-left text-xs text-red-700 dark:text-red-300">{sourceAmountIssues[index]}</p>}</td>
+                    <td className="px-3 py-2 text-right">{formatOrderUnit(noConversion ? line.unit_price_foreign : line.unit_price_myr, unitPlaces)}</td><td className="px-3 py-2 text-right">{fmt(noConversion ? line.amount_foreign : line.amount_myr)}</td>
                     <td className="px-3 py-2 text-right">{canReview && <button type="button" onClick={() => removeLine(index)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40" title={`Remove ${line.category === 'header' ? 'section heading' : 'order line'}`} aria-label={`Remove ${line.name || `row ${index + 1}`}`}><Trash2 className="h-4 w-4" /></button>}</td>
                   </tr>
                 );})}</tbody>
@@ -1086,7 +1101,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             {status === 'PENDING_REVIEW' && <>
               <button disabled={busy} onClick={() => act(() => reviewRun(runId, buildCorrected()))} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Save corrections</button>
               {(isOutsourced || !isOrderWorkflow) && <button disabled={busy} title={preparationBlocker || undefined} onClick={prepareForSql} className={`px-4 py-2 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${preparationBlocker ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)]'}`}><FileText className="h-4 w-4" /> {isOutsourced ? 'Prepare external request' : 'Prepare for accounting approval'}</button>}
-              {preparationBlocker && isOrderWorkflow && !isOutsourced && <button disabled={busy} onClick={() => setShowProceedModal(true)} className="rounded-md border border-amber-600 px-4 py-2 text-amber-800 disabled:opacity-50">Review source discrepancy</button>}
+              {preparationBlocker && !sourceArithmeticIssue && isOrderWorkflow && !isOutsourced && <button disabled={busy} onClick={() => setShowProceedModal(true)} className="rounded-md border border-amber-600 px-4 py-2 text-amber-800 disabled:opacity-50">Review source discrepancy</button>}
               {preparationBlocker && <p className="basis-full text-sm font-medium text-amber-800"><AlertTriangle className="mr-1.5 inline h-4 w-4" />{preparationBlocker}</p>}
             </>}
             {status === 'DRAFT_GENERATED' && <>
