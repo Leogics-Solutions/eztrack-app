@@ -5,6 +5,7 @@
 
 import { BASE_URL } from './config';
 import { getScopedHeaders, getScopedHeadersForFormData } from './apiHelpers';
+import { sqlRequestLogQuery, type SqlRequestLogFilters } from '@/utils/sqlRequestLog';
 
 export type PaymentAutoMode = 'OFF' | 'PREVIEW' | 'ENABLED';
 export interface PaymentCustomerAutoRule {
@@ -958,4 +959,33 @@ export interface SqlQueueSnapshot {
 export async function getSqlQueue(offset = 0, signal?: AbortSignal): Promise<SqlQueueSnapshot> {
   return handle<SqlQueueSnapshot>(await fetch(`${BASE_URL}/agents/sql-queue?offset=${offset}&limit=50`,
     {headers: getScopedHeaders(), signal}));
+}
+
+export interface SqlRequestLogItem extends SqlQueueItem {
+  id: string;
+  reviews: { id: number; company: string | null; customer: string | null }[];
+  submitted_email: string | null;
+  delivery_only: boolean;
+  sql_status: string | null;
+  error_message: string | null;
+}
+export interface SqlRequestLog {
+  updated_at: string;
+  items: SqlRequestLogItem[];
+  total: number; offset: number; limit: number; has_more: boolean;
+  companies: string[];
+  active_counts: Record<'RUNNING' | 'QUEUED' | 'SCHEDULED' | 'NEEDS_ATTENTION', number>;
+}
+export async function getSqlRequestLog(filters: SqlRequestLogFilters, offset = 0, signal?: AbortSignal): Promise<SqlRequestLog> {
+  return handle(await fetch(`${BASE_URL}/agents/sql-requests?${sqlRequestLogQuery(filters, offset)}`,
+    { headers: getScopedHeaders(), signal }));
+}
+export async function exportSqlRequestLog(filters: SqlRequestLogFilters, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(`${BASE_URL}/agents/sql-requests/export?${sqlRequestLogQuery(filters)}`,
+    { headers: getScopedHeaders(), signal });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || error.detail || 'Could not export the SQL request log.');
+  }
+  return response.blob();
 }

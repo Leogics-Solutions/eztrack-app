@@ -38,6 +38,7 @@ import {
   type DashboardCashflowItem,
 } from "@/services";
 import { useOrganization } from "@/lib/OrganizationContext";
+import { SqlRequestLogPanel } from "@/components/automation/SqlRequestLogPanel";
 
 interface Filters {
   date_from: string;
@@ -285,6 +286,8 @@ export default function Home() {
             {t.dashboard.subtitle}
           </p>
         </div>
+
+        <SqlRequestLogPanel key={selectedOrganizationId ?? 'personal'} />
 
         {/* Filter Panel */}
         <div className="rounded-lg p-6 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
