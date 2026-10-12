@@ -31,8 +31,8 @@ export function ReviewAiCost({ runId, refreshKey }: { runId: number; refreshKey?
         <h2 className="text-sm font-semibold">AI cost / AI 费用 <span className="font-normal text-[var(--muted-foreground)]">· estimated · USD</span></h2>
         <p role="status" className="mt-1 text-sm">
           {failed ? 'AI cost is temporarily unavailable.' : summary ? <>
-            <b>{formatAiCost(summary.estimated_cost_usd)}</b>{report?.status === 'partial' ? ' known cost · partial estimate' : ' total tracked cost'}
-            <span className="ml-2 text-[var(--muted-foreground)]">{count(summary.provider_calls)} AI calls · {count(summary.reused_calls)} reused results</span>
+            <b>{formatAiCost(summary.estimated_cost_usd)}</b>{summary.estimated_cost_usd === null ? ' · usage unavailable' : report?.status === 'partial' ? ' known cost · partial estimate' : ' total tracked cost'}
+            <span className="ml-2 text-[var(--muted-foreground)]">{count(summary.provider_calls + summary.errors)} AI calls · {count(summary.reused_calls)} reused results</span>
           </> : report?.status === 'no_data' ? 'No tracked AI calls yet.' : 'Loading AI cost…'}
         </p>
       </div>
@@ -47,8 +47,8 @@ export function ReviewAiCost({ runId, refreshKey }: { runId: number; refreshKey?
           <thead><tr className="border-b border-[var(--border)]"><th className="py-2 pr-3">Step / Model</th><th className="px-2">AI calls</th><th className="px-2">Reused</th><th className="px-2">Input tokens</th><th className="px-2">Cache read</th><th className="px-2">Cache write</th><th className="px-2">Output tokens</th><th className="py-2 pl-3 text-right">Estimated cost</th></tr></thead>
           <tbody>{report.stages.map((stage) => <tr key={`${stage.stage}:${stage.model}`} className="border-b border-[var(--border)]">
             <td className="py-2 pr-3"><p>{aiStageLabel(stage.stage)}</p><p className="mt-1 text-[var(--muted-foreground)]">{stage.model}</p></td>
-            <td className="px-2">{count(stage.provider_calls)}</td><td className="px-2">{count(stage.reused_calls)}</td><td className="px-2">{count(stage.input_tokens)}</td><td className="px-2">{count(stage.cached_input_tokens)}</td><td className="px-2">{count(stage.cache_write_tokens)}</td><td className="px-2">{count(stage.output_tokens)}</td>
-            <td className="py-2 pl-3 text-right whitespace-nowrap">{formatAiCost(stage.estimated_cost_usd)}{stage.unknown_cost_calls > 0 ? ' + unknown' : ''}</td>
+            <td className="px-2">{count(stage.provider_calls + stage.errors)}</td><td className="px-2">{count(stage.reused_calls)}</td><td className="px-2">{count(stage.input_tokens)}</td><td className="px-2">{count(stage.cached_input_tokens)}</td><td className="px-2">{count(stage.cache_write_tokens)}</td><td className="px-2">{count(stage.output_tokens)}</td>
+            <td className="py-2 pl-3 text-right whitespace-nowrap">{formatAiCost(stage.estimated_cost_usd)}{stage.estimated_cost_usd !== null && stage.unknown_cost_calls > 0 ? ' + unknown' : ''}</td>
           </tr>)}</tbody>
         </table>
       </div>

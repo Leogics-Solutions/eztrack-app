@@ -2,7 +2,7 @@ import { BASE_URL } from './config';
 import { getScopedHeaders } from './apiHelpers';
 
 export interface AiCostSummary {
-  estimated_cost_usd: string;
+  estimated_cost_usd: string | null;
   shared_source_estimated_cost_usd: string;
   unknown_cost_calls: number;
   provider_calls: number;

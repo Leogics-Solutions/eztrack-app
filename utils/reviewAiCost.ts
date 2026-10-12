@@ -1,4 +1,5 @@
-export function formatAiCost(value: string): string {
+export function formatAiCost(value: string | null): string {
+  if (value === null) return 'Cost not yet known';
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount < 0) return 'Unavailable';
   if (amount === 0) return 'USD $0.0000';

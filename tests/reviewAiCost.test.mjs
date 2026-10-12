@@ -7,6 +7,7 @@ test('small costs remain visible instead of rounding to free', () => {
   assert.equal(formatAiCost('0'), 'USD $0.0000');
   assert.equal(formatAiCost('0.03234'), 'USD $0.0323');
   assert.equal(formatAiCost('NaN'), 'Unavailable');
+  assert.equal(formatAiCost(null), 'Cost not yet known');
 });
 test('shared source and customer processing have clear labels', () => {
   assert.equal(aiStageLabel('excel_ai.discover_workbook_units'), 'Shared workbook discovery');
