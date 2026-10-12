@@ -1,4 +1,5 @@
 'use client';
+import { ReviewAiCost } from './ReviewAiCost';
 
 import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
@@ -605,6 +606,7 @@ export function OutsourcedReviewCase() {
 
             {run && (
               <>
+                <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />
                 <section className="overflow-hidden rounded-xl border border-[#E2E7E9] bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F2] px-[18px] py-3.5">
                     <MessageCircle className="h-4 w-4 text-[#5E6E75]" />

@@ -1,4 +1,5 @@
 'use client';
+import { ReviewAiCost } from '@/components/review/ReviewAiCost';
 import { PaymentInvoiceBalance } from '@/components/automation/PaymentInvoiceBalance';
 import PaymentReceiptDate, { type ReceiptDateFields } from '@/components/automation/PaymentReceiptDate';
 import { PaymentMessageAttachment, PaymentMessageAnalysisDetails, type PaymentMessageAnalysis } from '../../../components/automation/PaymentMessageEvidence';
@@ -667,6 +668,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
   return (
     <AppLayout pageName={reviewMode ? `Review item #${runId}` : `PO Run #${runId}`}>
+      {run && <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />}
       <button onClick={() => router.push(reviewMode ? '/review' : (run ? `/agents/${run.agent_id}` : '/review'))} className="mb-4 text-sm text-[var(--muted-foreground)] flex items-center gap-1 hover:text-[var(--foreground)]">
         <ArrowLeft className="h-4 w-4" /> {reviewMode ? 'Back to Review' : 'Back to automation'}
       </button>
@@ -1226,6 +1228,7 @@ function GenericWorkflowReview({
 
   return (
     <AppLayout pageName={`Review item #${runId}`}>
+      {run && <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />}
       <button onClick={() => router.push(router.query.returnTo === 'capture' ? '/capture' : '/review')} className="mb-4 flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
         <ArrowLeft className="h-4 w-4" /> Back to Review
       </button>
@@ -1452,6 +1455,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   const mergedInto = Number((run.output_refs as { merged_into_run_id?: number } | null)?.merged_into_run_id);
   if (run.status === 'MERGED' && Number.isInteger(mergedInto) && mergedInto > 0) {
     return <AppLayout pageName={`Payment review #${run.id}`}>
+      {run && <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />}
       <section className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
         <StatusPill status="MERGED" showMeaning />
         <h1 className="text-2xl font-bold">Continue in Review #{mergedInto}</h1>
@@ -1464,6 +1468,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   if (awaitingInstruction) {
     return (
       <AppLayout pageName={`Payment review #${run.id}`}>
+      {run && <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />}
         <div className="space-y-5">
           <button onClick={() => router.push(router.query.returnTo === 'capture' ? '/capture' : '/review')} className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><ArrowLeft className="h-4 w-4" /> Back to Review</button>
           {loading && <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading payment evidence...</div>}
@@ -1509,7 +1514,8 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     );
   }
 
-  return <AppLayout pageName={`Payment review #${run.id}`}><div className="space-y-5">
+  return <AppLayout pageName={`Payment review #${run.id}`}>
+      {run && <ReviewAiCost runId={run.id} refreshKey={`${run.revision}:${run.status}:${run.updated_at}`} />}<div className="space-y-5">
     <button onClick={() => router.push(router.query.returnTo === 'capture' ? '/capture' : '/review')} className="inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><ArrowLeft className="h-4 w-4" /> Back to Review</button>
     {loading && <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading payment bundle…</div>}
     {error && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">{error}</div>}
