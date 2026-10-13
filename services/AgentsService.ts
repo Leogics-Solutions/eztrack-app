@@ -880,6 +880,12 @@ export async function getOrderBatch(runId: number): Promise<OrderBatchJob | null
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/batch`, { headers: getScopedHeaders() }));
 }
 
+export async function processOrderBatchNow(runId: number, jobId: string): Promise<OrderBatchJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/batch/schedule`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ job_id: jobId }),
+  }));
+}
+
 export async function getSqlDispatchPolicy(): Promise<{ batch_interval_minutes: number; manual_default: string }> {
   return handle(await fetch(`${BASE_URL}/agents/sql-dispatch-policy`, { headers: getScopedHeaders() }));
 }

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   getOrderBatch, startOrderBatch, previewOrderBatchEmail, sendOrderBatchEmail,
   assignOrderBatchFiles, getRunFile, type OrderBatchJob, type AgentRunData,
-  getSqlDispatchPolicy,
+  getSqlDispatchPolicy, processOrderBatchNow,
 } from '@/services/AgentsService';
 import { sqlQueueNotice } from '@/utils/sqlQueueNotice';
 
@@ -24,7 +24,7 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [batchMinutes, setBatchMinutes] = useState(0);
-  const [dispatchMode, setDispatchMode] = useState<'AUTO' | 'IMMEDIATE' | 'BATCH'>('AUTO');
+  const [dispatchMode, setDispatchMode] = useState<'IMMEDIATE' | 'BATCH'>('IMMEDIATE');
   const refresh = useRef(onRefresh);
   refresh.current = onRefresh;
   const running = job?.status === 'PENDING' || job?.status === 'RUNNING';
@@ -38,7 +38,6 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
     let active = true;
     getSqlDispatchPolicy().then(p => { if (active) {
       setBatchMinutes(p.batch_interval_minutes);
-      setDispatchMode(p.batch_interval_minutes > 0 ? 'BATCH' : 'AUTO');
     } }).catch(() => {});
     return () => { active = false; };
   }, []);
@@ -101,19 +100,24 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
         const p = await previewOrderBatchEmail(runId); setPreview(p);
         setSubject(p.preview?.subject || ''); setBody(p.preview?.body || '');
       })}>Preview one email for all sets</button> : <button className={`${button} bg-[var(--primary)] text-white`} disabled={busy || running} onClick={() => act(async () => {
-        setJob(await startOrderBatch(runId, 'SUBMIT', false, getCorrectedData?.(), total > 1 ? dispatchMode : 'AUTO'));
+        setJob(await startOrderBatch(runId, 'SUBMIT', false, getCorrectedData?.(), total > 1 ? dispatchMode : 'IMMEDIATE'));
         refresh.current();
       })}>{busy ? 'Submitting…' : total > 1 ? `Submit all ${total} sets to SQL / 提交全部 ${total} 份` : 'Submit to SQL / 提交到 SQL'}</button>}
     </div>}
     {!outsourced && editable && <p className="mt-2 text-sm">One submission authorizes preparation and SQL posting. No separate Approve click is needed. Each set must pass validation; existing SQL documents are retained. 点击即提交准备及过账，无需再按 Approve。</p>}
     {!outsourced && total > 1 && <p className="mt-2 text-sm">SQL processes queued sets one at a time. A blocked set shows its own error; you can leave this page and return to check the results.</p>}
     {!outsourced && editable && batchMinutes > 0 && total > 1 && <label className="mt-2 block text-sm">Processing time
-        <select aria-label="SQL processing time" value={dispatchMode} disabled={busy || running} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
+        <select aria-label="SQL processing time" value={running ? job?.dispatch_mode || dispatchMode : dispatchMode} disabled={busy || running} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
           <option value="BATCH">Next batch (every {batchMinutes} minutes)</option>
-          <option value="IMMEDIATE">Urgent — join the ready queue now</option>
+          <option value="IMMEDIATE">Immediate — DO & Invoice priority / 立即优先排队</option>
         </select>
-        <p className="mt-1">Immediate processing still waits for current SQL work. It does not start a second SDK session.</p>
+        <p className="mt-1">Ready DO & Invoice requests have priority. Current SQL work finishes first. / 开单优先处理；正在保存的单会先完成。</p>
+        {running && <p className="mt-1">This submitted task keeps its saved processing time. / 已提交任务保留原定处理时间。</p>}
       </label>}
+    {!outsourced && editable && job?.status === 'PENDING' && !job.started_at && job.dispatch_mode === 'BATCH' && <button
+      className={`${button} mt-2`} disabled={busy} onClick={() => act(async () => {
+        setJob(await processOrderBatchNow(runId, job.id)); refresh.current();
+      })}>Process this submitted task now / 改为立即处理</button>}
     {preview?.preview && <div className="mt-3 space-y-3 rounded border bg-[var(--card)] p-3 text-sm">
       <p><strong>{preview.preview.set_count} sets:</strong> {preview.preview.run_ids.map(id => `#${id}`).join(', ')}</p>
       <p><strong>To:</strong> {preview.preview.route.to.join(', ')}{preview.preview.route.cc.length > 0 && <><br /><strong>Cc:</strong> {preview.preview.route.cc.join(', ')}</>}</p>
