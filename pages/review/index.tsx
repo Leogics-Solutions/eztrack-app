@@ -351,6 +351,10 @@ export default function ReviewPage() {
   const openTasks = useMemo(() => scopedTasks.filter((task) => task.state === 'open'), [scopedTasks]);
   const completedTasks = useMemo(() => scopedTasks.filter((task) => task.state === 'completed'), [scopedTasks]);
   const rejectedTasks = useMemo(() => scopedTasks.filter((task) => task.state === 'rejected'), [scopedTasks]);
+  // Keep unresolved orders visible even when a saved status/search filter hides
+  // their normal row. These are decisions to make, not missing source records.
+  const companyPendingTasks = useMemo(() => tasks.filter((task) =>
+    task.workflowKey === 'order_to_invoice' && task.approvalDestination === 'UNRESOLVED' && task.state === 'open'), [tasks]);
   const visibleStateTasks = useMemo(
     () => tasks.filter((task) => task.state === (view === 'OPEN' ? 'open' : view === 'COMPLETED' ? 'completed' : 'rejected')),
     [tasks, view],
@@ -445,6 +449,16 @@ export default function ReviewPage() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </header>
+
+        {(workstream === 'order_to_invoice' || workstream === 'ALL') && companyPendingTasks.length > 0 && (
+          <section aria-label="Issuing company needs confirmation" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+            <h2 className="font-semibold">开单公司待确认 / Issuing company needs confirmation ({companyPendingTasks.length})</h2>
+            <p className="mt-1">These orders are retained here regardless of the list filters. Open a review and select its issuing company before submitting to SQL. / 这些单仍保留在开单列表，不受下方筛选影响。请打开单据，选择开单公司后再提交。</p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {companyPendingTasks.map((task) => <li key={task.id}><Link href={`${task.href}#issuing-company`} className="inline-block rounded-lg border border-amber-300 bg-white px-3 py-2 font-medium hover:bg-amber-100 dark:bg-amber-900">#{task.id.replace('automation-', '')} · {task.title}</Link></li>)}
+            </ul>
+          </section>
+        )}
 
         {(workstream === 'payment_knock_off' || workstream === 'ALL') && <PaymentQueueFilters category={paymentCategory} flags={paymentFlags} onCategory={value => listState.update('paymentCategory', value)} onFlags={value => listState.update('paymentFlags', value)} summary={paymentSummary} truncated={paymentCountsTruncated} countScope="Inbox cases in this organization" />}
 
