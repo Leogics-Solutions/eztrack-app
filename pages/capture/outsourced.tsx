@@ -29,6 +29,7 @@ import {
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useListReturnState } from '@/lib/useListReturnState';
 import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
+import { caseRows, caseTitle, type OutsourcedWorkItem } from '@/lib/outsourcedCaseRows';
 import {
   listOutsourcedCases,
   type OutsourcedCase,
@@ -38,14 +39,6 @@ import {
 
 type InboxView = 'ALL' | OutsourcedCaseState;
 
-interface OutsourcedWorkItem {
-  caseId: number;
-  instruction?: string;
-  sourceFilename?: string;
-  set: OutsourcedSet;
-  state: OutsourcedCaseState;
-}
-
 const VIEW_TABS: Array<{ value: InboxView; label: string; icon: LucideIcon; countKey: InboxView }> = [
   { value: 'ALL', label: 'All incoming', icon: Inbox, countKey: 'ALL' },
   { value: 'ACTION', label: 'Needs your action', icon: ShieldAlert, countKey: 'ACTION' },
@@ -54,25 +47,6 @@ const VIEW_TABS: Array<{ value: InboxView; label: string; icon: LucideIcon; coun
 ];
 
 const PAGE_SIZE = 30;
-
-function setState(item: OutsourcedSet): OutsourcedCaseState {
-  if (item.state) return item.state;
-  if (item.delivered || item.status === 'COMPLETED') return 'COMPLETED';
-  if (['DRAFT_GENERATED', 'EXTERNAL_DOCUMENTS_RECEIVED', 'VERIFICATION_FAILED', 'VERIFICATION_PASSED', 'PENDING_REVIEW', 'FAILED', 'OUTPUT_FAILED'].includes(item.status)) {
-    return 'ACTION';
-  }
-  return 'WAITING';
-}
-
-function flattenCases(cases: OutsourcedCase[]): OutsourcedWorkItem[] {
-  return cases.flatMap((item) => item.sets.map((set) => ({
-    caseId: item.case_id,
-    instruction: item.instruction,
-    sourceFilename: item.source_filename,
-    set,
-    state: setState(set),
-  })));
-}
 
 function destinationOf(item: OutsourcedSet): ApprovalDestination {
   return String(item.outbound_channel || '').toUpperCase() === 'WHATSAPP' ? 'WHATSAPP' : 'EMAIL';
@@ -91,16 +65,6 @@ function money(value?: number | null, currency?: string | null) {
   return `${currency || 'RM'} ${value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-
-function itemTitle(item: OutsourcedWorkItem) {
-  const setLabel = item.set.label?.trim();
-  const filename = item.sourceFilename?.trim();
-  const customer = typeof item.set.customer === 'string' ? item.set.customer.trim() : '';
-  const base = setLabel || filename || customer || `Review #${item.set.run_id}`;
-  const setCount = item.set.set_count || 1;
-  const setIndex = item.set.set_index || 1;
-  return setCount > 1 ? `${base} · Set ${setIndex} of ${setCount}` : base;
-}
 
 function itemReason(item: OutsourcedWorkItem) {
   const status = item.set.status;
@@ -130,7 +94,6 @@ async function allOutsourcedCases() {
 export default function OutsourcedInboxPage() {
   const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
   const [cases, setCases] = useState<OutsourcedCase[]>([]);
-  const [serverCounts, setServerCounts] = useState<Record<OutsourcedCaseState, number> | undefined>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -150,7 +113,6 @@ export default function OutsourcedInboxPage() {
       .then((data) => {
         if (!active) return;
         setCases(data.cases);
-        setServerCounts(data.counts);
       })
       .catch((reason) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Could not load outsourced work');
@@ -161,7 +123,7 @@ export default function OutsourcedInboxPage() {
     return () => { active = false; };
   }, [organizationLoading, selectedOrganizationId, refreshKey]);
 
-  const items = useMemo(() => flattenCases(cases), [cases]);
+  const items = useMemo(() => caseRows(cases), [cases]);
   const counts = useMemo(() => {
     const next = items.reduce<Record<OutsourcedCaseState, number>>((result, item) => {
       result[item.state] += 1;
@@ -169,11 +131,11 @@ export default function OutsourcedInboxPage() {
     }, { ACTION: 0, WAITING: 0, COMPLETED: 0 });
     return {
       ALL: items.length,
-      ACTION: serverCounts?.ACTION ?? next.ACTION,
-      WAITING: serverCounts?.WAITING ?? next.WAITING,
-      COMPLETED: serverCounts?.COMPLETED ?? next.COMPLETED,
+      ACTION: next.ACTION,
+      WAITING: next.WAITING,
+      COMPLETED: next.COMPLETED,
     };
-  }, [items, serverCounts]);
+  }, [items]);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase().replace(/^#/, '');
@@ -183,6 +145,7 @@ export default function OutsourcedInboxPage() {
       return [
         item.caseId,
         item.set.run_id,
+        ...item.sets.map((set) => set.run_id),
         item.set.label,
         item.set.issuing_company,
         item.set.customer,
@@ -294,7 +257,7 @@ export default function OutsourcedInboxPage() {
             <div className="divide-y divide-[var(--border)]">
               {visible.map((item) => {
                 const destination = destinationOf(item.set);
-                const amount = money(item.set.amount, item.set.currency);
+                const amount = money(item.sets.reduce((sum, set) => sum + (set.amount || 0), 0), item.set.currency);
                 const updated = formatMalaysiaDateTime(item.set.updated_at || item.set.received_at);
                 const statusDefinition = resolveAutomationStatus(item.set.status, destination);
                 return (
@@ -307,7 +270,7 @@ export default function OutsourcedInboxPage() {
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-semibold text-[var(--foreground)]">{itemTitle(item)}</h2>
+                        <h2 className="font-semibold text-[var(--foreground)]">{caseTitle(item)}</h2>
                         <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">Outsourced</span>
                         <span className="rounded-full border border-cyan-300 bg-cyan-50 px-2 py-0.5 text-xs font-bold text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
                           Review #{item.set.run_id}
@@ -316,6 +279,7 @@ export default function OutsourcedInboxPage() {
                           Case #{item.caseId}
                         </span>
                       </div>
+                      {item.sets.length > 1 && <div className="mt-2 flex flex-wrap gap-2">{item.sets.map((set) => <Link key={set.run_id} href={`/review/outsourced/${set.run_id}`} className="rounded border border-[var(--border)] px-2 py-1 text-xs">#{set.run_id} · {set.status.replaceAll('_', ' ')}</Link>)}</div>}
                       <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                         {[item.set.issuing_company || 'Issuing company needs confirmation', item.set.customer || 'Customer needs confirmation', item.set.date, item.sourceFilename].filter(Boolean).join(' · ')}
                       </p>
@@ -334,7 +298,7 @@ export default function OutsourcedInboxPage() {
                       href={`/review/outsourced/${item.set.run_id}`}
                       className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white ${item.state === 'COMPLETED' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-cyan-700 hover:bg-cyan-800'}`}
                     >
-                      {item.state === 'COMPLETED' ? 'View completed' : 'Open Review'} <ArrowRight className="h-4 w-4" />
+                      {item.state === 'COMPLETED' ? 'View completed' : item.sets.length > 1 ? 'Open case' : 'Open Review'} <ArrowRight className="h-4 w-4" />
                     </Link>
                   </article>
                 );

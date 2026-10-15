@@ -639,6 +639,7 @@ export interface PaymentFollowUp {
 export type OutsourcedCaseState = 'ACTION' | 'WAITING' | 'COMPLETED';
 
 export interface OutsourcedSet {
+  route_key?: string;
   run_id: number;
   status: string;
   label?: string;
@@ -784,6 +785,21 @@ export async function verifySupplierDocuments(runId: number): Promise<AgentRun> 
     method: 'POST', headers: getScopedHeaders(),
   });
   return handle<AgentRun>(res);
+}
+
+export interface SupplierCaseJob {
+  id?: string; status: string; error?: string;
+  run_ids?: number[];
+  result?: { current_review?: number; status?: string; items?: Array<{ run_id: number; status: string; reason?: string }> };
+}
+export async function verifySupplierCase(runId: number): Promise<SupplierCaseJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/verify-supplier-case`, { method: 'POST', headers: getScopedHeaders() }));
+}
+export async function getSupplierCaseJob(runId: number): Promise<SupplierCaseJob> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/supplier-case-job`, { headers: getScopedHeaders() }));
+}
+export async function deliverSupplierCase(runId: number): Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/deliver-supplier-case`, { method: 'POST', headers: getScopedHeaders() }));
 }
 
 /** Retry only official-file retrieval and source delivery; accounting writes are never repeated. */

@@ -20,9 +20,11 @@ import {
   reviewRun,
   replyToCaseEmail,
   sendOrderBatchEmail,
-  sendRunToWhatsApp,
+  deliverSupplierCase,
   skipSupplierVerification,
-  verifySupplierDocuments,
+  verifySupplierCase,
+  getSupplierCaseJob,
+  type SupplierCaseJob,
   type AgentRun,
   type CaseEmailConversation,
   type AgentRunData,
@@ -196,25 +198,26 @@ function displayValue(value: unknown) {
 function defaultOutgoingBody(run: AgentRun, data?: AgentRunData) {
   if (data?.outsource_message_draft?.body) return data.outsource_message_draft.body;
   const caption = String(run.source_caption || '').trim();
+  const requested = run.output_refs?.requested_document_types;
+  const invoiceOnly = Array.isArray(requested) && requested.length === 1 && requested[0] === 'invoice';
   if (String(data?.issuing_entity?.outbound_channel || '').toUpperCase() === 'WHATSAPP') {
-    const lines = (!run.source_file_s3_key || Number(run.output_refs?.source_transaction_count || 1) > 1)
+    const lines = !run.source_file_s3_key
       ? (data?.lines || []).map((line, index) => `${index + 1}. ${line.name || ''} ? Qty ${line.qty ?? ''} ? Amount ${line.amount_myr ?? ''}`).join('\n') : '';
-    return `Hi, please help arrange open invoice\n\n${caption || data?.customer || ''}${lines ? `\n\n${lines}` : ''}\n\nthanks`;
+    return `Hi, please help arrange open invoice\n\n${caption || data?.customer || ''}${lines ? `\n\n${lines}` : ''}\n\n${invoiceOnly ? '' : 'Please help to issue DO also,\n'}Thanks`;
   }
   const customer = data?.customer || '';
-  const date = data?.inv_date || '';
   const setCount = run.bundle?.total || 1;
   return [
-    caption.split('\n')[0] || `${data?.issuing_entity?.legal_name || 'Partner'} / ${customer}`.trim(),
+    'Dear,',
     '',
-    'Please issue DO and invoice for:',
+    `Please prepare ${setCount} ${setCount === 1 ? 'set' : 'sets'} ${invoiceOnly ? 'Sales Invoice' : 'Delivery Order and Sales Invoice'} for the attached purchase order.`,
     '',
     caption || customer,
     '',
-    date ? `Invoice date: ${date}` : null,
-    setCount > 1 ? `Quantity: ${setCount} sets` : null,
+    'Thank you.',
     '',
-    'PO is attached. Please reply with the DO and invoice as PDF.',
+    'Regards,',
+    'Bryan',
   ].filter((line) => line != null).join('\n').trim();
 }
 
@@ -223,6 +226,7 @@ export function OutsourcedReviewCase() {
   const runId = Number(router.query.runId);
   const [run, setRun] = useState<AgentRun | null>(null);
   const [loading, setLoading] = useState(true);
+  const [caseJob, setCaseJob] = useState<SupplierCaseJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +275,29 @@ export function OutsourcedReviewCase() {
   }, [load, runId]);
 
   const status = run?.status || '';
+  const verifyingCase = caseJob?.status === 'PENDING' || caseJob?.status === 'RUNNING';
+  useEffect(() => {
+    setCaseJob(null);
+    if (!runId) return;
+    let active = true;
+    getSupplierCaseJob(runId).then((job) => { if (active) setCaseJob(job); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [runId]);
+  useEffect(() => {
+    if (!runId || !verifyingCase) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      getSupplierCaseJob(runId).then(async (job) => {
+        if (!active) return;
+        setCaseJob(job);
+        if (!['PENDING', 'RUNNING'].includes(job.status)) {
+          if (job.error) setError(job.error);
+          await load();
+        }
+      }).catch(() => undefined);
+    }, 4000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [runId, verifyingCase, load]);
   useEffect(() => {
     if (!runId || !['EXTRACTING', 'AI_VERIFYING', 'WAITING_EXTERNAL_DOCUMENTS'].includes(status)) return undefined;
     const timer = window.setInterval(() => { void load().catch(() => undefined); }, 8000);
@@ -846,16 +873,18 @@ export function OutsourcedReviewCase() {
                     </span>
                     <button
                       type="button"
-                      disabled={busy || externalDocuments.length === 0 || status === 'AI_VERIFYING'}
-                      onClick={() => void act(() => verifySupplierDocuments(runId), 'AI is checking the partner documents against the PO…')}
+                      disabled={busy || verifyingCase || externalDocuments.length === 0 || status === 'AI_VERIFYING'}
+                      onClick={() => void act(async () => { setCaseJob(await verifySupplierCase(runId)); }, 'Queuing verification for all sets in this case…')}
                       className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-[#1C6C87] px-4 text-[13.5px] font-semibold text-white disabled:opacity-50"
                     >
                       {status === 'AI_VERIFYING' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      {supplierVerification ? 'Run verification again' : 'Run verification'}
+                      {verifyingCase ? 'Checking case…' : setCount > 1 ? 'Verify all sets' : supplierVerification ? 'Run verification again' : 'Run verification'}
                     </button>
                   </div>
                   <div className="flex flex-col gap-3.5 p-4">
-                    <p className="text-[12.5px] text-[#5E6E75]">What {partnerName} sent back, against the PO and the instruction. Five fields, nothing else.</p>
+                    <p className="text-[12.5px] text-[#5E6E75]">Checks the returned files against the original PO and instructions. Each set keeps its own result.</p>
+                    {verifyingCase && <p role="status" className="text-sm text-[#144F63]">Checking {caseJob?.result?.current_review ? `Review #${caseJob.result.current_review}` : 'the case'} · {caseJob?.result?.items?.length || 0} / {caseJob?.run_ids?.length || setCount} sets finished. You can leave this page.</p>}
+                    {(caseJob?.result?.items?.length || 0) > 1 && <div className="flex flex-wrap gap-2">{caseJob?.result?.items?.map((item) => <Link key={item.run_id} href={`/review/outsourced/${item.run_id}`} title={item.reason} className={`rounded border px-2 py-1 text-xs ${item.status === 'FAILED' ? 'border-red-300 text-red-800' : 'border-emerald-300 text-emerald-800'}`}>#{item.run_id} · {item.status}</Link>)}</div>}
                     {status === 'AI_VERIFYING' && <p className="flex items-center gap-2 text-sm text-orange-800"><LoaderCircle className="h-4 w-4 animate-spin" /> Checking supplier, customer, document numbers, lines, prices and totals…</p>}
                     {verificationRows.length > 0 ? (
                       <div className="overflow-hidden rounded-[10px] border border-[#E2E7E9]">
@@ -919,12 +948,12 @@ export function OutsourcedReviewCase() {
             <button type="button" disabled={busy} onClick={() => void act(() => reviewRun(runId, draftData()), 'Saving draft…')} className="h-10 rounded-[9px] border border-[#DCE3E5] bg-white px-4 text-[13.5px] font-medium disabled:opacity-40">Save draft</button>
             <button
               type="button"
-              disabled={busy || !canPost}
+              disabled={busy || verifyingCase || !canPost}
               title={!canPost ? (customerWhatsAppJid ? 'Verification must pass or be accepted before posting to the group.' : 'The source WhatsApp group is unavailable; configure it before sending.') : undefined}
-              onClick={() => void act(() => sendRunToWhatsApp(runId), 'Posting verified documents to the group…')}
+              onClick={() => void act(() => deliverSupplierCase(runId), setCount > 1 ? 'Sending one ZIP of all verified sets…' : 'Posting verified documents to the group…')}
               className={`inline-flex h-10 items-center gap-2 rounded-[9px] px-[18px] text-[13.5px] font-semibold text-white ${canPost ? 'bg-[#1C6C87]' : 'cursor-not-allowed bg-[#A9B4B9]'}`}
             >
-              <MessageCircle className="h-4 w-4" /> Post to {customerGroup}
+              <MessageCircle className="h-4 w-4" /> {setCount > 1 ? 'Send verified ZIP to' : 'Post to'} {customerGroup}
             </button>
           </div>
         </footer>
