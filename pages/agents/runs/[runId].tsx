@@ -21,6 +21,9 @@ import { setInvoiceWaitApproval } from '@/services/AgentsService';
 import { PaymentEvidenceSummary } from '@/components/automation/PaymentEvidenceSummary';
 import { OrderSSTConfirmation } from '@/components/automation/OrderSSTConfirmation';
 import { SqlItemResolution } from '@/components/automation/SqlItemResolution';
+import { OrderItemPolicy } from '@/components/automation/OrderItemPolicy';
+import { orderItemPolicyMode } from '@/utils/orderItemPolicy';
+import { setOrderItemPolicy } from '@/services/AgentsService';
 import { applySqlItemBatches } from '@/utils/sqlItemBatch';
 import { OrderBatchActions } from '@/components/automation/OrderBatchActions';
 import { startOrderBatch } from '@/services/AgentsService';
@@ -466,7 +469,9 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
     }));
   };
 
-  const stockChoices: SqlAccountStockItemProposal[] = lines.flatMap((line, index) => {
+  const itemPolicyMode = orderItemPolicyMode(data, runId);
+  const orderFreeText = itemPolicyMode === 'FOLLOW_PO_FREE_TEXT';
+  const stockChoices: SqlAccountStockItemProposal[] = orderFreeText ? [] : lines.flatMap((line, index) => {
     const proposal = itemProposals.find(item => item.source_index === index);
     if (line.sql_item_mode === "free_text" || line.match?.sku_code || (!line.use_source_part_no_as_item_code && !proposal)) return [];
     return [{ source_index: index, code: String(proposal?.code || line.source_part_no || line.model || '').replace(/^'/, ''),
@@ -984,6 +989,10 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             </section>
           )}
 
+          {isOrderWorkflow && !isOutsourced && <OrderItemPolicy mode={itemPolicyMode}
+            disabled={!canReview || busy || approvalRecorded || sqlDocumentsCreated || !data?.issuing_entity?.sql_connection_id || !run.updated_at}
+            onChange={mode => void act(() => setOrderItemPolicy(runId, mode, run.updated_at!, buildCorrected()), 'Saving stock handling for this Review...')} />}
+
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
             <div className="p-4 border-b border-[var(--border)] font-semibold">Extracted order lines ({orderLines.length}){headingCount > 0 && <span className="font-normal text-[var(--muted-foreground)]"> + {headingCount} section heading{headingCount === 1 ? '' : 's'}</span>}{contextCount > 0 && <span className="font-normal text-[var(--muted-foreground)]"> + {contextCount} included context row{contextCount === 1 ? '' : 's'}</span>}</div>
             <div className="overflow-x-auto">
@@ -999,7 +1008,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                   <tr key={index} className={`border-t border-[var(--border)] align-top ${line.category === 'header' ? 'bg-cyan-500/10 font-medium' : line.category === 'included_component' ? 'bg-[var(--muted)]/45 text-[var(--muted-foreground)]' : ''}`}>
                     <td className="px-3 py-2"><div className={line.category === 'included_component' ? 'pl-4' : ''}>{line.category === 'included_component' ? '↳ ' : ''}{line.name}</div><div className="text-xs text-[var(--muted-foreground)]">{line.model}{line.category && <> · {humanLabel(line.category)}</>}</div></td>
                     <td className="px-3 py-2"><textarea disabled={!canReview} value={line.more_description || ''} onChange={(e) => updateLine(index, { more_description: e.target.value || null })} rows={4} placeholder="Continuation details" aria-label={`More description for ${line.name || `row ${index + 1}`}`} className="w-72 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" /></td>
-                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={(line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? line.source_part_no : line.match?.sku_code) || ''} aria-label={`Item code for ${line.name || `row ${index + 1}`}`} onChange={(e) => line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? updateLine(index, { source_part_no: e.target.value, model: e.target.value, match: { ...line.match, matched: false, confidence: 0, sku_code: null }, sql_account_uom: undefined }) : updateMatch(index, { sku_code: e.target.value })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" />{canReview && !descriptiveOnly && <button type="button" className="mt-1 block text-xs text-cyan-700" onClick={() => updateLine(index, { sql_item_mode: 'free_text', match: { matched: false, confidence: 0, sku_code: null }, sql_item_resolution: undefined })}>{line.sql_item_mode === 'free_text' ? 'Free-text line selected' : 'Use without item code'}</button>}</td>
+                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly || orderFreeText} value={(orderFreeText ? null : line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? line.source_part_no : line.match?.sku_code) || ''} aria-label={`Item code for ${line.name || `row ${index + 1}`}`} onChange={(e) => line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? updateLine(index, { source_part_no: e.target.value, model: e.target.value, match: { ...line.match, matched: false, confidence: 0, sku_code: null }, sql_account_uom: undefined }) : updateMatch(index, { sku_code: e.target.value })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" />{orderFreeText && <span className="mt-1 block text-xs text-cyan-700">不进库存；原 code 保留在描述</span>}{canReview && !descriptiveOnly && !orderFreeText && <button type="button" className="mt-1 block text-xs text-cyan-700" onClick={() => updateLine(index, { sql_item_mode: 'free_text', match: { matched: false, confidence: 0, sku_code: null }, sql_item_resolution: undefined })}>{line.sql_item_mode === 'free_text' ? 'Free-text line selected' : 'Use without item code'}</button>}</td>
                     <td className="px-3 py-2">
                       <input disabled={!canReview} value={line.match?.en_description || ''} onChange={(e) => updateMatch(index, { en_description: e.target.value })} className="w-56 rounded border border-[var(--border)] bg-transparent px-2 py-1" />
                       <label className="mt-1 flex items-center gap-1 text-xs text-[var(--muted-foreground)]" title="After final approval, reuse this English for the same company, customer and source product. Uncheck for a one-off description.">
@@ -1593,7 +1602,7 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     </section>
 
     {sqlPreview.open_invoice_search?.status === 'FAILED' && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Additional invoices could not be checked. Your selected invoices are retained. Use Search SQL again to retry.</p>}
-    {sqlPreview.open_invoice_search?.has_more && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Only part of this customer's open invoices is shown. Add any missing invoice number and use Search SQL again to check it. <button type="button" disabled={!editable || busy} onClick={() => updateInvoices([...invoices, { invoice_number: '', requested_amount: 0, requested_amount_source: 'MANUAL' }])} className="ml-2 rounded-md border border-amber-400 px-2 py-1 font-semibold disabled:opacity-50">Add invoice number</button></p>}
+    {sqlPreview.open_invoice_search?.has_more && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Only part of this customer&apos;s open invoices is shown. Add any missing invoice number and use Search SQL again to check it. <button type="button" disabled={!editable || busy} onClick={() => updateInvoices([...invoices, { invoice_number: '', requested_amount: 0, requested_amount_source: 'MANUAL' }])} className="ml-2 rounded-md border border-amber-400 px-2 py-1 font-semibold disabled:opacity-50">Add invoice number</button></p>}
 
     {(availableInvoiceCandidates.length > 0 || invoiceSuggestions.length > 0) && <section className="rounded-2xl border border-cyan-300 bg-cyan-50 p-5 text-cyan-950"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Open invoices for this SQL customer</h2><p className="mt-1 text-sm">These invoices come from SQL Accounting. Select an invoice when you need to correct the payment instructions.</p></div>{invoiceSuggestions.length > 0 && !sqlPreview.open_invoice_search?.has_more && <button type="button" disabled={!editable} onClick={applyOldestInvoiceSuggestions} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Use oldest open invoice(s)</button>}</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{availableInvoiceCandidates.map((candidate) => { const recommended = suggestedInvoiceKeys.has(invoiceKey(candidate.invoice_number)); return <div key={candidate.invoice_number || candidate.document_date} className={`flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-sm ${recommended ? 'ring-2 ring-emerald-400' : ''}`}><div><p className="font-semibold">{candidate.invoice_number}{recommended && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">Recommended: oldest first</span>}</p><p className="text-xs opacity-70">{candidate.document_date || 'No date'} · Open {moneyText(candidate.open_balance)}</p></div><button type="button" disabled={!editable} onClick={() => addInvoiceCandidate(candidate)} className="rounded-md bg-cyan-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Add</button></div>; })}</div></section>}
 

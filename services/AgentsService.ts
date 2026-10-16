@@ -168,6 +168,14 @@ export interface AgentRunForex {
 }
 
 export interface AgentRunData {
+  sql_order_item_policy?: {
+    mode?: string;
+    confirmed?: boolean;
+    approval_source?: string;
+    review_id?: number;
+    connection_id?: number;
+    preserve_source_codes?: boolean;
+  } | null;
   customer?: string | null;
   customer_code?: string | null;
   code?: string | null;
@@ -242,6 +250,13 @@ export interface AgentRunData {
     filename?: string;
   }>;
   [key: string]: unknown;
+}
+
+export async function setOrderItemPolicy(runId: number, mode: 'COMPANY_DEFAULT' | 'FOLLOW_PO_FREE_TEXT', expectedUpdatedAt: string, correctedData: AgentRunData): Promise<AgentRun> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/order-item-policy`, {
+    method: 'PUT', headers: getScopedHeaders(),
+    body: JSON.stringify({ mode, expected_updated_at: expectedUpdatedAt, corrected_data: correctedData }),
+  }));
 }
 
 export interface ReviewFieldDefinition {
