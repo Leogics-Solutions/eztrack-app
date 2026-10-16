@@ -22,7 +22,7 @@ import { PaymentEvidenceSummary } from '@/components/automation/PaymentEvidenceS
 import { OrderSSTConfirmation } from '@/components/automation/OrderSSTConfirmation';
 import { SqlItemResolution } from '@/components/automation/SqlItemResolution';
 import { OrderItemPolicy } from '@/components/automation/OrderItemPolicy';
-import { orderItemPolicyMode } from '@/utils/orderItemPolicy';
+import { orderItemPolicyMode, canChangeOrderItemPolicy } from '@/utils/orderItemPolicy';
 import { setOrderItemPolicy } from '@/services/AgentsService';
 import { applySqlItemBatches } from '@/utils/sqlItemBatch';
 import { OrderBatchActions } from '@/components/automation/OrderBatchActions';
@@ -990,7 +990,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
           )}
 
           {isOrderWorkflow && !isOutsourced && <OrderItemPolicy mode={itemPolicyMode}
-            disabled={!canReview || busy || approvalRecorded || sqlDocumentsCreated || !data?.issuing_entity?.sql_connection_id || !run.updated_at}
+            disabled={!canReview || busy || !canChangeOrderItemPolicy(approvalRecorded, sqlAccountDelivery?.status, Boolean((run.output_refs?.sql_posting_intent as { payload?: unknown } | undefined)?.payload)) || !data?.issuing_entity?.sql_connection_id || !run.updated_at}
             onChange={mode => void act(() => setOrderItemPolicy(runId, mode, run.updated_at!, buildCorrected()), 'Saving stock handling for this Review...')} />}
 
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
