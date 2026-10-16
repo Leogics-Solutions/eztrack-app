@@ -168,6 +168,7 @@ export interface AgentRunForex {
 }
 
 export interface AgentRunData {
+  source_description_titles?: Array<{ text: string; source: string; scoped_row: number; column: number }>;
   sql_order_item_policy?: {
     mode?: string;
     confirmed?: boolean;
@@ -722,7 +723,7 @@ export async function generateRun(runId: number): Promise<AgentRun> {
 
 export interface OrderSSTState {
   applicable: boolean; required: boolean; ready: boolean;
-  status: 'GROUP_J' | 'NOT_GROUP_J' | 'UNVERIFIED'; source: string | null;
+  status: 'GROUP_J' | 'NOT_GROUP_J' | 'UNVERIFIED' | 'NOT_APPLICABLE'; source: string | null;
   identity: Record<string, unknown>; configured_rate: number; rate: number; can_remember: boolean; message: string;
   confirmation: { checked_on: string; note: string; confirmed_at: string; confirmed_by_user_id: number } | null;
 }

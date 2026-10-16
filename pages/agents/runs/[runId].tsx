@@ -22,6 +22,7 @@ import { PaymentEvidenceSummary } from '@/components/automation/PaymentEvidenceS
 import { OrderSSTConfirmation } from '@/components/automation/OrderSSTConfirmation';
 import { SqlItemResolution } from '@/components/automation/SqlItemResolution';
 import { OrderItemPolicy } from '@/components/automation/OrderItemPolicy';
+import { OrderSourceHeadings } from '@/components/automation/OrderSourceHeadings';
 import { orderItemPolicyMode, canChangeOrderItemPolicy } from '@/utils/orderItemPolicy';
 import { setOrderItemPolicy } from '@/services/AgentsService';
 import { applySqlItemBatches } from '@/utils/sqlItemBatch';
@@ -1002,7 +1003,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                   <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2">Colour</th><th className="px-3 py-2 text-right">Source unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Source amount ({originalCurrency})</th>
                   <th className="px-3 py-2 text-right">SQL unit (MYR · {unitPlaces}dp)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="w-14 px-3 py-2"><span className="sr-only">Actions</span></th>
                 </tr></thead>
-                <tbody>{lines.map((line, index) => {
+                <tbody><OrderSourceHeadings titles={data?.source_description_titles} lines={lines} />{lines.map((line, index) => {
                   const descriptiveOnly = ['header', 'included_component'].includes(line.category || '');
                   return (
                   <tr key={index} className={`border-t border-[var(--border)] align-top ${line.category === 'header' ? 'bg-cyan-500/10 font-medium' : line.category === 'included_component' ? 'bg-[var(--muted)]/45 text-[var(--muted-foreground)]' : ''}`}>
