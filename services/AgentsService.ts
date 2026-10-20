@@ -208,7 +208,7 @@ export interface AgentRunData {
     template_sources?: Array<Record<string, unknown>>;
     [key: string]: unknown;
   } | null;
-  outsource_message_draft?: { body: string; subject?: string; filename?: string; destination?: { email_to?: string[]; group_jid?: string; group_name?: string } };
+  outsource_message_draft?: { body: string; body_source?: 'ORDER_FIELDS' | 'OPERATOR'; subject?: string; filename?: string; destination?: { email_to?: string[]; group_jid?: string; group_name?: string } };
   fulfilment_route?: 'INTERNAL' | 'OUTSOURCED' | string | null;
   forex?: AgentRunForex | null;
   conversion?: {

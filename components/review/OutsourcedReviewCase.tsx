@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
 import { OutsourceSupportingFiles } from './OutsourceSupportingFiles';
 import { returnedFilesEditable } from '@/utils/returnedAttachments';
+import { defaultOutsourceBody, outsourceSupplierContent, savedOutsourceBody } from '@/utils/outsourceRequestMessage';
 import {
   approveRun,
   attachOrderSource,
@@ -197,32 +198,6 @@ function displayValue(value: unknown) {
   return String(value);
 }
 
-function defaultOutgoingBody(run: AgentRun, data?: AgentRunData) {
-  if (data?.outsource_message_draft?.body) return data.outsource_message_draft.body;
-  const caption = String(run.source_caption || '').trim();
-  const requested = run.output_refs?.requested_document_types;
-  const invoiceOnly = Array.isArray(requested) && requested.length === 1 && requested[0] === 'invoice';
-  if (String(data?.issuing_entity?.outbound_channel || '').toUpperCase() === 'WHATSAPP') {
-    const lines = !run.source_file_s3_key
-      ? (data?.lines || []).map((line, index) => `${index + 1}. ${line.name || ''} ? Qty ${line.qty ?? ''} ? Amount ${line.amount_myr ?? ''}`).join('\n') : '';
-    return `Hi, please help arrange open invoice\n\n${caption || data?.customer || ''}${lines ? `\n\n${lines}` : ''}\n\n${invoiceOnly ? '' : 'Please help to issue DO also,\n'}Thanks`;
-  }
-  const customer = data?.customer || '';
-  const setCount = run.bundle?.total || 1;
-  return [
-    'Dear,',
-    '',
-    `Please prepare ${setCount} ${setCount === 1 ? 'set' : 'sets'} ${invoiceOnly ? 'Sales Invoice' : 'Delivery Order and Sales Invoice'} for the attached purchase order.`,
-    '',
-    caption || customer,
-    '',
-    'Thank you.',
-    '',
-    'Regards,',
-    'Bryan',
-  ].filter((line) => line != null).join('\n').trim();
-}
-
 export function OutsourcedReviewCase() {
   const router = useRouter();
   const runId = Number(router.query.runId);
@@ -252,6 +227,7 @@ export function OutsourcedReviewCase() {
   const [replyTarget, setReplyTarget] = useState<number | null>(null);
   const replyRequestId = useRef<string | null>(null);
   const messageEdited = useRef(false);
+  const bodyEdited = useRef(false);
   const dateEdited = useRef(false);
 
   const load = useCallback(async () => {
@@ -391,6 +367,7 @@ export function OutsourcedReviewCase() {
 
   useEffect(() => {
     messageEdited.current = false;
+    bodyEdited.current = false;
     dateEdited.current = false;
   }, [runId]);
 
@@ -399,13 +376,15 @@ export function OutsourcedReviewCase() {
   }, [data?.inv_date, runId]);
 
   useEffect(() => {
-    if (!run || messageEdited.current) return;
-    setSubject(outsourcedEmail?.subject || preview?.preview?.subject || `${run.source_caption?.split('\n')[0] || `INV&DO — ${partnerName}`}`);
-    setBody(data?.outsource_message_draft?.body || preview?.preview?.body || defaultOutgoingBody(run, data || undefined));
+    if (!run) return;
+    const effectiveData = { ...(data || {}), inv_date: invoiceDate || data?.inv_date };
+    if (!bodyEdited.current) setBody(savedOutsourceBody(run, effectiveData) ?? preview?.preview?.body ?? defaultOutsourceBody(run, effectiveData));
+    if (messageEdited.current) return;
+    setSubject(outsourcedEmail?.subject || data?.outsource_message_draft?.subject || preview?.preview?.subject || outsourceSupplierContent(run, effectiveData).split('\n')[0]);
     setFilename(data?.outsource_message_draft?.filename || run.source_filename || '');
     setEmailTo((data?.outsource_message_draft?.destination?.email_to || data?.issuing_entity?.email_to as string[] || []).join(', '));
     setGroupJid(data?.outsource_message_draft?.destination?.group_jid || String(data?.issuing_entity?.whatsapp_group_jid || ''));
-  }, [run, data, outsourcedEmail?.subject, partnerName, preview]);
+  }, [run, data, outsourcedEmail?.subject, partnerName, preview, invoiceDate]);
 
   useEffect(() => {
     setSelectedReplyFiles(JSON.parse(savedReplyFiles) as string[]);
@@ -511,7 +490,9 @@ export function OutsourcedReviewCase() {
   }
 
   function draftData(): AgentRunData {
-    return { ...(data || {}), inv_date: invoiceDate || undefined, order_date: invoiceDate || undefined, outsource_message_draft: { body, subject, filename, destination: whatsappChannel ? { group_jid: groupJid, group_name: groups.find((group) => group.jid === groupJid)?.name || String(data?.issuing_entity?.whatsapp_group_name || groupJid) } : { email_to: emailTo.split(/[,;]/).map((value) => value.trim()).filter(Boolean) } } };
+    const current = { ...(data || {}), inv_date: invoiceDate || undefined, order_date: invoiceDate || undefined };
+    const generated = Boolean(run && (body === defaultOutsourceBody(run, { ...current, outsource_message_draft: undefined }) || body === preview?.preview?.body));
+    return { ...current, outsource_message_draft: { body, body_source: generated ? 'ORDER_FIELDS' : 'OPERATOR', subject, filename, destination: whatsappChannel ? { group_jid: groupJid, group_name: groups.find((group) => group.jid === groupJid)?.name || String(data?.issuing_entity?.whatsapp_group_name || groupJid) } : { email_to: emailTo.split(/[,;]/).map((value) => value.trim()).filter(Boolean) } } };
   }
 
   async function sendRequest() {
@@ -686,9 +667,9 @@ export function OutsourcedReviewCase() {
                 <section className="rounded-xl border border-[#E2E7E9] bg-white px-4 py-3.5">
                   <label className="flex flex-wrap items-center gap-3 text-sm font-semibold">
                     Invoice date for this set
-                    <input type="date" aria-label="Invoice date for this set" value={invoiceDate} onChange={(event) => { dateEdited.current = true; setInvoiceDate(event.target.value); }} disabled={posted || busy} className="rounded-lg border border-[#DCE3E5] px-3 py-2 font-normal" />
+                    <input type="date" aria-label="Invoice date for this set" value={invoiceDate} onChange={(event) => { dateEdited.current = true; setPreview(null); setInvoiceDate(event.target.value); }} disabled={posted || busy} className="rounded-lg border border-[#DCE3E5] px-3 py-2 font-normal" />
                   </label>
-                  {!invoiceDate && <p className="mt-2 text-xs text-amber-800">Choose this set's date from the original file or instruction before sending.</p>}
+                  {!invoiceDate && <p className="mt-2 text-xs text-amber-800">Choose this set&apos;s date from the original file or instruction before sending.</p>}
                 </section>
 
                 <section className="overflow-hidden rounded-xl border border-[#E2E7E9] bg-white">
@@ -744,7 +725,7 @@ export function OutsourcedReviewCase() {
                   <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F2] px-[18px] py-3.5">
                     <Mail className="h-4 w-4 text-[#5E6E75]" />
                     <h2 className="flex-1 text-sm font-semibold">Outgoing message</h2>
-                    <span className="text-xs text-[#5E6E75]">Drafted by Smartdok from the instruction above — yours to edit</span>
+                    <span className="text-xs text-[#5E6E75]">Drafted from the order details — yours to edit</span>
                   </div>
                   <div className="flex flex-col gap-3.5 p-4">
                     <div className="flex flex-wrap items-center gap-2.5">
@@ -778,7 +759,7 @@ export function OutsourcedReviewCase() {
                     </label>}
                     <label className="flex flex-col gap-1.5 text-[12.5px] font-medium text-[#5E6E75]">
                       Message
-                      <textarea value={body} onChange={(event) => { messageEdited.current = true; setBody(event.target.value); }} rows={12} className="rounded-[9px] border border-[#DCE3E5] px-3.5 py-3 font-mono text-[12.5px] leading-[1.8] text-[#101619]" />
+                      <textarea value={body} onChange={(event) => { messageEdited.current = true; bodyEdited.current = true; setBody(event.target.value); }} rows={12} className="rounded-[9px] border border-[#DCE3E5] px-3.5 py-3 font-mono text-[12.5px] leading-[1.8] text-[#101619]" />
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[12.5px] text-[#5E6E75]">Attached</span>
