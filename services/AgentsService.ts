@@ -108,6 +108,9 @@ export interface WhatsAppConnection {
 
 export interface AgentRunLine {
   sql_item_mode?: "free_text" | "stock";
+  sql_stock_required?: boolean;
+  sql_stock_requirement_evidence?: string;
+  sql_allow_free_text_fallback?: boolean;
   sql_item_resolution?: { action: string; code: string };
   source_part_no?: string | null;
   source_description?: string | null;

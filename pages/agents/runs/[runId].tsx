@@ -26,6 +26,7 @@ import { OrderSourceHeadings } from '@/components/automation/OrderSourceHeadings
 import { orderItemPolicyMode, canChangeOrderItemPolicy } from '@/utils/orderItemPolicy';
 import { setOrderItemPolicy } from '@/services/AgentsService';
 import { applySqlItemBatches } from '@/utils/sqlItemBatch';
+import { selectSqlStock, sqlStockChoices } from '@/utils/sqlStockChoice';
 import { OrderBatchActions } from '@/components/automation/OrderBatchActions';
 import { startOrderBatch } from '@/services/AgentsService';
 import { requiresOrderCustomerSelection } from '@/utils/orderCustomerConfirmation';
@@ -472,13 +473,9 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
   const itemPolicyMode = orderItemPolicyMode(data, runId);
   const orderFreeText = itemPolicyMode === 'FOLLOW_PO_FREE_TEXT';
-  const stockChoices: SqlAccountStockItemProposal[] = orderFreeText ? [] : lines.flatMap((line, index) => {
-    const proposal = itemProposals.find(item => item.source_index === index);
-    if (line.sql_item_mode === "free_text" || line.match?.sku_code || (!line.use_source_part_no_as_item_code && !proposal)) return [];
-    return [{ source_index: index, code: String(proposal?.code || line.source_part_no || line.model || '').replace(/^'/, ''),
-      description: String(proposal?.description || line.more_description || line.source_description || line.name || ''),
-      uom: line.omit_document_uom ? '' : line.unit || '' }];
-  });
+  const stockChoices: SqlAccountStockItemProposal[] = sqlStockChoices(lines, itemProposals, orderFreeText);
+  const sourceStockLines = lines.filter(line => !['header', 'deduction', 'included_component'].includes(line.category || '')
+    && !line.match?.sku_code && Boolean(line.source_part_no || line.model));
 
   const act = async (fn: () => Promise<AgentRun>, message = 'Saving changes…') => {
     setBusy(true);
@@ -994,6 +991,16 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             disabled={!canReview || busy || !canChangeOrderItemPolicy(approvalRecorded, sqlAccountDelivery?.status, Boolean((run.output_refs?.sql_posting_intent as { payload?: unknown } | undefined)?.payload)) || !data?.issuing_entity?.sql_connection_id || !run.updated_at}
             onChange={mode => void act(() => setOrderItemPolicy(runId, mode, run.updated_at!, buildCorrected()), 'Saving stock handling for this Review...')} />}
 
+          {canReview && isOrderWorkflow && !isOutsourced && !orderFreeText && sourceStockLines.length > 0 && (
+            <div className="rounded border border-cyan-300 p-3 text-sm">
+              <button type="button" disabled={busy} className="rounded border px-3 py-2 disabled:opacity-50"
+                onClick={() => setLines(previous => previous.map(line => !line.match?.sku_code && (line.source_part_no || line.model) ? selectSqlStock(line) : line))}>
+                Use PO item codes for SQL matching ({sourceStockLines.length})
+              </button>
+              <p className="mt-2">Uses source codes for this Review only. Check SQL matches first; approve creating unmatched items separately.</p>
+            </div>
+          )}
+
           <div className="bg-white dark:bg-[var(--card)] rounded-lg shadow-sm border border-[var(--border)]">
             <div className="p-4 border-b border-[var(--border)] font-semibold">Extracted order lines ({orderLines.length}){headingCount > 0 && <span className="font-normal text-[var(--muted-foreground)]"> + {headingCount} section heading{headingCount === 1 ? '' : 's'}</span>}{contextCount > 0 && <span className="font-normal text-[var(--muted-foreground)]"> + {contextCount} included context row{contextCount === 1 ? '' : 's'}</span>}</div>
             <div className="overflow-x-auto">
@@ -1009,7 +1016,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                   <tr key={index} className={`border-t border-[var(--border)] align-top ${line.category === 'header' ? 'bg-cyan-500/10 font-medium' : line.category === 'included_component' ? 'bg-[var(--muted)]/45 text-[var(--muted-foreground)]' : ''}`}>
                     <td className="px-3 py-2"><div className={line.category === 'included_component' ? 'pl-4' : ''}>{line.category === 'included_component' ? '↳ ' : ''}{line.name}</div><div className="text-xs text-[var(--muted-foreground)]">{line.model}{line.category && <> · {humanLabel(line.category)}</>}</div></td>
                     <td className="px-3 py-2"><textarea disabled={!canReview} value={line.more_description || ''} onChange={(e) => updateLine(index, { more_description: e.target.value || null })} rows={4} placeholder="Continuation details" aria-label={`More description for ${line.name || `row ${index + 1}`}`} className="w-72 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" /></td>
-                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly || orderFreeText} value={(orderFreeText ? null : line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? line.source_part_no : line.match?.sku_code) || ''} aria-label={`Item code for ${line.name || `row ${index + 1}`}`} onChange={(e) => line.line_mapping_mode === 'PART_NO_DESCRIPTION' ? updateLine(index, { source_part_no: e.target.value, model: e.target.value, match: { ...line.match, matched: false, confidence: 0, sku_code: null }, sql_account_uom: undefined }) : updateMatch(index, { sku_code: e.target.value })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" />{orderFreeText && <span className="mt-1 block text-xs text-cyan-700">不进库存；原 code 保留在描述</span>}{canReview && !descriptiveOnly && !orderFreeText && <button type="button" className="mt-1 block text-xs text-cyan-700" onClick={() => updateLine(index, { sql_item_mode: 'free_text', match: { matched: false, confidence: 0, sku_code: null }, sql_item_resolution: undefined })}>{line.sql_item_mode === 'free_text' ? 'Free-text line selected' : 'Use without item code'}</button>}</td>
+                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly || orderFreeText} value={(orderFreeText ? null : (line.line_mapping_mode === 'PART_NO_DESCRIPTION' || line.use_source_part_no_as_item_code) ? line.source_part_no || line.model : line.match?.sku_code) || ''} aria-label={`Item code for ${line.name || `row ${index + 1}`}`} onChange={(e) => (line.line_mapping_mode === 'PART_NO_DESCRIPTION' || line.use_source_part_no_as_item_code) ? updateLine(index, { ...selectSqlStock(line), source_part_no: e.target.value, model: e.target.value, match: { ...line.match, matched: false, confidence: 0, sku_code: null }, sql_account_uom: undefined }) : updateMatch(index, { sku_code: e.target.value })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 disabled:opacity-50" />{orderFreeText && <span className="mt-1 block text-xs text-cyan-700">不进库存；原 code 保留在描述</span>}{canReview && !descriptiveOnly && !orderFreeText && <button type="button" className="mt-1 block text-xs text-cyan-700" onClick={() => line.sql_item_mode === 'free_text' ? updateLine(index, selectSqlStock(line)) : updateLine(index, { sql_item_mode: 'free_text', sql_stock_required: false, use_source_part_no_as_item_code: false, sql_allow_free_text_fallback: true, sql_stock_requirement_evidence: undefined, match: { ...line.match, matched: false, confidence: 0, sku_code: null }, sql_item_resolution: undefined })}>{line.sql_item_mode === 'free_text' ? 'Use SQL item' : 'Use without item code'}</button>}</td>
                     <td className="px-3 py-2">
                       <input disabled={!canReview} value={line.match?.en_description || ''} onChange={(e) => updateMatch(index, { en_description: e.target.value })} className="w-56 rounded border border-[var(--border)] bg-transparent px-2 py-1" />
                       <label className="mt-1 flex items-center gap-1 text-xs text-[var(--muted-foreground)]" title="After final approval, reuse this English for the same company, customer and source product. Uncheck for a one-off description.">

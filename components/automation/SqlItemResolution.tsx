@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { selectUnresolvedForCreation } from '@/utils/sqlItemBatch';
+import { validNewStockCode } from '@/utils/sqlStockChoice';
 import type { SqlAccountStockItemChoice, SqlAccountStockItemProposal } from '@/services/AgentsService';
 
 type Draft = SqlAccountStockItemProposal & { action: '' | SqlAccountStockItemChoice['action'] };
@@ -14,7 +15,7 @@ export function SqlItemResolution({ items, busy, onApply, onCheck }: {
   const [page, setPage] = useState(0);
   const selected = drafts.filter(item => item.action);
   const invalid = selected.some(item => !item.code.trim() || item.description.trim().length < 2 ||
-    (item.action === 'create_new' && !/^[A-Za-z0-9_/-]{2,20}$/.test(item.code.trim())));
+    (item.action === 'create_new' && !validNewStockCode(item.code)));
   const update = (index: number, change: Partial<Draft>) => setDrafts(previous => previous.map(
     item => item.source_index === index ? { ...item, ...change } : item));
   if (!items.length) return null;
@@ -40,13 +41,13 @@ export function SqlItemResolution({ items, busy, onApply, onCheck }: {
         <label className="text-sm">Decision<select aria-label={`Line ${item.source_index + 1} decision`} className="mt-1 w-full rounded border p-2 text-black" disabled={busy} value={item.action} onChange={event => update(item.source_index, { action: event.target.value as Draft['action'] })}>
           <option value="">Leave unresolved</option><option value="match_existing">Match existing SQL item</option><option value="create_new">Create new SQL item</option>
         </select></label>
-        <label className="text-sm">SQL item code<input className="mt-1 w-full rounded border p-2 text-black" disabled={busy} maxLength={item.action === 'create_new' ? 20 : 100} value={item.code} onChange={event => update(item.source_index, { code: event.target.value })} /></label>
+        <label className="text-sm">SQL item code<input className="mt-1 w-full rounded border p-2 text-black" disabled={busy} maxLength={item.action === 'create_new' ? 30 : 100} value={item.code} onChange={event => update(item.source_index, { code: event.target.value })} /></label>
         <label className="text-sm">New item description<input className="mt-1 w-full rounded border p-2 text-black" disabled={busy || item.action !== 'create_new'} maxLength={500} value={item.description} onChange={event => update(item.source_index, { description: event.target.value })} /></label>
         <label className="text-sm">Stock UOM override (optional)<input className="mt-1 w-full rounded border p-2 text-black" disabled={busy || item.action !== 'create_new'} maxLength={30} placeholder="Use SQL company default" value={item.uom || ''} onChange={event => update(item.source_index, { uom: event.target.value })} /></label>
       </div>
     </div>)}</div>
     <p className="mt-3 text-sm">{new Set(selected.filter(item => item.action === 'create_new').map(item => item.code.trim().toLowerCase())).size} unique stock codes selected for creation. Exact existing codes with the same details are reused; conflicting details stop the batch.</p>
     <button className="mt-3 rounded bg-violet-600 px-4 py-2 text-white disabled:opacity-50" disabled={busy || !selected.length || invalid} onClick={() => onApply(selected.map(item => ({ ...item, action: item.action as SqlAccountStockItemChoice['action'], code: item.code.trim(), description: item.description.trim(), uom: item.uom?.trim() })))}>Apply selected item choices ({selected.length})</button>
-    {invalid && <p className="mt-2 text-sm">Check the selected item codes and descriptions.</p>}
+    {invalid && <p className="mt-2 text-sm">New codes support 2–30 letters, digits, spaces, dots, underscores, slashes or hyphens. Check the selected codes and descriptions.</p>}
   </section>;
 }
