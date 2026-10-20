@@ -1,5 +1,6 @@
 'use client';
 import { ReviewAiCost } from './ReviewAiCost';
+import { supplierVerificationRows } from '@/utils/supplierVerificationRows';
 
 import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
@@ -93,13 +94,6 @@ const STEPS: Array<{ key: StepKey; label: string }> = [
   { key: 'post', label: 'Post to group' },
 ];
 
-const VERIFY_FIELDS = [
-  { code: 'DOCUMENT_DATE', label: 'Date' },
-  { code: 'DESCRIPTION', label: 'Description' },
-  { code: 'QUANTITY', label: 'Quantity' },
-  { code: 'UNIT_PRICE', label: 'Unit price' },
-  { code: 'GRAND_TOTAL', label: 'Amount' },
-];
 
 function money(value?: number | null) {
   if (value == null || Number.isNaN(Number(value))) return '—';
@@ -313,6 +307,9 @@ export function OutsourcedReviewCase() {
     status?: string;
     summary?: { passed?: number; failed?: number; checks?: number };
     documents?: VerificationDocument[];
+    original_source_comparisons?: Array<{ filename?: string; reason?: string; checks?: Array<{
+      category?: string; status?: string; original_evidence?: string; returned_evidence?: string; reason?: string;
+    }> }>;
     started_at?: string;
     completed_at?: string;
   } | undefined;
@@ -338,8 +335,7 @@ export function OutsourcedReviewCase() {
     || status === 'DELIVERY_PENDING'
     || (status === 'COMPLETED' && notify?.status === 'failed')
   ) && Boolean(customerWhatsAppJid);
-  const invoiceDoc = (supplierVerification?.documents || []).find((document) => String(document.kind || '').toUpperCase().includes('INVOICE'))
-    || supplierVerification?.documents?.[0];
+
   const partnerName = data?.issuing_entity?.display_name || data?.issuing_entity?.legal_name || 'partner';
   const customerGroup = notify?.group_name || notify?.source_group_name || 'source group';
   const sourceName = run?.source_filename || 'received document';
@@ -390,22 +386,9 @@ export function OutsourcedReviewCase() {
     setSelectedReplyFiles(JSON.parse(savedReplyFiles) as string[]);
   }, [run?.id, savedReplyFiles]);
 
-  const verificationRows = useMemo(() => {
-    const checks = invoiceDoc?.checks || [];
-    return VERIFY_FIELDS.map((field) => {
-      const matched = checks.filter((check) => check.code === field.code);
-      if (!matched.length) return null;
-      const failed = matched.filter((check) => check.status === 'FAILED');
-      const sample = failed[0] || matched[0];
-      return {
-        ...field,
-        expected: displayValue(sample.expected),
-        actual: displayValue(sample.actual),
-        match: failed.length === 0,
-        note: failed.length > 1 ? `${failed.length} line differences` : null,
-      };
-    }).filter(Boolean) as Array<{ code: string; label: string; expected: string; actual: string; match: boolean; note: string | null }>;
-  }, [invoiceDoc]);
+  const verificationRows = useMemo(() => supplierVerificationRows(supplierVerification).map((row) => ({
+    ...row, expected: displayValue(row.expected), actual: displayValue(row.actual),
+  })), [supplierVerification]);
 
   const failedCount = verificationRows.filter((row) => !row.match).length;
   const toLabel = emailChannel ? (outsourcedEmail?.to || preview?.preview?.route.to || previewRefs?.to || []).join(', ') : '';
@@ -880,17 +863,17 @@ export function OutsourcedReviewCase() {
                         <div className="grid grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_140px] gap-3 border-b border-[#E2E7E9] bg-[#FAFBFB] px-4 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#5E6E75]">
                           <div>Field</div>
                           <div>PO and instruction</div>
-                          <div className="truncate">{invoiceDoc?.filename || 'Returned invoice'}</div>
+                          <div className="truncate">Returned document</div>
                           <div>Result</div>
                         </div>
                         {verificationRows.map((row) => (
-                          <div key={row.code} className={`grid grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_140px] items-center gap-3 border-b border-[#F1F4F5] px-4 py-3 text-[13px] last:border-0 ${row.match ? '' : 'bg-[#FFFDF7]'}`}>
-                            <div className={row.match ? 'text-[#5E6E75]' : 'font-semibold text-[#6B4600]'}>{row.label}</div>
-                            <div className="truncate font-mono">{row.expected}</div>
-                            <div className={`truncate font-mono ${row.match ? '' : 'font-semibold text-[#6B4600]'}`}>{row.actual}</div>
+                          <div key={row.key} className={`grid grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_140px] items-center gap-3 border-b border-[#F1F4F5] px-4 py-3 text-[13px] last:border-0 ${row.match ? '' : 'bg-[#FFFDF7]'}`}>
+                            <div className={row.match ? 'text-[#5E6E75]' : 'font-semibold text-[#6B4600]'}><span className="block text-[10px] text-[#5E6E75]">{row.document}</span><span>{row.label}</span></div>
+                            <div className="whitespace-pre-wrap break-words font-mono">{row.expected}</div>
+                            <div className={`whitespace-pre-wrap break-words font-mono ${row.match ? '' : 'font-semibold text-[#6B4600]'}`}>{row.actual}</div>
                             <div className={`flex items-center gap-1.5 text-[12.5px] font-semibold ${row.match ? 'text-[#0B5C34]' : 'text-[#6B4600]'}`}>
                               {row.match ? <Check className="h-4 w-4" strokeWidth={2.4} /> : <AlertTriangle className="h-4 w-4" />}
-                              {row.match ? 'Match' : 'Differs'}
+                              {row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.match ? 'Match' : 'Differs'}
                             </div>
                           </div>
                         ))}
@@ -904,7 +887,7 @@ export function OutsourcedReviewCase() {
                       <div className="flex flex-wrap items-center gap-3">
                         <span className={`flex flex-1 items-center gap-2 text-[13px] font-semibold ${failedCount ? 'text-[#6B4600]' : 'text-[#0B5C34]'}`}>
                           {failedCount ? <AlertTriangle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                          {failedCount ? `${verificationRows.length - failedCount} of ${verificationRows.length || 5} fields match. ${failedCount} difference${failedCount === 1 ? '' : 's'} need your decision.` : 'All compared fields match.'}
+                          {failedCount ? `${failedCount} check${failedCount === 1 ? '' : 's'} need your decision. Each file and item line is shown separately.` : 'All applicable document and original PO checks match.'}
                         </span>
                         {status === 'VERIFICATION_FAILED' && !verificationOverride && (
                           <button type="button" disabled={busy} onClick={() => void act(() => skipSupplierVerification(runId), 'Recording manual acceptance…')} className="h-9 rounded-[9px] border border-[#DCE3E5] bg-white px-3.5 text-[13px] font-semibold">Accept the difference</button>
