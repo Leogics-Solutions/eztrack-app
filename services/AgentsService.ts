@@ -691,6 +691,19 @@ export async function listOutsourcedCases(page = 1, pageSize = 100): Promise<{
 }> {
   return handle(await fetch(`${BASE_URL}/agents/outsourced-cases?page=${page}&page_size=${pageSize}`, { headers: getScopedHeaders() }));
 }
+
+export type OutsourcedInboxCounts = Record<'ALL' | OutsourcedCaseState, number>;
+
+export async function listOutsourcedInbox(options: {
+  page: number; view: 'ALL' | OutsourcedCaseState; search: string; signal?: AbortSignal;
+}): Promise<{ items: import('../lib/outsourcedCaseRows').OutsourcedWorkItem[]; total: number; page: number; revision: string }> {
+  const query = new URLSearchParams({ page: String(options.page), page_size: '30', view: options.view, search: options.search });
+  return handle(await fetch(`${BASE_URL}/agents/outsourced-inbox?${query}`, { headers: getScopedHeaders(), signal: options.signal }));
+}
+
+export async function getOutsourcedInboxCounts(signal?: AbortSignal): Promise<{ counts: OutsourcedInboxCounts; revision: string }> {
+  return handle(await fetch(`${BASE_URL}/agents/outsourced-inbox/counts`, { headers: getScopedHeaders(), signal }));
+}
 export async function listPaymentFollowUps():Promise<{items:PaymentFollowUp[]}> {
   return handle(await fetch(`${BASE_URL}/agents/payment-follow-ups`,{headers:getScopedHeaders()}));
 }

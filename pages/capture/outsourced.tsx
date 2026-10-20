@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -29,10 +29,11 @@ import {
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useListReturnState } from '@/lib/useListReturnState';
 import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
-import { caseRows, caseTitle, type OutsourcedWorkItem } from '@/lib/outsourcedCaseRows';
+import { caseTitle, type OutsourcedWorkItem } from '@/lib/outsourcedCaseRows';
 import {
-  listOutsourcedCases,
-  type OutsourcedCase,
+  listOutsourcedInbox,
+  getOutsourcedInboxCounts,
+  type OutsourcedInboxCounts,
   type OutsourcedCaseState,
   type OutsourcedSet,
 } from '@/services/AgentsService';
@@ -80,20 +81,13 @@ function itemReason(item: OutsourcedWorkItem) {
   return 'Outsourced PO / DO & Invoice work that still needs a decision or is waiting on the partner.';
 }
 
-async function allOutsourcedCases() {
-  const first = await listOutsourcedCases(1, 100);
-  const cases = [...first.cases];
-  for (let page = 2; cases.length < first.total; page += 1) {
-    const next = await listOutsourcedCases(page, 100);
-    if (!next.cases.length) break;
-    cases.push(...next.cases);
-  }
-  return { cases, counts: first.counts };
-}
-
 export default function OutsourcedInboxPage() {
   const { selectedOrganizationId, isLoading: organizationLoading } = useOrganization();
-  const [cases, setCases] = useState<OutsourcedCase[]>([]);
+  const [visible, setVisible] = useState<OutsourcedWorkItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<OutsourcedInboxCounts | null>(null);
+  const [countsError, setCountsError] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -103,16 +97,29 @@ export default function OutsourcedInboxPage() {
     loading,
   );
   const { view, search, page } = listState.value;
+  const { restored, update: updateList } = listState;
 
   useEffect(() => {
-    if (organizationLoading || !selectedOrganizationId) return;
+    const timer = setTimeout(() => setAppliedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (organizationLoading || !selectedOrganizationId || !restored || appliedSearch !== search) return;
     let active = true;
-    setLoading(true);
-    setError('');
-    allOutsourcedCases()
+    const controller = new AbortController();
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError('');
+      setVisible([]);
+      return listOutsourcedInbox({ page, view, search: appliedSearch, signal: controller.signal });
+    })
       .then((data) => {
-        if (!active) return;
-        setCases(data.cases);
+        if (!active || !data) return;
+        setVisible(data.items);
+        setTotal(data.total);
+        if (page !== data.page) updateList('page', data.page);
       })
       .catch((reason) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Could not load outsourced work');
@@ -120,48 +127,26 @@ export default function OutsourcedInboxPage() {
       .finally(() => {
         if (active) setLoading(false);
       });
-    return () => { active = false; };
-  }, [organizationLoading, selectedOrganizationId, refreshKey]);
-
-  const items = useMemo(() => caseRows(cases), [cases]);
-  const counts = useMemo(() => {
-    const next = items.reduce<Record<OutsourcedCaseState, number>>((result, item) => {
-      result[item.state] += 1;
-      return result;
-    }, { ACTION: 0, WAITING: 0, COMPLETED: 0 });
-    return {
-      ALL: items.length,
-      ACTION: next.ACTION,
-      WAITING: next.WAITING,
-      COMPLETED: next.COMPLETED,
-    };
-  }, [items]);
-
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase().replace(/^#/, '');
-    return items.filter((item) => {
-      if (view !== 'ALL' && item.state !== view) return false;
-      if (!needle) return true;
-      return [
-        item.caseId,
-        item.set.run_id,
-        ...item.sets.map((set) => set.run_id),
-        item.set.label,
-        item.set.issuing_company,
-        item.set.customer,
-        item.sourceFilename,
-        item.instruction,
-      ].some((value) => String(value || '').toLowerCase().includes(needle));
-    });
-  }, [items, search, view]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+    return () => { active = false; controller.abort(); };
+  }, [organizationLoading, selectedOrganizationId, refreshKey, restored, updateList, page, view, search, appliedSearch]);
 
   useEffect(() => {
-    if (page !== safePage) listState.update('page', safePage);
-  }, [listState.update, page, safePage]);
+    if (organizationLoading || !selectedOrganizationId) return;
+    let active = true;
+    const controller = new AbortController();
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setCounts(null);
+      setCountsError('');
+      return getOutsourcedInboxCounts(controller.signal);
+    })
+      .then((data) => { if (active && data) setCounts(data.counts); })
+      .catch(() => { if (active) setCountsError('Counts could not be loaded. Refresh to retry.'); });
+    return () => { active = false; controller.abort(); };
+  }, [organizationLoading, selectedOrganizationId, refreshKey]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
 
   const emptyCopy = view === 'WAITING'
     ? ['Nothing is waiting on a partner', 'Approved requests stay here until the DO and invoice come back.']
@@ -216,11 +201,12 @@ export default function OutsourcedInboxPage() {
                   </span>
                   <span className="font-medium">{tab.label}</span>
                 </span>
-                <span className="text-2xl font-bold">{counts[tab.countKey]}</span>
+                <span className="text-2xl font-bold">{counts?.[tab.countKey] ?? '—'}</span>
               </button>
             );
           })}
         </div>
+        {countsError && <p role="alert" className="text-sm text-amber-700">{countsError}</p>}
 
         <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <div className="grid gap-3 border-b border-[var(--border)] p-4 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -242,7 +228,7 @@ export default function OutsourcedInboxPage() {
             <p role="alert" className="m-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">{error}</p>
           )}
 
-          {loading && items.length === 0 ? (
+          {loading ? (
             <p role="status" className="p-14 text-center text-sm text-[var(--muted-foreground)]">
               <LoaderCircle className="mx-auto mb-3 h-6 w-6 animate-spin" />
               Loading outsourced inbox…
@@ -306,10 +292,10 @@ export default function OutsourcedInboxPage() {
             </div>
           )}
 
-          {filtered.length > 0 && (
+          {total > 0 && (
             <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <span className="text-[var(--muted-foreground)]">
-                Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, total)} of {total}
               </span>
               <div className="flex items-center gap-2">
                 <button
