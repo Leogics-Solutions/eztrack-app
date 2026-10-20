@@ -972,6 +972,25 @@ export async function attachOrderSource(runId: number, file: File): Promise<{ ru
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/source-attachment`, { method: 'POST', headers, body: form }));
 }
 
+export interface OutsourceSupportingFile {
+  file_key: string; filename: string; size: number; sha256: string; content_type: string;
+}
+
+export async function addOutsourceSupportingFiles(runId: number, files: File[], expectedFileKeys: string[]): Promise<{ files: OutsourceSupportingFile[] }> {
+  const form = new FormData();
+  files.forEach(file => form.append('files', file));
+  form.append('expected_file_keys', JSON.stringify(expectedFileKeys));
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/outsource-supporting-files`, {
+    method: 'POST', headers: getScopedHeadersForFormData(), body: form,
+  }));
+}
+
+export async function removeOutsourceSupportingFile(runId: number, fileKey: string, expectedFileKeys: string[]): Promise<{ files: OutsourceSupportingFile[] }> {
+  return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/outsource-supporting-files/remove`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, expected_file_keys: expectedFileKeys }),
+  }));
+}
+
 export async function renameReturnedFile(runId: number, fileKey: string, filename: string): Promise<{ filename: string }> {
   return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/returned-filename`, {
     method: 'PATCH', headers: getScopedHeaders(), body: JSON.stringify({ file_key: fileKey, filename }),

@@ -3,6 +3,7 @@ import { ReviewAiCost } from './ReviewAiCost';
 
 import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
+import { OutsourceSupportingFiles } from './OutsourceSupportingFiles';
 import { returnedFilesEditable } from '@/utils/returnedAttachments';
 import {
   approveRun,
@@ -29,6 +30,7 @@ import {
   type CaseEmailConversation,
   type AgentRunData,
   type OrderBatchJob,
+  type OutsourceSupportingFile,
 } from '@/services/AgentsService';
 import {
   AlertTriangle,
@@ -430,6 +432,7 @@ export function OutsourcedReviewCase() {
   const toLabel = emailChannel ? (outsourcedEmail?.to || preview?.preview?.route.to || previewRefs?.to || []).join(', ') : '';
   const whatsappTarget = outsourcedWhatsApp?.group_name || previewRefs?.group_name || partnerName;
   const attachmentName = preview?.preview?.files[0]?.filename || previewRefs?.attachment_filename || sourceName;
+  const supportingFiles = (refs.outsource_supporting_files || []) as OutsourceSupportingFile[];
   const opened = formatMalaysiaDateTime(run?.received_at);
   const days = daysOpen(run?.received_at);
 
@@ -786,6 +789,11 @@ export function OutsourcedReviewCase() {
                         <button type="button" disabled={busy} onClick={() => void act(ensurePreview, 'Loading the partner email…')} className="text-[12.5px] font-semibold text-[#1C6C87]">Load editable email</button>
                       )}
                     </div>
+                    <OutsourceSupportingFiles key={runId} runId={runId} files={supportingFiles} busy={busy}
+                      editable={!alreadySent && !run?.approved_at && !refs.order_batch_active && ['PENDING_REVIEW', 'DRAFT_GENERATED'].includes(status)}
+                      onBusyChange={value => { setBusy(value);setBusyMessage(value ? 'Updating supporting attachments…' : null); }}
+                      onChanged={async () => { setPreview(null);await load(); }}
+                      onOpen={file => void openFile(file)} />
                     <div className="flex flex-wrap items-center gap-3 rounded-[9px] bg-[#F5F7F7] px-4 py-3">
                       <AlertTriangle className="h-4 w-4 shrink-0 text-[#5E6E75]" />
                       <p className="min-w-0 flex-1 text-[12.5px] text-[#3C4C53]"><strong>Nothing goes out until you press Send.</strong> {whatsappChannel && emailChannel ? 'Sending posts to the configured WhatsApp group and email at the same time.' : whatsappChannel ? 'Sending posts to the partner WhatsApp group.' : 'Sending emails the partner and tracks the thread.'}</p>
