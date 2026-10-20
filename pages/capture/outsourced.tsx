@@ -29,7 +29,7 @@ import {
 import { useOrganization } from '@/lib/OrganizationContext';
 import { useListReturnState } from '@/lib/useListReturnState';
 import { formatMalaysiaDateTime } from '@/lib/malaysiaDateTime';
-import { caseTitle, type OutsourcedWorkItem } from '@/lib/outsourcedCaseRows';
+import { caseTitle, caseAmount, type OutsourcedWorkItem } from '@/lib/outsourcedCaseRows';
 import {
   listOutsourcedInbox,
   getOutsourcedInboxCounts,
@@ -59,11 +59,6 @@ function sourceIcon(source?: string | null) {
   if (value.includes('GMAIL') || value.includes('EMAIL')) return <Mail {...props} />;
   if (value.includes('WHATSAPP') || value.includes('WECHAT')) return <MessageCircle {...props} />;
   return <Upload {...props} />;
-}
-
-function money(value?: number | null, currency?: string | null) {
-  if (value == null) return null;
-  return `${currency || 'RM'} ${value.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 
@@ -243,12 +238,12 @@ export default function OutsourcedInboxPage() {
             <div className="divide-y divide-[var(--border)]">
               {visible.map((item) => {
                 const destination = destinationOf(item.set);
-                const amount = money(item.sets.reduce((sum, set) => sum + (set.amount || 0), 0), item.set.currency);
+                const amount = caseAmount(item);
                 const updated = formatMalaysiaDateTime(item.set.updated_at || item.set.received_at);
                 const statusDefinition = resolveAutomationStatus(item.set.status, destination);
                 return (
                   <article
-                    key={item.set.run_id}
+                    key={item.caseId}
                     className="grid gap-4 p-4 transition hover:bg-[var(--muted)]/40 lg:grid-cols-[44px_minmax(0,1fr)_190px_150px] lg:items-center"
                   >
                     <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-700 dark:text-cyan-300">
@@ -265,7 +260,7 @@ export default function OutsourcedInboxPage() {
                           Case #{item.caseId}
                         </span>
                       </div>
-                      {item.sets.length > 1 && <div className="mt-2 flex flex-wrap gap-2">{item.sets.map((set) => <Link key={set.run_id} href={`/review/outsourced/${set.run_id}`} className="rounded border border-[var(--border)] px-2 py-1 text-xs">#{set.run_id} · {set.status.replaceAll('_', ' ')}</Link>)}</div>}
+                      {item.sets.length > 1 && <div className="mt-2 flex flex-wrap gap-2">{item.sets.map((set) => <Link key={set.run_id} href={`/review/outsourced/${set.run_id}`} className="rounded border border-[var(--border)] px-2 py-1 text-xs">#{set.run_id}</Link>)}</div>}
                       <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                         {[item.set.issuing_company || 'Issuing company needs confirmation', item.set.customer || 'Customer needs confirmation', item.set.date, item.sourceFilename].filter(Boolean).join(' · ')}
                       </p>
