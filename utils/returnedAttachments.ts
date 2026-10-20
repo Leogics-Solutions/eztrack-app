@@ -12,3 +12,9 @@ export function returnedFilesError(files: { name: string; size: number }[], exis
   }
   return null;
 }
+
+export function returnedReplySelection(documents: Array<{ file_key: string; source_file_key?: string }>, saved?: string[]) {
+  // The retained set assignment is authoritative after automatic routing.
+  // Old checkbox metadata may still refer to the whole supplier reply.
+  return documents.length ? documents.map(file => file.source_file_key || file.file_key) : saved || [];
+}

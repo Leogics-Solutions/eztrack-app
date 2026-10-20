@@ -5,7 +5,7 @@ import { supplierVerificationRows } from '@/utils/supplierVerificationRows';
 import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
 import { OutsourceSupportingFiles } from './OutsourceSupportingFiles';
-import { returnedFilesEditable } from '@/utils/returnedAttachments';
+import { returnedFilesEditable, returnedReplySelection } from '@/utils/returnedAttachments';
 import { defaultOutsourceBody, outsourceSupplierContent, savedOutsourceBody } from '@/utils/outsourceRequestMessage';
 import {
   approveRun,
@@ -63,6 +63,7 @@ type StepKey = 'received' | 'sent' | 'returned' | 'check' | 'post';
 interface ExternalDocument {
   filename: string;
   file_key: string;
+  source_file_key?: string;
   kind?: string;
   content_type?: string;
 }
@@ -359,7 +360,7 @@ export function OutsourcedReviewCase() {
     const id = Number(data?.issuing_entity?.whatsapp_connection_id);
     if (id && whatsappChannel) void listWhatsAppGroups(id).then(setGroups).catch(() => setGroups([]));
   }, [data?.issuing_entity?.whatsapp_connection_id, whatsappChannel]);
-  const savedReplyFiles = JSON.stringify(refs.outsource_batch_selected_files || []);
+  const savedReplyFiles = JSON.stringify(returnedReplySelection(externalDocuments, refs.outsource_batch_selected_files as string[] | undefined));
 
   useEffect(() => {
     messageEdited.current = false;
