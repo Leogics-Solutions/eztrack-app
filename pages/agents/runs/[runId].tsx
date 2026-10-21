@@ -44,7 +44,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { ArrowLeft, CheckCircle2, AlertTriangle, FileText, Send, Download, FileSpreadsheet, Image as ImageIcon, Clock3, History, Inbox, ShieldCheck, Plus, Trash2, X, LoaderCircle, RefreshCw, UploadCloud } from 'lucide-react';
 import {
-  getRun, getRunSource, getRunFile, reviewRun, reanalyzeRun, refreshPaymentPreview, addPaymentEvidence, generateRun, updateRunDocumentNumbers, approveRun, retryRunDelivery, sendRunToWhatsApp, verifySupplierDocuments, skipSupplierVerification, repushRunToSqlAccount, createSqlAccountCustomerAndRepush, resolveSqlAccountItems, checkSqlAccountItems, rejectRun, listRuns, combineRuns,
+  getRun, getRunSource, getRunFile, downloadOrderDocumentsZip, reviewRun, reanalyzeRun, refreshPaymentPreview, addPaymentEvidence, generateRun, updateRunDocumentNumbers, approveRun, retryRunDelivery, sendRunToWhatsApp, verifySupplierDocuments, skipSupplierVerification, repushRunToSqlAccount, createSqlAccountCustomerAndRepush, resolveSqlAccountItems, checkSqlAccountItems, rejectRun, listRuns, combineRuns,
   type AgentRun, type AgentRunData, type AgentRunForex, type AgentRunLine, type SqlAccountCustomerProposal, type SqlAccountStockItemProposal,
   type ReviewFieldDefinition, type AgentRunListItem,
 } from '@/services/AgentsService';
@@ -769,6 +769,10 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                 </span>
               </div>
             )}
+            {isOrderWorkflow && !isOutsourced && (generatedDocuments.length > 0 || Boolean(run.output_refs?.sql_official_documents)) && <button type="button" disabled={busy} onClick={async () => {
+              setBusy(true);setBusyMessage('Preparing DO/INV ZIP…');setError(null);
+              try { await downloadOrderDocumentsZip(runId); } catch (e) { setError((e as Error).message); } finally { setBusy(false);setBusyMessage(null); }
+            }} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download className="h-4 w-4" /> Download DO/INV ZIP{(bundle?.total || 0) > 1 ? ' · all sets' : ''}</button>}
             {generatedDocuments.length > 0 && <div className="mt-4 rounded-lg border border-slate-300 p-3"><p className="text-sm font-semibold">Generated documents</p><div className="mt-2 flex flex-wrap gap-2">{generatedDocuments.map((file) => <button key={file.file_key} type="button" disabled={busy} onClick={() => void downloadExternalDocument(file)} className="rounded border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800">{file.filename}</button>)}</div></div>}
             {salesTax?.customer_group && <div className={`mt-3 rounded-md border p-3 text-sm ${salesTax.applied ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100' : 'border-slate-300 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'}`}><b>SQL customer group {salesTax.customer_group}:</b> {salesTax.applied ? `${salesTax.rate || 0}% SST applied to the sales lines.` : 'No configured SST rule applied.'}</div>}
             {conversion?.status === 'PENDING_RATE' && (

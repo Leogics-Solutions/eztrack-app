@@ -573,6 +573,23 @@ export async function getRunSource(runId: number): Promise<Blob> {
   return res.blob();
 }
 
+/** Download retained DO/INV files for every set; this GET never sends or posts. */
+export async function downloadOrderDocumentsZip(runId: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/agents/runs/${runId}/document-zip`, { headers: getScopedHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.detail || 'Could not download the DO/INV ZIP.');
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Review-${runId}-DO-INV.zip`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function getRunFile(runId: number, fileKey: string): Promise<Blob> {
   const query = new URLSearchParams({ file_key: fileKey });
   const res = await fetch(`${BASE_URL}/agents/runs/${runId}/file?${query.toString()}`, { headers: getScopedHeaders() });

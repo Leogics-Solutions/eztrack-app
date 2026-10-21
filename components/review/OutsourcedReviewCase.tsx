@@ -18,6 +18,7 @@ import {
   getRun,
   getCaseEmailConversation,
   getRunFile,
+  downloadOrderDocumentsZip,
   getRunSource,
   previewOrderBatchEmail,
   rejectRun,
@@ -670,6 +671,7 @@ export function OutsourcedReviewCase() {
                   <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F2] px-[18px] py-3.5">
                     {hasReturned ? <Check className="h-4 w-4 text-[#0B5C34]" strokeWidth={2.4} /> : <FileText className="h-4 w-4 text-[#5E6E75]" />}
                     <h2 className="flex-1 text-sm font-semibold">DO / Invoice returned by {partnerName}</h2>
+                    {hasReturned && <button type="button" disabled={busy || verifyingCase || verificationSystemError || !(posted || status === 'VERIFICATION_PASSED' || verificationOverride)} onClick={() => void act(() => downloadOrderDocumentsZip(runId), 'Preparing DO/INV ZIP…')} className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE3E5] px-3 py-1.5 text-xs font-semibold"><Download className="h-3.5 w-3.5" /> Download verified ZIP</button>}
                     <span className="text-xs text-[#5E6E75]">
                       {hasReturned ? `${externalDocuments.length} file${externalDocuments.length === 1 ? '' : 's'}` : 'Nothing back yet'}
                       {outsourcedEmail?.sent_at ? ` · ${formatMalaysiaShort(outsourcedEmail.sent_at)} · email` : ''}
