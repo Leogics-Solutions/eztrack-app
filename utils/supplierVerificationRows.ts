@@ -10,7 +10,7 @@ export function supplierVerificationRows(verification?: Verification) {
       rows.push({ key:`document-${documentIndex}-${checkIndex}`, document:document.document_number || document.filename || 'Returned file',
         label:`${LABELS[check.code || ''] || check.label || check.code || 'Check'}${check.line ? ` · line ${check.line}` : ''}`,
         expected:check.expected, actual:check.actual, match:['PASSED','NOT_APPLICABLE'].includes(check.status || ''),
-        status:check.status || 'FAILED', note:undefined as string | undefined });
+        status:check.status || 'FAILED', systemError:check.code === 'VERIFICATION_SYSTEM_ERROR', note:undefined as string | undefined });
     }
   }
   for (const [fileIndex, file] of (verification?.original_source_comparisons || []).entries()) {
@@ -19,7 +19,7 @@ export function supplierVerificationRows(verification?: Verification) {
       rows.push({ key:`source-${fileIndex}-${checkIndex}`, document:file.filename || 'Original PO',
         label:`Original PO · ${(check.category || 'Evidence').replaceAll('_',' ').toLowerCase()}`,
         expected:check.original_evidence, actual:check.returned_evidence,
-        match:['PASSED','NOT_APPLICABLE'].includes(check.status || ''), status:check.status || 'FAILED', note:check.reason });
+        match:['PASSED','NOT_APPLICABLE'].includes(check.status || ''), status:check.status || 'FAILED', systemError:!file.checks?.length, note:check.reason });
     }
   }
   return rows;

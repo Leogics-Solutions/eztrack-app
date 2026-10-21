@@ -1,5 +1,6 @@
 'use client';
 import { ReviewAiCost } from './ReviewAiCost';
+import { sourceAmountPrecisionWarnings } from '@/utils/sourceAmountPrecision';
 import { supplierVerificationRows } from '@/utils/supplierVerificationRows';
 
 import { AppLayout } from '@/components/layout';
@@ -306,6 +307,8 @@ export function OutsourcedReviewCase() {
   const externalDocuments = (refs.external_documents as ExternalDocument[] | undefined) || [];
   const supplierVerification = refs.supplier_document_verification as {
     status?: string;
+    failure_type?: string;
+    system_errors?: Array<{ message?: string }>;
     summary?: { passed?: number; failed?: number; checks?: number };
     documents?: VerificationDocument[];
     original_source_comparisons?: Array<{ filename?: string; reason?: string; checks?: Array<{
@@ -314,6 +317,8 @@ export function OutsourcedReviewCase() {
     started_at?: string;
     completed_at?: string;
   } | undefined;
+  const verificationSystemError = supplierVerification?.failure_type === 'SYSTEM_ERROR' || Boolean(supplierVerification?.system_errors?.length);
+  const precisionWarnings = useMemo(() => sourceAmountPrecisionWarnings(data), [data]);
   const notify = refs.notify as { status?: string; group_name?: string; group_jid?: string; source_group_name?: string; source_channel_ref?: string } | undefined;
   const batchReply = refs.outsource_batch_reply as { anchor_run_id: number; files: { file_key: string; filename?: string }[] } | undefined;
   const outboundChannel = String(data?.issuing_entity?.outbound_channel || '').toUpperCase();
@@ -335,7 +340,7 @@ export function OutsourcedReviewCase() {
     || (status === 'VERIFICATION_FAILED' && verificationOverride)
     || status === 'DELIVERY_PENDING'
     || (status === 'COMPLETED' && notify?.status === 'failed')
-  ) && Boolean(customerWhatsAppJid);
+  ) && Boolean(customerWhatsAppJid) && !verificationSystemError;
 
   const partnerName = data?.issuing_entity?.display_name || data?.issuing_entity?.legal_name || 'partner';
   const customerGroup = notify?.group_name || notify?.source_group_name || 'source group';
@@ -588,6 +593,11 @@ export function OutsourcedReviewCase() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            {precisionWarnings.length > 0 && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Source amounts have more than 2 decimal places</p>
+              <p>Confirm how these amounts should be rounded before sending. Rounding each line can change the invoice total. Original amounts are kept.</p>
+              <ul className="mt-2 list-disc pl-5">{precisionWarnings.map((row) => <li key={row.line}>Line {row.line}: {row.name} — {row.amount}</li>)}</ul>
+            </div>}
           <div className="mx-auto flex max-w-[1180px] flex-col gap-4">
             {loading && (
               <p className="flex items-center gap-2 text-sm text-[#5E6E75]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading this outsourced review…</p>
@@ -842,7 +852,7 @@ export function OutsourcedReviewCase() {
                     <RefreshCw className="h-4 w-4 text-[#144F63]" />
                     <h2 className="flex-1 text-sm font-semibold text-[#144F63]">AI verification</h2>
                     <span className="text-xs text-[#2C5A6B]">
-                      {supplierVerification ? `${supplierVerification.summary?.passed || 0} passed · ${supplierVerification.summary?.failed || 0} failed` : 'Not run yet'}
+                      {verificationSystemError ? 'System error · verification incomplete' : supplierVerification ? `${supplierVerification.summary?.passed || 0} passed · ${supplierVerification.summary?.failed || 0} failed` : 'Not run yet'}
                     </span>
                     <button
                       type="button"
@@ -856,6 +866,7 @@ export function OutsourcedReviewCase() {
                   </div>
                   <div className="flex flex-col gap-3.5 p-4">
                     <p className="text-[12.5px] text-[#5E6E75]">Checks the returned files against the original PO and instructions. Each set keeps its own result.</p>
+                    {verificationSystemError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">System error: verification could not finish reading the selected files. This does not mean the supplier failed to return them. Run verification again; contact support if it persists.</p>}
                     {verifyingCase && <p role="status" className="text-sm text-[#144F63]">Checking {caseJob?.result?.current_review ? `Review #${caseJob.result.current_review}` : 'the case'} · {caseJob?.result?.items?.length || 0} / {caseJob?.run_ids?.length || setCount} sets finished. You can leave this page.</p>}
                     {(caseJob?.result?.items?.length || 0) > 1 && <div className="flex flex-wrap gap-2">{caseJob?.result?.items?.map((item) => <Link key={item.run_id} href={`/review/outsourced/${item.run_id}`} title={item.reason} className={`rounded border px-2 py-1 text-xs ${item.status === 'FAILED' ? 'border-red-300 text-red-800' : 'border-emerald-300 text-emerald-800'}`}>#{item.run_id} · {item.status}</Link>)}</div>}
                     {status === 'AI_VERIFYING' && <p className="flex items-center gap-2 text-sm text-orange-800"><LoaderCircle className="h-4 w-4 animate-spin" /> Checking supplier, customer, document numbers, lines, prices and totals…</p>}
@@ -874,7 +885,7 @@ export function OutsourcedReviewCase() {
                             <div className={`whitespace-pre-wrap break-words font-mono ${row.match ? '' : 'font-semibold text-[#6B4600]'}`}>{row.actual}</div>
                             <div className={`flex items-center gap-1.5 text-[12.5px] font-semibold ${row.match ? 'text-[#0B5C34]' : 'text-[#6B4600]'}`}>
                               {row.match ? <Check className="h-4 w-4" strokeWidth={2.4} /> : <AlertTriangle className="h-4 w-4" />}
-                              {row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.match ? 'Match' : 'Differs'}
+                              {row.systemError ? 'System error' : row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.match ? 'Match' : 'Differs'}
                             </div>
                           </div>
                         ))}
@@ -888,9 +899,9 @@ export function OutsourcedReviewCase() {
                       <div className="flex flex-wrap items-center gap-3">
                         <span className={`flex flex-1 items-center gap-2 text-[13px] font-semibold ${failedCount ? 'text-[#6B4600]' : 'text-[#0B5C34]'}`}>
                           {failedCount ? <AlertTriangle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                          {failedCount ? `${failedCount} check${failedCount === 1 ? '' : 's'} need your decision. Each file and item line is shown separately.` : 'All applicable document and original PO checks match.'}
+                          {verificationSystemError ? 'Verification is incomplete due to a system error. Retry verification before accepting differences or sending.' : failedCount ? `${failedCount} check${failedCount === 1 ? '' : 's'} need your decision. Each file and item line is shown separately.` : 'All applicable document and original PO checks match.'}
                         </span>
-                        {status === 'VERIFICATION_FAILED' && !verificationOverride && (
+                        {status === 'VERIFICATION_FAILED' && !verificationOverride && !verificationSystemError && (
                           <button type="button" disabled={busy} onClick={() => void act(() => skipSupplierVerification(runId), 'Recording manual acceptance…')} className="h-9 rounded-[9px] border border-[#DCE3E5] bg-white px-3.5 text-[13px] font-semibold">Accept the difference</button>
                         )}
                       </div>
@@ -907,7 +918,7 @@ export function OutsourcedReviewCase() {
           <div className="min-w-0 leading-snug">
             <p className="text-[12.5px] text-[#3C4C53]">Automation run <span className="font-mono font-semibold">#{runId}</span> · Customer PO to DO & Invoice</p>
             <p className="text-[11.5px] text-[#6B4600]">
-              {failedCount > 0 && !verificationOverride
+              {verificationSystemError ? 'System error: retry verification before posting.' : failedCount > 0 && !verificationOverride
                 ? `${failedCount} verification difference${failedCount === 1 ? '' : 's'} to settle before this can be posted`
                 : canPost
                   ? `Ready to post to ${customerGroup}`

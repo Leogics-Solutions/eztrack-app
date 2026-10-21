@@ -28,3 +28,9 @@ test('unavailable evidence never renders as a match', () => {
   assert.equal(rows.length,2);
   assert.equal(rows.filter(r=>r.match).length,0);
 });
+
+
+test('a system read error is explicit and never rendered as a document mismatch', () => {
+ const rows=supplierVerificationRows({documents:[{filename:'inv.pdf',checks:[{code:'VERIFICATION_SYSTEM_ERROR',label:'Verification system error',status:'FAILED',actual:'Binding unavailable'}]}]});
+ assert.equal(rows[0].systemError,true);assert.equal(rows[0].match,false);
+});
