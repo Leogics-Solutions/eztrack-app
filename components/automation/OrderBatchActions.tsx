@@ -106,6 +106,7 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
     </div>}
     {!outsourced && editable && <p className="mt-2 text-sm">One submission authorizes preparation and SQL posting. No separate Approve click is needed. Each set must pass validation; existing SQL documents are retained. 点击即提交准备及过账，无需再按 Approve。</p>}
     {!outsourced && total > 1 && <p className="mt-2 text-sm">SQL processes queued sets one at a time. A blocked set shows its own error; you can leave this page and return to check the results.</p>}
+    {!outsourced && total > 1 && <p className="mt-2 text-sm">Each issuing company’s sets are delivered together in one ZIP only after all SQL documents and PDFs are ready. If a set fails, none of that company’s sets are sent until it is resolved. 同一公司全部套数完成后才统一发 ZIP。</p>}
     {!outsourced && editable && batchMinutes > 0 && total > 1 && <label className="mt-2 block text-sm">Processing time
         <select aria-label="SQL processing time" value={running ? job?.dispatch_mode || dispatchMode : dispatchMode} disabled={busy || running} onChange={e => setDispatchMode(e.target.value as typeof dispatchMode)} className="ml-2 rounded border bg-[var(--card)] p-2">
           <option value="BATCH">Next batch (every {batchMinutes} minutes)</option>

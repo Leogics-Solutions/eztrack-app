@@ -290,7 +290,18 @@ export interface AgentRunEvent {
   created_at?: string | null;
 }
 
+export interface InternalCaseDeliverySummary {
+  status: string;
+  total: number;
+  ready_count?: number;
+  run_ids: number[];
+  filename?: string;
+  note?: string | null;
+  blockers?: { run_id: number | null; set_index?: number; label?: string | null; reason: string }[];
+}
+
 export interface AgentRunBundle {
+  internal_delivery?: InternalCaseDeliverySummary | null;
   total: number;
   index: number | null;
   run_ids: number[];

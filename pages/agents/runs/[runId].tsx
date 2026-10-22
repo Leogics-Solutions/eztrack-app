@@ -1,4 +1,5 @@
 'use client';
+import { InternalCaseDelivery } from '@/components/review/InternalCaseDelivery';
 import { ReviewAiCost } from '@/components/review/ReviewAiCost';
 import { PaymentInvoiceBalance } from '@/components/automation/PaymentInvoiceBalance';
 import PaymentReceiptDate, { type ReceiptDateFields } from '@/components/automation/PaymentReceiptDate';
@@ -769,6 +770,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
                 </span>
               </div>
             )}
+            {isOrderWorkflow && !isOutsourced && <InternalCaseDelivery state={bundle?.internal_delivery || run.output_refs?.internal_case_delivery} />}
             {isOrderWorkflow && !isOutsourced && (generatedDocuments.length > 0 || Boolean(run.output_refs?.sql_official_documents)) && <button type="button" disabled={busy} onClick={async () => {
               setBusy(true);setBusyMessage('Preparing DO/INV ZIP…');setError(null);
               try { await downloadOrderDocumentsZip(runId); } catch (e) { setError((e as Error).message); } finally { setBusy(false);setBusyMessage(null); }
@@ -1161,7 +1163,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             {status === 'DELIVERY_PENDING' && (
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-2 text-amber-800"><AlertTriangle className="h-4 w-4" /> Accounting documents were created, but the customer PDFs have not been returned to WhatsApp yet.</span>
-                <button disabled={busy} onClick={() => act(() => sendRunToWhatsApp(runId))} className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"><Send className="h-4 w-4" /> Prepare PDFs & send</button>
+                <button disabled={busy} onClick={() => act(() => sendRunToWhatsApp(runId))} className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"><Send className="h-4 w-4" /> {bundle?.internal_delivery ? 'Prepare PDFs & check whole ZIP' : 'Prepare PDFs & send'}</button>
               </div>
             )}
             {status === 'COMPLETED' && whatsappDelivery?.status === 'failed' && (
