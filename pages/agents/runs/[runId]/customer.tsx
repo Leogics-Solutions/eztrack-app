@@ -33,7 +33,7 @@ export default function CustomerMaintenance() {
   const [operation, setOperation] = useState<'CREATE' | 'UPDATE'>('CREATE'); const [code, setCode] = useState('');
   const [search, setSearch] = useState(''); const [preview, setPreview] = useState<CustomerPreview>();
   const [result, setResult] = useState<CustomerResult>(); const [confirmed, setConfirmed] = useState(false);
-  const [resume, setResume] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [resume, setResume] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [uncertain, setUncertain] = useState(false); const serial = useRef(0);
   const load = useCallback(async (connectionId?: number, selectedCode = '', term = '') => {
     const n = ++serial.current; setBusy(true); setError('');
