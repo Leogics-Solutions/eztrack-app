@@ -34,3 +34,12 @@ test('a system read error is explicit and never rendered as a document mismatch'
  const rows=supplierVerificationRows({documents:[{filename:'inv.pdf',checks:[{code:'VERIFICATION_SYSTEM_ERROR',label:'Verification system error',status:'FAILED',actual:'Binding unavailable'}]}]});
  assert.equal(rows[0].systemError,true);assert.equal(rows[0].match,false);
 });
+
+test('the same DO and INV number remains distinguishable and unpriced DO money is not a difference', () => {
+ const rows=supplierVerificationRows({documents:[
+  {document_number:'SM19',kind:'DELIVERY_ORDER',checks:[{code:'UNIT_PRICE',status:'NOT_APPLICABLE',actual:'Not printed'}]},
+  {document_number:'SM19',document_type:'INVOICE',checks:[{code:'UNIT_PRICE',status:'FAILED',expected:58.75,actual:59}]}]});
+ assert.equal(rows[0].document,'DO · SM19');assert.equal(rows[0].match,true);
+ assert.equal(rows[0].status,'NOT_APPLICABLE');
+ assert.equal(rows[1].document,'INV · SM19');assert.equal(rows[1].match,false);
+});
