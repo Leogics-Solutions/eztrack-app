@@ -603,7 +603,7 @@ export function OutsourcedReviewCase() {
             {loading && (
               <p className="flex items-center gap-2 text-sm text-[#5E6E75]"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading this outsourced review…</p>
             )}
-            {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+
             {busy && busyMessage && (
               <div role="status" className="flex items-center gap-2 rounded-xl border border-[#BCD8E2] bg-[#F4F9FB] p-3 text-sm text-[#144F63]">
                 <LoaderCircle className="h-4 w-4 animate-spin" /> {busyMessage}
@@ -917,6 +917,15 @@ export function OutsourcedReviewCase() {
         </div>
 
         <footer className="flex shrink-0 flex-wrap items-center gap-3 border-t border-[#E2E7E9] bg-white px-4 py-3 sm:px-6">
+          {(error || run?.error_message) && (
+            <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+              <p className="font-semibold">Action could not be completed</p>
+              <p className="whitespace-pre-wrap break-words">{error || run?.error_message}</p>
+              {/WhatsApp routing.*incomplete|unavailable WhatsApp connection/i.test(error || run?.error_message || '') && (
+                <p className="mt-1">Select the connected WhatsApp account and supplier group in the Business Entity Registry, refresh this Review, then retry.</p>
+              )}
+            </div>
+          )}
           <div className="min-w-0 leading-snug">
             <p className="text-[12.5px] text-[#3C4C53]">Automation run <span className="font-mono font-semibold">#{runId}</span> · Customer PO to DO & Invoice</p>
             <p className="text-[11.5px] text-[#6B4600]">
