@@ -9,8 +9,8 @@ const fields: { key: Exclude<keyof CustomerForm, 'address_lines'>; label: string
   { key: 'company_name', label: 'Company name', max: 100 }, { key: 'registration_no', label: 'Reg. No (New)', max: 20 },
   { key: 'branch_name', label: 'Branch name', max: 100 }, { key: 'country', label: 'Country code (MY = Malaysia)', max: 2 },
   { key: 'postcode', label: 'PostCode', max: 10 }, { key: 'city', label: 'City', max: 50 }, { key: 'state', label: 'State', max: 50 },
-  { key: 'attention', label: 'Attention (optional)', max: 100 }, { key: 'phone', label: 'Phone', max: 30 }, { key: 'mobile', label: 'Mobile', max: 30 },
-  { key: 'email', label: 'Email', max: 100 }, { key: 'agent', label: 'Agent', max: 20 }, { key: 'tin', label: 'TIN (optional)', max: 14 },
+  { key: 'attention', label: 'Attention (optional)', max: 100 }, { key: 'phone', label: 'Phone (optional)', max: 30 }, { key: 'mobile', label: 'Mobile (optional)', max: 30 },
+  { key: 'email', label: 'Email (optional)', max: 100 }, { key: 'agent', label: 'Agent', max: 20 }, { key: 'tin', label: 'TIN (optional)', max: 14 },
 ];
 const input = 'mt-1 w-full rounded border border-[var(--border)] bg-[var(--card)] p-2';
 const button = 'rounded border border-[var(--border)] px-4 py-2 disabled:opacity-50';
@@ -101,8 +101,8 @@ export default function CustomerMaintenance() {
       <h2 className="text-lg font-bold">{operation === 'UPDATE' ? `Edit existing customer ${code}` : 'Create a new customer'}</h2>
       <p className="text-sm">{operation === 'CREATE' ? 'New defaults: next 300-series company-initial code · Control A/C 300-000 · 30 Days · E-Invoice. Other SQL defaults are retained.' : 'Other customer settings and delivery branches are retained.'}</p>
       {form && <div className="grid gap-4 sm:grid-cols-2">
-        {fields.map(f => <label key={f.key}>{f.label}{f.key !== 'tin' && f.key !== 'attention' ? ' *' : ''}
-          <input className={input} required={f.key !== 'tin' && f.key !== 'attention'} maxLength={f.max} type={f.key === 'email' ? 'email' : 'text'}
+        {fields.map(f => <label key={f.key}>{f.label}{!['tin', 'attention', 'phone', 'mobile', 'email'].includes(f.key) ? ' *' : ''}
+          <input className={input} required={!['tin', 'attention', 'phone', 'mobile', 'email'].includes(f.key)} maxLength={f.max} type={f.key === 'email' ? 'email' : 'text'}
             list={f.key === 'agent' ? 'customer-agents' : undefined} value={form[f.key]} onChange={e => edit(f.key, e.target.value)} />
         </label>)}
         <datalist id="customer-agents">{context?.native?.agents.map(a => <option key={a.CODE} value={a.CODE}>{a.DESCRIPTION}</option>)}</datalist>
