@@ -70,13 +70,14 @@ export function getSettingsNavigation(t: Translations): AppNavigationItem {
     href: '/settings',
     label: t.nav.settings,
     icon: Settings,
-    relatedRoutes: ['/automations', '/integrations', '/capture/rules', '/capture/playground', '/knowledge-base'],
+    relatedRoutes: ['/automations', '/integrations', '/capture/rules', '/capture/playground', '/knowledge-base', '/template-studio'],
     children: [
       { href: '/automations', label: t.nav.automations },
       { href: '/integrations', label: t.nav.integrations, relatedRoutes: ['/capture/channels'] },
       { href: '/capture/rules', label: 'Filtering rules' },
       { href: '/capture/playground', label: 'Playground' },
       { href: '/knowledge-base', label: t.nav.knowledgeBase },
+      { href: '/template-studio', label: 'PDF 格式聊天室' },
       { href: '/settings', label: 'Company' },
     ],
   };
