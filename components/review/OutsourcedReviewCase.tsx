@@ -7,7 +7,7 @@ import { AppLayout } from '@/components/layout';
 import { ReturnedFileUpload } from './ReturnedFileUpload';
 import { OutsourceSupportingFiles } from './OutsourceSupportingFiles';
 import { returnedFilesEditable, returnedReplySelection } from '@/utils/returnedAttachments';
-import { defaultOutsourceBody, outsourceSupplierContent, savedOutsourceBody } from '@/utils/outsourceRequestMessage';
+import { defaultOutsourceBody, outsourceSupplierContent, savedOutsourceBody, outsourceAttachmentName } from '@/utils/outsourceRequestMessage';
 import {
   approveRun,
   attachOrderSource,
@@ -384,7 +384,7 @@ export function OutsourcedReviewCase() {
     if (!bodyEdited.current) setBody(savedOutsourceBody(run, effectiveData) ?? preview?.preview?.body ?? defaultOutsourceBody(run, effectiveData));
     if (messageEdited.current) return;
     setSubject(outsourcedEmail?.subject || data?.outsource_message_draft?.subject || preview?.preview?.subject || outsourceSupplierContent(run, effectiveData).split('\n')[0]);
-    setFilename(data?.outsource_message_draft?.filename || run.source_filename || '');
+    setFilename(outsourceAttachmentName(run, effectiveData, preview?.preview?.files[0]?.filename || previewRefs?.attachment_filename));
     setEmailTo((data?.outsource_message_draft?.destination?.email_to || data?.issuing_entity?.email_to as string[] || []).join(', '));
     setGroupJid(data?.outsource_message_draft?.destination?.group_jid || String(data?.issuing_entity?.whatsapp_group_jid || ''));
   }, [run, data, outsourcedEmail?.subject, partnerName, preview, invoiceDate]);

@@ -30,6 +30,16 @@ export function outsourceRequestDate(data?: AgentRunData): string {
   return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
 }
 
+export function outsourceAttachmentName(run: AgentRun, data?: AgentRunData, previewName?: string): string {
+  const refs = run.output_refs || {};
+  const saved = String(data?.outsource_message_draft?.filename || '');
+  if (refs.outsourced_email || refs.outsourced_whatsapp) return saved || run.source_filename || '';
+  const bundle = refs.source_transaction_type === 'pdf' && Number(refs.source_transaction_count) > 1
+    ? String(refs.bundle_source_filename || '') : '';
+  if (saved && (!bundle || saved !== run.source_filename)) return saved;
+  return previewName || bundle || run.source_filename || '';
+}
+
 export function outsourceSupplierContent(run: AgentRun, data?: AgentRunData): string {
   const issuer = data?.issuing_entity;
   const company = field(issuer?.display_name || issuer?.legal_name);
@@ -41,7 +51,48 @@ export function outsourceSupplierContent(run: AgentRun, data?: AgentRunData): st
   if (date) lines.push(`Date: ${date}`);
   const po = field(data?.po_number);
   if (po && !['N/A', 'NONE', 'NULL', '-'].includes(po.toUpperCase())) lines.push(`PO No: ${po}`);
+  if (!run.source_file_s3_key && !run.output_refs?.outsource_forward_only) {
+    const details = outsourceTextOrderDetails(data);
+    if (details) lines.push('', details);
+  }
   return lines.join('\n');
+}
+
+export function outsourceTextOrderDetails(data?: AgentRunData): string {
+  const number = (value: unknown, money = false): string => {
+    if (value == null || typeof value === 'boolean' || !String(value).trim()) return '';
+    const raw = String(value).trim();
+    const amount = Number(raw);
+    if (!Number.isFinite(amount)) return '';
+    const decimal = raw.split('.')[1] || '';
+    return money && decimal.length <= 2
+      ? amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : String(amount);
+  };
+  const currency = field(data?.currency || data?.conversion?.source_currency);
+  const prefix = ['MYR', 'RM'].includes(currency.toUpperCase()) ? 'RM ' : currency ? `${currency} ` : '';
+  const blocks: string[] = [];
+  for (const row of data?.lines || []) {
+    if (['header', 'included_component'].includes(String(row.category || '').toLowerCase())) continue;
+    const description = String(row.match?.en_description || row.name || row.source_description || '').trim();
+    if (!description) continue;
+    const fields = [`DESC: ${description}`];
+    const more = String(row.more_description || '').trim();
+    if (more && !description.includes(more)) fields.push(more);
+    const qty = number(row.qty);
+    if (qty) fields.push(`QTY: ${qty}`);
+    const uom = field(row.source_unit || row.unit);
+    if (uom) fields.push(`UOM: ${uom}`);
+    const price = row.unit_price_foreign ?? (['MYR', 'RM'].includes(currency.toUpperCase()) ? row.unit_price_myr : undefined);
+    const amount = row.amount_foreign ?? (['MYR', 'RM'].includes(currency.toUpperCase()) ? row.amount_myr : undefined);
+    if (number(price)) fields.push(`UNIT PRICE: ${prefix}${number(price, true)}`);
+    if (number(amount)) fields.push(`LINE TOTAL: ${prefix}${number(amount, true)}`);
+    blocks.push(fields.join('\n'));
+  }
+  const total = data?.totals?.amount_foreign_total ?? (['MYR', 'RM'].includes(currency.toUpperCase()) ? data?.totals?.grand_total_myr : undefined);
+  if (blocks.length && number(total)) blocks.push(`TOTAL: ${prefix}${number(total, true)}`);
+  if (field(data?.payment_terms)) blocks.push(`CREDIT TERMS: ${field(data?.payment_terms)}`);
+  return blocks.join('\n\n');
 }
 
 export function savedOutsourceBody(run: AgentRun, data?: AgentRunData): string | null {
@@ -53,7 +104,8 @@ export function savedOutsourceBody(run: AgentRun, data?: AgentRunData): string |
   if (refs.outsourced_email || refs.outsourced_whatsapp) return body;
   if (data?.outsource_message_draft?.body_source === 'ORDER_FIELDS') return null;
   const oldDefault = caption && body.includes(caption) && /^(Hi, please help arrange open invoice|Dear,|Hi Team,)/.test(body);
-  return oldDefault || /^Orders in this request:\s*$/m.test(body) ? null : body;
+  if (oldDefault || /^Orders in this request:\s*$/m.test(body)) return null;
+  return run.source_file_s3_key ? body : body.replace(/for the attached purchase order/gi, 'using the order details below');
 }
 
 export function defaultOutsourceBody(run: AgentRun, data?: AgentRunData): string {
@@ -66,5 +118,6 @@ export function defaultOutsourceBody(run: AgentRun, data?: AgentRunData): string
     return `Hi, please help arrange open invoice\n\n${content}\n\n${invoiceOnly ? '' : 'Please help to issue DO also,\n'}Thanks`;
   }
   const documents = invoiceOnly ? 'Sales Invoice' : 'Delivery Order and Sales Invoice';
-  return `Dear,\n\nPlease prepare ${outsourceSetCount(run, data)} set ${documents} for the attached purchase order.\n\n${content}\n\nThank you.\n\nRegards,\nBryan`;
+  const instruction = run.source_file_s3_key ? 'for the attached purchase order' : 'using the order details below';
+  return `Dear,\n\nPlease prepare ${outsourceSetCount(run, data)} set ${documents} ${instruction}.\n\n${content}\n\nThank you.\n\nRegards,\nBryan`;
 }

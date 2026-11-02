@@ -4,7 +4,7 @@ import { defaultOutsourceBody, outsourceSupplierContent, savedOutsourceBody, out
 
 const caption = 'INV&DO\nJET *R.ACC\nV SIGNATURE to CARNAUBA AUTOSPA SDN BHD - 2 sets\nDate: 19/10/2026\nDesc & qty may refer to previous invoice';
 const run = { source_caption: caption, source_file_s3_key: null, output_refs: { source_transaction_count: 2 } };
-const data = { customer: 'CARNAUBA AUTOSPA SDN BHD', inv_date: '2026-10-19', issuing_entity: { legal_name: 'V SIGNATURE', outbound_channel: 'WHATSAPP' }, lines: [{ name: 'INTERNAL ITEM NOTES' }] };
+const data = { customer: 'CARNAUBA AUTOSPA SDN BHD', inv_date: '2026-10-19', issuing_entity: { legal_name: 'V SIGNATURE', outbound_channel: 'WHATSAPP' }, lines: [{ name: 'INTERNAL ITEM NOTES', category: 'header' }] };
 const summary = 'V SIGNATURE to CARNAUBA AUTOSPA SDN BHD - 2 sets\nDate: 19/10/2026';
 
 test('WhatsApp uses only structured request fields, even without a source attachment', () => {
@@ -14,7 +14,7 @@ test('WhatsApp uses only structured request fields, even without a source attach
 
 test('email matches the requested wording and derives its opening count', () => {
   const email = { ...data, issuing_entity: { ...data.issuing_entity, outbound_channel: 'EMAIL' } };
-  assert.equal(defaultOutsourceBody(run, email), `Dear,\n\nPlease prepare 2 set Delivery Order and Sales Invoice for the attached purchase order.\n\n${summary}\n\nThank you.\n\nRegards,\nBryan`);
+  assert.equal(defaultOutsourceBody(run, email), `Dear,\n\nPlease prepare 2 set Delivery Order and Sales Invoice using the order details below.\n\n${summary}\n\nThank you.\n\nRegards,\nBryan`);
   for (const count of [1, 4]) {
     assert.match(defaultOutsourceBody({ ...run, output_refs: { source_transaction_count: count } }, email), new RegExp(`Please prepare ${count} set Delivery Order`));
   }
