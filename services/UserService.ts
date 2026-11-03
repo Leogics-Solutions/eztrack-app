@@ -170,14 +170,14 @@ export async function getCurrentUser(): Promise<GetUserProfileResponse> {
 
   if (!response.ok) {
     // Check for auth errors and redirect
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         const { redirectToLogin } = await import('@/lib/auth/authHelpers');
         redirectToLogin(window.location.pathname);
       }
     }
     const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.message || error.error || 'Failed to get user information');
+    throw Object.assign(new Error(error.message || error.error || 'Failed to get user information'), { status: response.status });
   }
 
   return response.json();

@@ -31,7 +31,7 @@ export function redirectToLogin(redirectPath?: string): void {
  * Check if an error response indicates authentication failure
  */
 export function isAuthError(status: number): boolean {
-  return status === 401 || status === 403;
+  return status === 401;
 }
 
 /**

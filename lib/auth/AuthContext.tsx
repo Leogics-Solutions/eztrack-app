@@ -4,6 +4,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authAdapter } from './adapter';
 import { AuthState, User } from './types';
 import { redirectToLogin } from './authHelpers';
+import { installSessionFetch } from './sessionFetch';
+import { BASE_URL } from '@/services/config';
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
@@ -21,7 +23,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: false,
   });
 
+  const [sessionError, setSessionError] = useState(false);
+  const [sessionRetry, setSessionRetry] = useState(0);
+
   useEffect(() => {
+    installSessionFetch(BASE_URL);
+    setSessionError(false);
+    setState(previous => ({ ...previous, isLoading: true }));
     // Initialize auth and set up listener
     let unsubscribe: (() => void) | undefined;
 
@@ -63,9 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isAuthenticated: false,
         });
         
-        // If initialization fails and not on login page, redirect
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          redirectToLogin(window.location.pathname);
+        if ((error as { status?: number })?.status === 401) {
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            redirectToLogin(window.location.pathname);
+          }
+        } else {
+          setSessionError(true);
         }
       }
     };
@@ -75,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribe?.();
     };
-  }, []);
+  }, [sessionRetry]);
 
   const signIn = async (email: string, password: string) => {
     setState(prev => ({ ...prev, isLoading: true }));
@@ -147,7 +158,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithProvider,
       }}
     >
-      {children}
+      {sessionError ? (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+          <p>Unable to check your sign-in. Your session has been kept.</p>
+          <button type="button" className="rounded border px-4 py-2" onClick={() => setSessionRetry(value => value + 1)}>Retry</button>
+        </div>
+      ) : children}
     </AuthContext.Provider>
   );
 }

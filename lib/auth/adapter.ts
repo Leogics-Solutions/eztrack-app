@@ -353,7 +353,8 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
           const user = await this.getCurrentUser();
           this.setUser(user);
         } catch (error) {
-          // Token invalid, clear it
+          // Connectivity and permission errors do not revoke a sign-in.
+          if ((error as { status?: number })?.status !== 401) throw error;
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           this.setUser(null);
@@ -397,7 +398,7 @@ class InvoiceReaderAPIAuthAdapter implements AuthAdapter {
       }
       return null;
     } catch (error) {
-      // Error getting user - token invalid or expired
+      if ((error as { status?: number })?.status !== 401) throw error;
       if (window.location.pathname !== '/login') {
         redirectToLogin(window.location.pathname);
       }
