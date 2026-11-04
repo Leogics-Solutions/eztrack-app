@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout';
-import { customerContext, previewCustomer, confirmCustomer, CustomerForm, CustomerContext, CustomerPreview, CustomerResult, SavedCustomer } from '@/services/CustomerMasterService';
+import { customerContext, previewCustomer, confirmCustomer, importCustomerDetails, CustomerForm, CustomerContext, CustomerPreview, CustomerResult, SavedCustomer } from '@/services/CustomerMasterService';
+import { customerFormatWarnings } from '@/utils/customerDetails';
 
 const fields: { key: Exclude<keyof CustomerForm, 'address_lines'>; label: string; max: number }[] = [
   { key: 'company_name', label: 'Company name', max: 100 }, { key: 'registration_no', label: 'Reg. No (New)', max: 20 },
@@ -35,12 +36,14 @@ export default function CustomerMaintenance() {
   const [result, setResult] = useState<CustomerResult>(); const [confirmed, setConfirmed] = useState(false);
   const [resume, setResume] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [uncertain, setUncertain] = useState(false); const serial = useRef(0);
+  const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
   const load = useCallback(async (connectionId?: number, selectedCode = '', term = '') => {
     const n = ++serial.current; setBusy(true); setError('');
     try {
       const c = await customerContext(runId, connectionId, selectedCode, term);
       if (n !== serial.current) return;
       setContext(c); setConfirmed(false);
+      setSourceWarnings(c.warnings || []);
       const last = c.last_change;
       if (last && ['SAVING', 'UNKNOWN'].includes(last.status)) {
         setUncertain(true); setPreview({ ready: true, preview_id: last.id, plan: last.native_plan });
@@ -65,6 +68,26 @@ export default function CustomerMaintenance() {
   function edit(key: keyof CustomerForm, value: string | string[]) {
     if (!form) return; setForm({ ...form, [key]: value }); setPreview(undefined); setConfirmed(false); setResult(undefined);
   }
+  async function importDetails(file?: File) {
+    if (!file) return; setBusy(true); setError('');
+    try {
+      const imported = await importCustomerDetails(runId, file);
+      setForm(current => {
+        if (!current) return clean(imported.prefill);
+        const next = { ...current, address_lines: [...current.address_lines] };
+        if (['MATCHED', 'MATCHED_PARTIAL'].includes(imported.customer_details?.status || '')) {
+          for (const [key, value] of Object.entries(imported.customer_details?.fields || {})) {
+            if (key in next && value && (!Array.isArray(value) || value.some(Boolean))) Object.assign(next, { [key]: value });
+          }
+        }
+        return clean(next);
+      });
+      setSourceWarnings(imported.warnings);
+      setPreview(undefined); setConfirmed(false); setResult(undefined);
+      setContext(c => c ? { ...c, prefill: imported.prefill, customer_details: imported.customer_details } : c);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
   async function check() {
     if (!form || !context?.connection_id) return; setBusy(true); setError(''); setConfirmed(false); setResult(undefined);
     try { setPreview(await previewCustomer(runId, context.connection_id, operation, code, form)); }
@@ -78,11 +101,26 @@ export default function CustomerMaintenance() {
     catch (e) { await load(context?.connection_id || undefined); setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
+  const warnings = [...new Set([
+    ...sourceWarnings.filter(w => !/^(New registration number|Malaysian postcode|Check the TIN|Check the non-individual TIN)/.test(w)),
+    ...(form ? customerFormatWarnings(form) : []), ...(preview?.warnings || []),
+  ])];
   return <AppLayout pageName="Review"><main className="mx-auto max-w-5xl space-y-5 p-6">
     <Link href={`/review/${runId}`} className="underline">← Back to Review #{runId}</Link>
     <h1 className="text-2xl font-bold">Maintain SQL customer</h1>
     <p>Select the issuing company, complete the PO details, then preview and confirm the SQL change.</p>
     {error && <div role="alert" className="rounded border border-red-400 p-3 text-red-700">{error}</div>}
+    <section className="space-y-2 rounded border border-[var(--border)] p-4">
+      <label className="block font-medium">Import full customer details (.xlsx)
+        <input aria-label="Import customer details workbook" type="file" accept=".xlsx" disabled={busy || uncertain}
+          onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void importDetails(file); }} className="mt-2 block w-full text-sm" />
+      </label>
+      <p className="text-sm">Use the completed CS E-INV template. Fields fill automatically for review; importing does not save a customer in SQL.</p>
+      {context?.customer_details && <p className="text-sm">Customer details: {context.customer_details.status === 'MATCHED' ? 'Received — review the fields below' : context.customer_details.status === 'CUSTOMER_MISMATCH' ? 'Customer identity needs confirmation' : 'Additional fields still needed'}</p>}
+    </section>
+    {!!warnings.length && <div role="alert" className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">
+      <ul className="list-inside list-disc">{warnings.map(w => <li key={w}>{w}</li>)}</ul>
+    </div>}
     <label className="block">Issuing company / SQL
       <select className={input} disabled={busy || uncertain} value={context?.connection_id || ''} onChange={e => void load(Number(e.target.value))}>
         <option value="">Choose company</option>{context?.companies.map(c => <option key={c.connection_id} value={c.connection_id}>{c.name}</option>)}

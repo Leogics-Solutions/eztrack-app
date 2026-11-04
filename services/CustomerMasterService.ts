@@ -18,10 +18,13 @@ export interface CustomerContext {
   companies: { connection_id: number; name: string }[]; connection_id: number | null;
   order_connection_id: number | null; prefill: CustomerForm; last_change?: CustomerChange;
   can_resume_order: boolean;
+  warnings?: string[];
+  customer_details?: { status: string; fields?: Partial<CustomerForm>; source?: { filename?: string; file?: { filename?: string } } };
   native?: { customer?: SavedCustomer; matches: { CODE: string; COMPANYNAME: string; BRN2: string; STATUS: string }[];
     agents: { CODE: string; DESCRIPTION: string }[]; truncated: boolean };
 }
 export interface CustomerPreview { ready: boolean; preview_id?: string; expires_at?: string; plan?: CustomerPlan;
+  warnings?: string[];
   duplicates?: { CODE: string; COMPANYNAME: string; BRN2: string; STATUS: string }[] }
 export interface CustomerResult { status: string; readback: SavedCustomer; resumed: boolean; resume_error?: string;
   confirmed_by?: number; confirmed_at?: string; note?: string }
@@ -44,4 +47,13 @@ export function previewCustomer(runId: number, connectionId: number, operation: 
 }
 export function confirmCustomer(runId: number, previewId: string, resume: boolean, checkOnly = false) {
   return request<CustomerResult>(runId, '/confirm', { preview_id: previewId, confirmed: true, resume_order: resume, check_only: checkOnly });
+}
+
+export async function importCustomerDetails(runId: number, file: File) {
+  const body = new FormData(); body.append('file', file);
+  const headers = new Headers(getScopedHeaders()); headers.delete('Content-Type');
+  const response = await fetch(`${BASE_URL}/agents/runs/${runId}/customer-master/import`, { method: 'POST', headers, body });
+  const value = await response.json();
+  if (!response.ok) throw new Error(typeof value.detail === 'string' ? value.detail : 'Customer details import failed.');
+  return value as { prefill: CustomerForm; warnings: string[]; customer_details: CustomerContext['customer_details']; sql_save_called: false };
 }

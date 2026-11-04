@@ -135,6 +135,8 @@ export function resolveAutomationStatus(
   destination: ApprovalDestination = 'SQL',
 ): AutomationStatusDefinition {
   const status = String(rawStatus || '').trim().toUpperCase();
+  if (status === 'WAITING_CUSTOMER_DETAILS') return { key: status, label: 'Waiting for customer details / 等客户资料', color: '#D97706', meaning: 'Reply to the original INV&DO order with the customer details, or import the E-INV workbook in Maintain customer.' };
+  if (status === 'CUSTOMER_DETAILS_READY') return { key: status, label: 'Customer details ready / 资料待确认', color: '#D97706', meaning: 'Full details are attached. Review the fields and confirm the SQL customer; normal order safeguards remain active.' };
   if (status === 'PAYMENT_PROCESSING') return {
     key: status, label: 'Payment processing', color: '#0891B2',
     meaning: 'Checking SQL, posting the receipt and sending confirmation in the background. Open the review to see progress.',
