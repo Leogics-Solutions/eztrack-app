@@ -791,7 +791,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
     !== orderMoneyScope(data?.lines || [], data?.no_conversion ? null : data?.forex, Boolean(data?.no_conversion), String(data?.issuing_entity?.entity_key || data?.issuing_entity?.key || ''));
 
-  const sourceNeedsConfirmation = reconciliation?.requires_review && (sourceScopeChanged || !(data?.review_override as {accepted_fingerprint?: string} | undefined)?.accepted_fingerprint);
+  const sourceNeedsConfirmation = Boolean(reconciliation?.requires_review && (sourceScopeChanged || !run?.source_review?.accepted_current_version));
 
   const canGenerateDocuments = (isOutsourced || hasEffectiveMyrAmounts) && !waitingForDocuments && !sourceArithmeticIssue && !sourceNeedsConfirmation;
 
@@ -1258,6 +1258,10 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
 
   const proceedDespiteMismatch = () => {
+    if (sourceArithmeticIssue || reconciliation?.currency_matches === false) {
+      setError(sourceArithmeticIssue || 'Correct the source currency before confirming an amount.');
+      return;
+    }
 
     setShowProceedModal(false);
 
@@ -1277,9 +1281,9 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
     void act(async () => {
 
-      await reviewRun(runId, corrected);
+      const saved = await reviewRun(runId, corrected);
 
-      return generateRun(runId);
+      return isOrderWorkflow && !isOutsourced ? saved : generateRun(runId);
 
     });
 
@@ -2178,6 +2182,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
             key={`${runId}:${String(run.output_refs?.order_batch_job_id || '')}`} runId={runId} total={bundle?.total || 1} outsourced={isOutsourced}
 
             getCorrectedData={buildCorrected}
+            submissionBlocker={sourceArithmeticIssue || (sourceNeedsConfirmation ? 'Review and confirm the current source amount before submitting.' : undefined)}
 
             editable={canReview && !busy && !approvalRecorded && !sqlDocumentsCreated} onRefresh={() => getRun(runId).then((updated) => {
 
@@ -2205,13 +2210,12 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
             {canReanalyze && !aiExtractionNeedsAttention && <button disabled={busy} onClick={reanalyzeWithAi} className="inline-flex items-center gap-2 rounded-md border border-cyan-400 px-4 py-2 text-cyan-800 hover:bg-cyan-50 disabled:opacity-50 dark:text-cyan-200 dark:hover:bg-cyan-950/30"><RefreshCw className={`h-4 w-4 ${busy && busyMessage?.startsWith('Re-analyzing') ? 'animate-spin' : ''}`} /> Re-analyze with AI</button>}
 
+            {['PENDING_REVIEW', 'DRAFT_GENERATED'].includes(status || '') && !sqlDocumentsCreated && !approvalRecorded && reconciliation?.currency_matches !== false && (reconciliation?.requires_review || waitingForDocuments) && !sourceArithmeticIssue && isOrderWorkflow && !isOutsourced && <button disabled={busy} onClick={() => setShowProceedModal(true)} className="rounded-md border border-amber-600 px-4 py-2 text-amber-800 disabled:opacity-50">Review and confirm source amount</button>}
             {status === 'PENDING_REVIEW' && <>
 
               <button disabled={busy} onClick={() => act(() => reviewRun(runId, buildCorrected()))} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">Save corrections</button>
 
               {(isOutsourced || !isOrderWorkflow) && <button disabled={busy} title={preparationBlocker || undefined} onClick={prepareForSql} className={`px-4 py-2 text-white rounded-md disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2 ${preparationBlocker ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[var(--primary)] hover:bg-[var(--primary-hover)]'}`}><FileText className="h-4 w-4" /> {isOutsourced ? 'Prepare external request' : 'Prepare for accounting approval'}</button>}
-
-              {preparationBlocker && !sourceArithmeticIssue && isOrderWorkflow && !isOutsourced && <button disabled={busy} onClick={() => setShowProceedModal(true)} className="rounded-md border border-amber-600 px-4 py-2 text-amber-800 disabled:opacity-50">Review source discrepancy</button>}
 
               {preparationBlocker && <p className="basis-full text-sm font-medium text-amber-800"><AlertTriangle className="mr-1.5 inline h-4 w-4" />{preparationBlocker}</p>}
 
@@ -2219,7 +2223,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
             {status === 'DRAFT_GENERATED' && <>
 
-              {!sqlDocumentsCreated && <button disabled={busy || !canGenerateDocuments} onClick={() => act(async () => { const updated = await reviewRun(runId, buildCorrected()); return isOrderWorkflow && !isOutsourced ? updated : generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">{isOrderWorkflow && !isOutsourced ? 'Save corrections' : 'Update prepared data'}</button>}
+              {!sqlDocumentsCreated && <button disabled={busy} onClick={() => act(async () => { const updated = await reviewRun(runId, buildCorrected()); return isOrderWorkflow && !isOutsourced ? updated : generateRun(runId); })} className="px-4 py-2 border border-[var(--border)] rounded-md hover:bg-[var(--hover-bg)]">{isOrderWorkflow && !isOutsourced ? 'Save corrections' : 'Update prepared data'}</button>}
 
               {isOutsourced
 
@@ -2313,9 +2317,9 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
         <ReviewConfirmationModal
 
-          title="Proceed with an incomplete source package?"
+          title={reconciliation?.requires_review ? "Confirm the reviewed source amount?" : "Confirm the reviewed source grouping?"}
 
-          confirmLabel="Proceed with current document"
+          confirmLabel={isOrderWorkflow && !isOutsourced ? "Confirm current version — save only" : "Proceed with current document"}
 
           tone="warning"
 
@@ -2327,13 +2331,14 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
         >
 
-          <p>{preparationBlocker}</p>
+          <p>{preparationBlocker || `The current ${data?.currency || ''} ${fmt(displayedTotals.amount_foreign_total)} was accepted for this version. The original source target ${fmt(reconciliation?.expected_foreign_total)} remains visible for audit.`}</p>
 
           <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
 
             {isOutsourced ? 'The external provider request' : 'The accounting transaction'} will use the currently extracted <b>{data?.currency || ''} {fmt(displayedTotals.amount_foreign_total)}</b>, not the amount stated in the source message. This decision will be recorded in the audit activity.
 
           </div>
+          {isOrderWorkflow && !isOutsourced && <p className="mt-3 text-sm">This confirmation saves the reviewed amount and audit decision only. It does not create or submit SQL documents. If this order was already issued manually, do not submit it again.</p>}
 
         </ReviewConfirmationModal>
 

@@ -12,10 +12,11 @@ type Reply = { anchor_run_id: number; files: { file_key: string; filename?: stri
 type Props = {
   runId: number; total: number; outsourced: boolean; editable: boolean;
   getCorrectedData?: () => AgentRunData;
+  submissionBlocker?: string | null;
   onRefresh: () => void; reply?: Reply; selectedFiles?: string[];
 };
 
-export function OrderBatchActions({ runId, total, outsourced, editable, onRefresh, reply, selectedFiles, getCorrectedData }: Props) {
+export function OrderBatchActions({ runId, total, outsourced, editable, onRefresh, reply, selectedFiles, getCorrectedData, submissionBlocker }: Props) {
   const [job, setJob] = useState<OrderBatchJob | null>(null);
   const [preview, setPreview] = useState<OrderBatchJob | null>(null);
   const [subject, setSubject] = useState('');
@@ -99,11 +100,12 @@ export function OrderBatchActions({ runId, total, outsourced, editable, onRefres
       {outsourced ? <button className={button} disabled={busy || running} onClick={() => act(async () => {
         const p = await previewOrderBatchEmail(runId); setPreview(p);
         setSubject(p.preview?.subject || ''); setBody(p.preview?.body || '');
-      })}>Preview one email for all sets</button> : <button className={`${button} bg-[var(--primary)] text-white`} disabled={busy || running} onClick={() => act(async () => {
+      })}>Preview one email for all sets</button> : <button className={`${button} bg-[var(--primary)] text-white`} title={submissionBlocker || undefined} disabled={busy || running || Boolean(submissionBlocker)} onClick={() => act(async () => {
         setJob(await startOrderBatch(runId, 'SUBMIT', false, getCorrectedData?.(), total > 1 ? dispatchMode : 'IMMEDIATE'));
         refresh.current();
       })}>{busy ? 'Submitting…' : total > 1 ? `Submit all ${total} sets to SQL / 提交全部 ${total} 份` : 'Submit to SQL / 提交到 SQL'}</button>}
     </div>}
+    {!outsourced && submissionBlocker && <p role="alert" className="mt-2 text-sm text-amber-800">{submissionBlocker}</p>}
     {!outsourced && editable && <p className="mt-2 text-sm">One submission authorizes preparation and SQL posting. No separate Approve click is needed. Each set must pass validation; existing SQL documents are retained. 点击即提交准备及过账，无需再按 Approve。</p>}
     {!outsourced && total > 1 && <p className="mt-2 text-sm">SQL processes queued sets one at a time. A blocked set shows its own error; you can leave this page and return to check the results.</p>}
     {!outsourced && total > 1 && <p className="mt-2 text-sm">Each issuing company’s sets are delivered together in one ZIP only after all SQL documents and PDFs are ready. If a set fails, none of that company’s sets are sent until it is resolved. 同一公司全部套数完成后才统一发 ZIP。</p>}

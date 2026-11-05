@@ -312,6 +312,7 @@ export interface AgentRunBundle {
 }
 
 export interface AgentRun {
+  source_review?: { requires_review: boolean; accepted_current_version: boolean; currency_matches?: boolean | null; current_total?: number | null; source_total?: number | null; difference?: number | null; currency?: string | null } | null;
   display_status?: string | null;
   bundle?: AgentRunBundle | null;
   id: number;
