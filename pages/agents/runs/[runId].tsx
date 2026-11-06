@@ -1,7 +1,7 @@
 'use client';
 import { WorkflowStatus } from '@/components/review/WorkflowStatus';
 
-import { InternalCaseDelivery } from '@/components/review/InternalCaseDelivery';
+import { InternalCaseDelivery, OrderDeliveryError } from '@/components/review/InternalCaseDelivery';
 
 import { ReviewAiCost } from '@/components/review/ReviewAiCost';
 
@@ -1600,7 +1600,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
             )}
 
-            {run.error_message && !aiExtractionNeedsAttention && !(customerIdentityChanged && /customer/i.test(run.error_message)) && <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{explainSqlAccountError(run.error_message)}</p>}
+            {run.error_message && !aiExtractionNeedsAttention && !(customerIdentityChanged && /customer/i.test(run.error_message)) && (isOrderWorkflow ? <OrderDeliveryError message={explainSqlAccountError(run.error_message)} status={run.status} outputRefs={run.output_refs} /> : <p className="mt-3 whitespace-pre-wrap text-sm text-red-600">{explainSqlAccountError(run.error_message)}</p>)}
 
             {Boolean(run.output_refs?.manual_order_closure) && (
 
