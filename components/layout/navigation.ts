@@ -62,6 +62,7 @@ export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
       ],
     },
     { href: '/audit-trail', label: 'Audit Trail', icon: ScrollText },
+    { href: '/support', label: 'Support centre / 支援记录', icon: ListChecks },
   ];
 }
 
