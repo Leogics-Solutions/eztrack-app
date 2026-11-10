@@ -771,6 +771,8 @@ export interface OrderSSTState {
   status: 'GROUP_J' | 'NOT_GROUP_J' | 'UNVERIFIED' | 'NOT_APPLICABLE'; source: string | null;
   identity: Record<string, unknown>; configured_rate: number; rate: number; can_remember: boolean; message: string;
   confirmation: { checked_on: string; note: string; confirmed_at: string; confirmed_by_user_id: number } | null;
+  suggestion?: {run_id:number;status:'GROUP_J'|'NOT_GROUP_J';requires_confirmation:true;confirmation:NonNullable<OrderSSTState['confirmation']>} | null;
+  summary?: {subtotal_myr:number;sst_rate:number;sst_amount_myr:number;grand_total_myr:number} | null;
 }
 export async function getOrderSST(runId: number): Promise<OrderSSTState> {
   return handle<OrderSSTState>(await fetch(`${BASE_URL}/agents/runs/${runId}/sst-confirmation`, { headers: getScopedHeaders() }));

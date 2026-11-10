@@ -43,6 +43,9 @@ import { setInvoiceWaitApproval } from '@/services/AgentsService';
 
 import { PaymentEvidenceSummary } from '@/components/automation/PaymentEvidenceSummary';
 
+import { orderSstTotals, orderSstReconciliation } from '@/utils/orderSstTotals';
+import type { OrderSSTState } from '@/services/AgentsService';
+
 import { OrderSSTConfirmation } from '@/components/automation/OrderSSTConfirmation';
 
 import { SqlItemResolution } from '@/components/automation/SqlItemResolution';
@@ -248,6 +251,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
 
   const [run, setRun] = useState<AgentRun | null>(null);
+  const [sstState, setSstState] = useState<OrderSSTState|null>(null);
 
   const manualClosure = run?.output_refs?.manual_order_closure as { reason_code?: string; canonical_run_id?: number } | undefined;
 
@@ -749,7 +753,6 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
   const aiExtractionNeedsAttention = ['FAILED', 'RECOVERED'].includes(aiExtractionStatus);
 
-  const reconciliation = data?.reconciliation;
 
   const workPackage = data?.package;
 
@@ -774,6 +777,10 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
   const hasAllMyrAmounts = orderLines.length > 0 && orderLines.every((line) => line.amount_myr != null);
 
   const hasEffectiveMyrAmounts = hasAllMyrAmounts || (noConversion && hasAllSourceAmounts);
+
+  const sstSubtotal = hasEffectiveMyrAmounts ? orderLines.reduce((sum,line)=>sum+Number(noConversion?line.amount_foreign:line.amount_myr||0),0) : null;
+  const sstSummary = orderSstTotals(sstSubtotal,lines,sstState,noConversion);
+  const {reconciliation,sstDifference} = orderSstReconciliation(data?.reconciliation,sstSummary,noConversion && ['MYR','RM'].includes(String(data?.currency||'').toUpperCase()));
 
   const waitingForDocuments = ['WAITING_FOR_DOCUMENTS', 'NEEDS_REVIEW'].includes(workPackage?.status || '');
 
@@ -1307,7 +1314,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
     grand_total_myr: hasEffectiveMyrAmounts
 
-      ? orderLines.reduce((sum, line) => sum + Number(noConversion ? line.amount_foreign : line.amount_myr || 0), 0)
+      ? sstSummary?.grandTotal ?? sstSubtotal
 
       : null,
 
@@ -1430,7 +1437,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
 
 
-            {isOrderWorkflow && <OrderSSTConfirmation run={run} onSaved={setRun} disabled={busy || sqlDocumentsCreated || !['PENDING_REVIEW','DRAFT_GENERATED'].includes(status || '') || customerDraft !== (data?.customer || '') || customerCodeDraft !== (data?.customer_code || '') || (issuingEntityKey !== String((data?.issuing_entity as BusinessEntityProfile | undefined)?.entity_key || (data?.issuing_entity as Record<string,unknown> | undefined)?.key || ''))} />}
+            {isOrderWorkflow && <OrderSSTConfirmation run={run} onState={setSstState} onSaved={setRun} disabled={busy || sqlDocumentsCreated || !['PENDING_REVIEW','DRAFT_GENERATED'].includes(status || '') || customerDraft !== (data?.customer || '') || customerCodeDraft !== (data?.customer_code || '') || (issuingEntityKey !== String((data?.issuing_entity as BusinessEntityProfile | undefined)?.entity_key || (data?.issuing_entity as Record<string,unknown> | undefined)?.key || ''))} />}
 
             {supportingSourceFiles.length > 0 && (
 
@@ -1766,7 +1773,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
                   <div className="min-w-0">
 
-                    <p className="font-semibold">{reconciliation.status === 'MATCHED' ? 'Source total reconciled' : 'Source package does not reconcile yet'}</p>
+                    <p className="font-semibold">{reconciliation.status === 'MATCHED' ? 'Source total reconciled' : sstDifference ? '差额是 SST，请确认 SST 处理' : 'Source package does not reconcile yet'}</p>
 
                     <p className="mt-1">
 
@@ -2094,7 +2101,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
             </div>
 
-            <div className="p-4 border-t border-[var(--border)] text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{originalCurrency} {fmt(displayedTotals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(displayedTotals.qty_total)}</b></span>{forex && <span>Flat fee: <b>RM {fmt(displayedTotals.flat_fee)}</b></span>}<span>Grand total: <b>{displayedTotals.grand_total_myr == null ? 'Pending conversion' : `RM ${fmt(displayedTotals.grand_total_myr)}`}</b></span></div>
+            <div className="p-4 border-t border-[var(--border)] text-sm flex flex-wrap gap-6 justify-end"><span>Original total: <b>{originalCurrency} {fmt(displayedTotals.amount_foreign_total)}</b></span><span>Qty total: <b>{fmt(displayedTotals.qty_total)}</b></span>{forex && <span>Flat fee: <b>RM {fmt(displayedTotals.flat_fee)}</b></span>}{sstState?.applicable && <><span>小计 / Subtotal: <b>RM {fmt(sstSummary?.subtotal)}</b></span><span>SST {sstSummary?.rate || 0}%{!sstState.ready?'（待确认）':''}: <b>RM {fmt(sstSummary?.tax)}</b></span></>}<span>{sstState?.applicable?'含税总额 / Grand total':'Grand total'}: <b>{displayedTotals.grand_total_myr == null ? 'Pending conversion' : `RM ${fmt(displayedTotals.grand_total_myr)}`}</b></span></div>
 
           </div>
 

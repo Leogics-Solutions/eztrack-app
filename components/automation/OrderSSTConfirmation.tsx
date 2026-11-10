@@ -2,7 +2,7 @@ import { sstSaveBlocker } from '@/utils/orderSstValidation';
 import { useEffect, useState } from 'react';
 import { getOrderSST, saveOrderSST, type AgentRun, type OrderSSTState } from '@/services/AgentsService';
 
-export function OrderSSTConfirmation({run, disabled, onSaved}: {run:AgentRun;disabled:boolean;onSaved:(run:AgentRun)=>void}) {
+export function OrderSSTConfirmation({run, disabled, onSaved, onState}: {run:AgentRun;disabled:boolean;onSaved:(run:AgentRun)=>void;onState?:(state:OrderSSTState|null)=>void}) {
   const [state,setState]=useState<OrderSSTState|null>(null);
   const [status,setStatus]=useState('UNVERIFIED');
   const [checkedOn,setCheckedOn]=useState(new Date().toLocaleDateString('en-CA'));
@@ -12,13 +12,19 @@ export function OrderSSTConfirmation({run, disabled, onSaved}: {run:AgentRun;dis
   const identityData=run.corrected_data || run.extracted_data;
   const identityKey=JSON.stringify([run.id, identityData?.customer, identityData?.customer_code, identityData?.issuing_entity, identityData?.customer_registration_numbers, run.output_refs?.customer_sst_confirmation]);
   const blocker=sstSaveBlocker(disabled,busy,note,checkedOn,status,confirmed);
-  useEffect(()=>{let active=true;setState(null);
-    getOrderSST(run.id).then(s=>{if(active){setState(s);setStatus(s.status);setNote(s.confirmation?.note||'');setConfirmed(false);setRemember(false);setError('');}}).catch(e=>{if(active)setError(e.message);});
+  useEffect(()=>{let active=true;setState(null);onState?.(null);
+    getOrderSST(run.id).then(s=>{if(active){setState(s);onState?.(s);setStatus(s.status);setNote(s.confirmation?.note||s.suggestion?.confirmation.note||'');setCheckedOn(s.confirmation?.checked_on||new Date().toLocaleDateString('en-CA'));setConfirmed(false);setRemember(false);setError('');}}).catch(e=>{if(active)setError(e.message);});
     return()=>{active=false;};
-  },[identityKey]);
+  },[identityKey,onState,run.id]);
   async function save(){if(!state)return;setBusy(true);setError('');
     try{const updated=await saveOrderSST(run.id,{status,checked_on:checkedOn,note,confirmed,remember,expected_identity:state.identity});onSaved(updated);
-      setNotice('已保存。请重新 Generate draft，核对金额后再批准。');
+      const fresh=await getOrderSST(run.id);setState(fresh);onState?.(fresh);setStatus(fresh.status);
+      setNotice('已保存 SST 确认，金额已更新。请核对含税总额后，再由你提交开单。');
+    }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  async function applyPreviousDecision(){if(!state?.suggestion)return;setBusy(true);setError('');
+    try{const suggestion=state.suggestion;const updated=await saveOrderSST(run.id,{status:suggestion.status,checked_on:suggestion.confirmation.checked_on,note:`沿用 Review #${suggestion.run_id} 的客户 SST 核查依据：${suggestion.confirmation.note}`,confirmed:true,remember:false,expected_identity:state.identity});onSaved(updated);
+      const fresh=await getOrderSST(run.id);setState(fresh);onState?.(fresh);setStatus(fresh.status);setNotice('已确认沿用上次 SST 处理，并更新本单金额；尚未提交开单。');
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   if(state&&!state.applicable)return null;
@@ -27,6 +33,8 @@ export function OrderSSTConfirmation({run, disabled, onSaved}: {run:AgentRun;dis
     <p className="mt-1">先到 <a href="https://sst01.customs.gov.my/account/inquiry" target="_blank" rel="noopener noreferrer" className="underline">MySST 查询客户注册状态</a>，再确认本单如何处理 SST。</p>
     {state&&<><p className="mt-2 font-medium">{state.status==='GROUP_J'?'已确认 Group J · 本单不加 SST':state.status==='NOT_GROUP_J'?`已确认非 Group J · 按配置加 SST ${state.rate}%`:'待查询 / 未确认'}{state.source==='SAVED_CUSTOMER'?'（来自已保存的客户记录）':''}</p>
     {state.confirmation&&<p className="mt-1 text-xs">上次核查：{state.confirmation.checked_on} · 确认人 ID {state.confirmation.confirmed_by_user_id} · {state.confirmation.note}</p>}
+    {state.suggestion&&<div className="mt-3 rounded border border-cyan-300 bg-cyan-50 p-3 text-slate-900"><p>同一开票公司与客户的上次确认：Review #{state.suggestion.run_id} · {state.suggestion.status==='NOT_GROUP_J'?`非 Group J，加 SST ${state.configured_rate}%`:'Group J，不加 SST'}。</p><p className="mt-1 text-xs">核查日期：{state.suggestion.confirmation.checked_on} · {state.suggestion.confirmation.note}。请核对本单是否仍适用。</p><button type="button" disabled={disabled||busy} onClick={()=>void applyPreviousDecision()} className="mt-2 rounded bg-cyan-800 px-3 py-2 text-white disabled:opacity-50">确认本单沿用上次 SST 处理</button></div>}
+    {state.summary&&<dl aria-label="SST amount summary" className="mt-3 grid grid-cols-2 gap-1 rounded bg-white p-3 text-slate-900"><dt>小计</dt><dd>RM {state.summary.subtotal_myr.toFixed(2)}</dd><dt>SST {state.summary.sst_rate}%{!state.ready?'（待确认）':''}</dt><dd>RM {state.summary.sst_amount_myr.toFixed(2)}</dd><dt className="font-semibold">含税总额 / Grand total</dt><dd className="font-semibold">RM {state.summary.grand_total_myr.toFixed(2)}</dd></dl>}
     <div className="mt-3 grid gap-3 md:grid-cols-2">
       <label>本次确认结果<select aria-label="SST confirmation result" value={status} onChange={e=>{setStatus(e.target.value);setConfirmed(false);}} disabled={disabled||busy} className="mt-1 block w-full rounded border p-2 dark:bg-slate-800">
         <option value="UNVERIFIED">待查询 / 暂不确认</option><option value="GROUP_J">已确认 Group J，本单不加 SST</option><option value="NOT_GROUP_J">非 Group J，按公司配置加 SST ({state.configured_rate}%)</option>
