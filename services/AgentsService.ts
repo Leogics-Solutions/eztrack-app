@@ -1093,3 +1093,17 @@ export async function exportSqlRequestLog(filters: SqlRequestLogFilters, signal?
   }
   return response.blob();
 }
+
+
+export async function stopPaymentForManualHandoff(runId:number,expected_updated_at:string,reason:string,related_run_ids:number[]):Promise<AgentRun> {
+ return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-manual-handoff`,{
+  method:'POST',headers:getScopedHeaders(),body:JSON.stringify({expected_updated_at,reason,related_run_ids}),
+ }));
+}
+
+
+export async function attestPaymentManualHandoff(runId:number,body:Record<string,unknown>):Promise<AgentRun> {
+ return handle(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-manual-handoff/human-attestation`,{
+  method:'POST',headers:getScopedHeaders(),body:JSON.stringify(body),
+ }));
+}
