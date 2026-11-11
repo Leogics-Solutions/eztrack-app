@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout';
-import { customerContext, previewCustomer, confirmCustomer, importCustomerDetails, CustomerForm, CustomerContext, CustomerPreview, CustomerResult, SavedCustomer } from '@/services/CustomerMasterService';
-import { customerFormatWarnings } from '@/utils/customerDetails';
+import { customerContext, previewCustomer, confirmCustomer, importCustomerDetails, confirmCustomerDetails, CustomerForm, CustomerContext, CustomerPreview, CustomerResult, SavedCustomer } from '@/services/CustomerMasterService';
+import { customerFormatWarnings, mergeCustomerDetails } from '@/utils/customerDetails';
 
 const fields: { key: Exclude<keyof CustomerForm, 'address_lines'>; label: string; max: number }[] = [
   { key: 'company_name', label: 'Company name', max: 100 }, { key: 'registration_no', label: 'Reg. No (New)', max: 20 },
@@ -36,13 +36,14 @@ export default function CustomerMaintenance() {
   const [result, setResult] = useState<CustomerResult>(); const [confirmed, setConfirmed] = useState(false);
   const [resume, setResume] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [uncertain, setUncertain] = useState(false); const serial = useRef(0);
+  const [identityChecked, setIdentityChecked] = useState(false);
   const [sourceWarnings, setSourceWarnings] = useState<string[]>([]);
   const load = useCallback(async (connectionId?: number, selectedCode = '', term = '') => {
     const n = ++serial.current; setBusy(true); setError('');
     try {
       const c = await customerContext(runId, connectionId, selectedCode, term);
       if (n !== serial.current) return;
-      setContext(c); setConfirmed(false);
+      setContext(c); setConfirmed(false); setIdentityChecked(false);
       setSourceWarnings(c.warnings || []);
       const last = c.last_change;
       if (last && ['SAVING', 'UNKNOWN'].includes(last.status)) {
@@ -69,24 +70,30 @@ export default function CustomerMaintenance() {
     if (!form) return; setForm({ ...form, [key]: value }); setPreview(undefined); setConfirmed(false); setResult(undefined);
   }
   async function importDetails(file?: File) {
-    if (!file) return; setBusy(true); setError('');
+    if (!file || busy || uncertain) return;
+    const n = ++serial.current; setBusy(true); setError(''); setIdentityChecked(false);
     try {
       const imported = await importCustomerDetails(runId, file);
-      setForm(current => {
-        if (!current) return clean(imported.prefill);
-        const next = { ...current, address_lines: [...current.address_lines] };
-        if (['MATCHED', 'MATCHED_PARTIAL'].includes(imported.customer_details?.status || '')) {
-          for (const [key, value] of Object.entries(imported.customer_details?.fields || {})) {
-            if (key in next && value && (!Array.isArray(value) || value.some(Boolean))) Object.assign(next, { [key]: value });
-          }
-        }
-        return clean(next);
-      });
+      if (n !== serial.current) return;
+      setForm(current => clean(mergeCustomerDetails(current, imported)));
       setSourceWarnings(imported.warnings);
       setPreview(undefined); setConfirmed(false); setResult(undefined);
-      setContext(c => c ? { ...c, prefill: imported.prefill, customer_details: imported.customer_details } : c);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+      setContext(c => c ? { ...c, prefill: imported.prefill, customer_details: imported.customer_details, identity_review: imported.identity_review } : c);
+    } catch (e) { if (n === serial.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { if (n === serial.current) setBusy(false); }
+  }
+  async function confirmIdentity() {
+    const identity = context?.identity_review;
+    if (!identity?.required || !identity.can_confirm || !identityChecked || busy || uncertain) return;
+    const n = ++serial.current; setBusy(true); setError('');
+    try {
+      const imported = await confirmCustomerDetails(runId, identity.profile_fingerprint);
+      if (n !== serial.current) return;
+      setForm(current => clean(mergeCustomerDetails(current, imported)));
+      setSourceWarnings(imported.warnings); setPreview(undefined); setConfirmed(false); setResult(undefined); setIdentityChecked(false);
+      setContext(c => c ? { ...c, prefill: imported.prefill, customer_details: imported.customer_details, identity_review: imported.identity_review } : c);
+    } catch (e) { if (n === serial.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { if (n === serial.current) setBusy(false); }
   }
   async function check() {
     if (!form || !context?.connection_id) return; setBusy(true); setError(''); setConfirmed(false); setResult(undefined);
@@ -116,8 +123,22 @@ export default function CustomerMaintenance() {
           onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void importDetails(file); }} className="mt-2 block w-full text-sm" />
       </label>
       <p className="text-sm">Use the completed CS E-INV template. Fields fill automatically for review; importing does not save a customer in SQL.</p>
-      {context?.customer_details && <p className="text-sm">Customer details: {context.customer_details.status === 'MATCHED' ? 'Received — review the fields below' : context.customer_details.status === 'CUSTOMER_MISMATCH' ? 'Customer identity needs confirmation' : 'Additional fields still needed'}</p>}
+      {context?.customer_details && <p className="text-sm">Customer details: {context.identity_review?.confirmed ? 'Identity confirmed — review imported fields below' : (context.customer_details.status === 'MATCHED' || (context.identity_review && !context.identity_review.required)) ? 'Received — review the fields below' : context.customer_details.status === 'CUSTOMER_MISMATCH' ? 'Customer identity needs confirmation' : 'Additional fields still needed'}</p>}
     </section>
+    {context?.identity_review?.required && <section aria-label="Customer identity confirmation" className="space-y-3 rounded border border-amber-400 bg-amber-50 p-4 text-amber-950">
+      <h2 className="font-bold">Confirm the customer for this attachment</h2>
+      <p>The attached name or registration differs from this Review. Check both identities before importing.</p>
+      <table className="w-full text-left text-sm"><thead><tr><th>Identity</th><th>This Review</th><th>Attached workbook</th></tr></thead><tbody>
+        <tr><th>Company name</th><td>{context.identity_review.expected.company_name || '—'}</td><td>{context.identity_review.attached.company_name || '—'}</td></tr>
+        <tr><th>Registration number</th><td>{context.identity_review.expected.registration_no || '—'}</td><td>{context.identity_review.attached.registration_no || '—'}</td></tr>
+      </tbody></table>
+      <label className="block"><input type="checkbox" checked={identityChecked} disabled={busy || uncertain || !context.identity_review.can_confirm}
+        onChange={e => setIdentityChecked(e.target.checked)} /> I checked both names and registration numbers. This attachment is for this Review’s customer.</label>
+      <button className={button} disabled={busy || uncertain || !identityChecked || !context.identity_review.can_confirm} onClick={() => void confirmIdentity()}>Confirm customer &amp; import fields</button>
+      <p className="text-sm">This fills the form only. SQL Save still requires duplicate checks, preview and separate confirmation.</p>
+      {!context.identity_review.can_confirm && <p>Check the current customer save or order result before importing.</p>}
+    </section>}
+    {context?.identity_review?.confirmed && <p role="status" className="rounded border border-green-600 p-3 text-green-800">Customer identity confirmed. Imported fields remain subject to review and separate SQL Save confirmation.</p>}
     {!!warnings.length && <div role="alert" className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">
       <ul className="list-inside list-disc">{warnings.map(w => <li key={w}>{w}</li>)}</ul>
     </div>}

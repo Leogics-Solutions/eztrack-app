@@ -14,11 +14,22 @@ export interface CustomerChange {
   id: string; status: string; connection_id: number; native_plan: CustomerPlan;
   readback?: SavedCustomer; confirmed_by?: number; confirmed_at?: string; resume_error?: string;
 }
+export interface CustomerIdentityReview {
+  required: boolean; confirmed: boolean; can_confirm: boolean; profile_fingerprint: string;
+  expected: { company_name: string; registration_no: string };
+  attached: { company_name: string; registration_no: string };
+  confirmed_by_user_id?: number | null; confirmed_at?: string | null;
+}
+export interface CustomerDetailsImport {
+  prefill: CustomerForm; warnings: string[]; customer_details: CustomerContext['customer_details'];
+  identity_review?: CustomerIdentityReview | null; sql_save_called: false;
+}
 export interface CustomerContext {
   companies: { connection_id: number; name: string }[]; connection_id: number | null;
   order_connection_id: number | null; prefill: CustomerForm; last_change?: CustomerChange;
   can_resume_order: boolean;
   warnings?: string[];
+  identity_review?: CustomerIdentityReview | null;
   customer_details?: { status: string; fields?: Partial<CustomerForm>; source?: { filename?: string; file?: { filename?: string } } };
   native?: { customer?: SavedCustomer; matches: { CODE: string; COMPANYNAME: string; BRN2: string; STATUS: string }[];
     agents: { CODE: string; DESCRIPTION: string }[]; truncated: boolean };
@@ -55,5 +66,11 @@ export async function importCustomerDetails(runId: number, file: File) {
   const response = await fetch(`${BASE_URL}/agents/runs/${runId}/customer-master/import`, { method: 'POST', headers, body });
   const value = await response.json();
   if (!response.ok) throw new Error(typeof value.detail === 'string' ? value.detail : 'Customer details import failed.');
-  return value as { prefill: CustomerForm; warnings: string[]; customer_details: CustomerContext['customer_details']; sql_save_called: false };
+  return value as CustomerDetailsImport;
+}
+
+export function confirmCustomerDetails(runId: number, profileFingerprint: string) {
+  return request<CustomerDetailsImport>(runId, '/details-confirmation', {
+    confirmed: true, profile_fingerprint: profileFingerprint,
+  });
 }

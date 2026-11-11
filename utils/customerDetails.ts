@@ -1,4 +1,4 @@
-import type { CustomerForm } from '../services/CustomerMasterService';
+import type { CustomerForm, CustomerDetailsImport } from '../services/CustomerMasterService';
 
 export function customerFormatWarnings(form: CustomerForm): string[] {
   const warnings: string[] = [];
@@ -13,4 +13,17 @@ export function customerFormatWarnings(form: CustomerForm): string[] {
     else if (!['IG', 'EI'].includes(match[1]) && (match[2].startsWith('0') || !match[2].endsWith('0'))) warnings.push('Check the non-individual TIN: no leading zero after its prefix, and it should end in 0.');
   }
   return warnings;
+}
+
+
+export function mergeCustomerDetails(current: CustomerForm | undefined, imported: CustomerDetailsImport): CustomerForm {
+  const next = { ...(current || imported.prefill), address_lines: [...(current || imported.prefill).address_lines] };
+  const allowed = !imported.identity_review?.required && (imported.identity_review?.confirmed ||
+    ['MATCHED', 'MATCHED_PARTIAL'].includes(imported.customer_details?.status || ''));
+  if (allowed) {
+    for (const [key, value] of Object.entries(imported.customer_details?.fields || {})) {
+      if (key in next && value && (!Array.isArray(value) || value.some(Boolean))) Object.assign(next, { [key]: value });
+    }
+  }
+  return next;
 }
