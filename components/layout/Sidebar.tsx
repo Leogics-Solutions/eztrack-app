@@ -23,7 +23,10 @@ export function Sidebar({ isCollapsed }: SidebarProps) {
   const router = useRouter();
   const { t } = useLanguage();
   const [recordsOpen, setRecordsOpen] = useState(true);
-  const primaryItems = getPrimaryNavigation(t);
+  let primaryItems = getPrimaryNavigation(t);
+  if (router.pathname === '/maha' || router.pathname.startsWith('/maha/')) {
+    primaryItems = [{ href: '/maha', label: 'Maha C3 / C4', icon: ChevronDown }];
+  }
   const settingsItem = getSettingsNavigation(t);
 
   const renderNavItem = (item: AppNavigationItem) => {

@@ -19,13 +19,16 @@ function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [hasRedirected, setHasRedirected] = useState(false);
+  const [mahaWorkspace, setMahaWorkspace] = useState(false);
+  useEffect(() => { setMahaWorkspace(process.env.NEXT_PUBLIC_WORKSPACE === 'maha' || window.location.hostname === 'maha.smartdok.ai' || router.query.next === '/maha'); }, [router.query.next]);
 
   // Redirect if already authenticated (only once, and only if not currently logging in)
   useEffect(() => {
     if (!authLoading && isAuthenticated && router.isReady && !hasRedirected && !isLoading) {
       setHasRedirected(true);
       const next = router.query.next as string;
-      router.replace(next || '/');
+      const safeNext = next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : (mahaWorkspace ? '/maha' : '/');
+      router.replace(safeNext);
     }
   }, [isAuthenticated, router.isReady, authLoading, hasRedirected, isLoading]);
 
@@ -440,8 +443,8 @@ function LoginPage() {
                   className="login-logo-image"
                 />
               </div>
-              <h1 className="login-title">Welcome Back</h1>
-              <p className="login-subtitle">Sign in to your Smartdok.ai account</p>
+              <h1 className="login-title">{mahaWorkspace ? 'Maha Chemicals' : 'Welcome Back'}</h1>
+              <p className="login-subtitle">{mahaWorkspace ? 'C3 / C4 workspace · Sign in with your Smartdok.ai account' : 'Sign in to your Smartdok.ai account'}</p>
             </div>
 
             {/* Error Message */}

@@ -24,6 +24,27 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
+  // A same-origin gateway preserves the existing Smartdok API and login flow.
+  // This server-only upstream is supplied by the deployment, never a request.
+  async rewrites() {
+    const upstream = process.env.SMARTDOK_BACKEND_URL;
+    const sstUpstream = process.env.MAHA_SST_BACKEND_URL;
+    return [
+      ...(sstUpstream ? [{ source: '/maha-api/api/v1/maha-sst/:path*', destination: `${sstUpstream.replace(/\/$/, '')}/api/v1/maha-sst/:path*` }] : []),
+      ...(upstream ? [{ source: '/maha-api/:path*', destination: `${upstream.replace(/\/$/, '')}/:path*` }] : []),
+    ];
+  },
+
+  async headers() {
+    return [{ source: '/maha/:path*', headers: [
+      { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+      { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    ] }];
+  },
+
   transpilePackages: ['lucide-react'],
 
   webpack: (config, { isServer }) => {
