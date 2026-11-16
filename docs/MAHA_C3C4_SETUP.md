@@ -4,6 +4,12 @@ The Maha workspace is `/maha` in the existing Smartdok Next.js frontend. It uses
 the existing AuthProvider, OrganizationProvider, AppLayout and Smartdok accounts.
 The Maha deployment lands on this page at `https://maha.smartdok.ai`.
 
+The module retains Smartdok's standard navigation, header, company selector and
+blue/mint theme. C3/C4 is an additional navigation item. `/dashboard` reuses the
+original dashboard component so the tenant's C3/C4 landing route does not hide
+the existing Smartdok dashboard. The page styles use the shared light/dark theme
+tokens and standard text sizes rather than a separate Maha palette.
+
 Implemented: authenticated case intake, PDF source attachments, manual PO line
 review, revision conflict handling, case filtering, company-scoped activity and
 a setup page. There are no seeded example cases, local SQLite data, mock API
@@ -15,7 +21,7 @@ The UI and API deliberately leave these capabilities pending.
 
 ## Release
 
-Build `Dockerfile.maha` as `smartdok-maha-ui:20261113`. The build uses the same
+Build `Dockerfile.maha` as `smartdok-maha-ui:20261116-ui-alignment`. The build uses the same
 Next.js 16.3.6 / React 19.2.8 dependency versions already installed in the primary
 Smartdok checkout. `NEXT_PUBLIC_WORKSPACE=maha` selects the dedicated landing and
 login branding; it is not an authorization boundary.

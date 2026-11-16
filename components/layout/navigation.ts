@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Database,
+  FileCheck2,
   Inbox,
   LayoutDashboard,
   ListChecks,
@@ -42,10 +43,12 @@ const RECORD_ROUTES = [
 ];
 
 export function getPrimaryNavigation(t: Translations): AppNavigationItem[] {
+  const mahaWorkspace = process.env.NEXT_PUBLIC_WORKSPACE === 'maha';
   return [
-    { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
+    { href: mahaWorkspace ? '/dashboard' : '/', label: t.nav.dashboard, icon: LayoutDashboard },
     { href: '/capture', label: t.nav.capture, icon: Inbox },
     { href: '/automations', label: t.nav.automations, icon: Workflow },
+    ...(mahaWorkspace ? [{ href: '/maha', label: 'C3 / C4 declarations', icon: FileCheck2 }] : []),
     { href: '/review', label: t.nav.review, icon: ListChecks },
     { href: '/audit-trail', label: 'Audit Trail', icon: ScrollText },
     {
