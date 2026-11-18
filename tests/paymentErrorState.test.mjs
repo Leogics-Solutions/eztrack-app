@@ -19,3 +19,8 @@ test('completed accounting clears only the known old validation message',()=>{
   assert.equal(currentPaymentError('Notification failed',{...ready,status:'COMPLETED'}),'Notification failed');
 });
 test('other workflows keep their original error',()=>assert.equal(currentPaymentError(old,{...ready,review_schema:{template_key:'order_to_invoice'}}),old));
+test('actual active, manual and partial-payment holds remain visible',()=>{
+  for (const key of ['payment_submit_active','payment_manual_handoff','payment_resolution','payment_post_attempts','sql_account_payment']) {
+    assert.equal(currentPaymentError(old,{...ready,output_refs:{[key]:{retained:true}}}),old);
+  }
+});
