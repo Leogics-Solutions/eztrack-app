@@ -1,4 +1,5 @@
 'use client';
+import { currentPaymentError } from '@/utils/paymentErrorState';
 import { WorkflowStatus } from '@/components/review/WorkflowStatus';
 
 import { InternalCaseDelivery, OrderDeliveryError } from '@/components/review/InternalCaseDelivery';
@@ -321,6 +322,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
 
   const hydrate = (r: AgentRun) => {
+    setError(previous => currentPaymentError(previous, r));
 
     setRun(r);
 
