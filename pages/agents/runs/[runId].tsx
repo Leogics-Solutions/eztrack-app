@@ -2044,7 +2044,7 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
                   <th className="px-3 py-2">Product (source)</th><th className="px-3 py-2">More description</th><th className="px-3 py-2">Item code / Internal SKU</th><th className="px-3 py-2">English description</th>
 
-                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2">Colour</th><th className="px-3 py-2 text-right">Source unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Source amount ({originalCurrency})</th>
+                  <th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">UOM</th><th className="px-3 py-2 text-right">Source unit ({originalCurrency})</th><th className="px-3 py-2 text-right">Source amount ({originalCurrency})</th>
 
                   <th className="px-3 py-2 text-right">SQL unit (MYR · {unitPlaces}dp)</th><th className="px-3 py-2 text-right">Amount (MYR)</th><th className="w-14 px-3 py-2"><span className="sr-only">Actions</span></th>
 
@@ -2086,7 +2086,6 @@ function AutomationRunReviewSession({ reviewMode = false }: { reviewMode?: boole
 
                     <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.omit_document_uom ? '' : line.unit || ''} onChange={(e) => updateLine(index, { unit: e.target.value.toUpperCase(), sql_account_uom: null, omit_document_uom: !e.target.value.trim() })} placeholder="Blank" aria-label={`UOM for ${line.name || `row ${index + 1}`}`} className="w-20 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
 
-                    <td className="px-3 py-2"><input disabled={!canReview || descriptiveOnly} value={line.color || ''} onChange={(e) => updateLine(index, { color: e.target.value.toUpperCase() })} placeholder="Blank" aria-label={`Colour for ${line.name || `row ${index + 1}`}`} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 uppercase disabled:opacity-50" /></td>
 
                     <td className="px-3 py-2 text-right"><input disabled={!canReview} type="number" step="any" value={line.unit_price_foreign ?? ''} onChange={(e) => updateLine(index, { unit_price_foreign: numeric(e.target.value) })} className="w-28 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right" /></td>
 
