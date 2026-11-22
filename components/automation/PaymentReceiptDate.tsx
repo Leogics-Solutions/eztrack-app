@@ -15,6 +15,25 @@ export type ReceiptDateFields = {
   receipt_date_override_reason?: string;
 };
 
+export function receiptDateReviewKey(slip: ReceiptDateFields): string {
+  return [slip.slip_date || '', slip.payment_date || '', slip.payment_date_evidence?.capture_event_id || ''].join('|');
+}
+
+export function receiptDateAcknowledged(slip: ReceiptDateFields): boolean {
+  return slip.receipt_date_ack === receiptDateReviewKey(slip)
+    && (slip.receipt_date_ack_requested === true
+      || (slip.receipt_date_ack_source !== 'WORKFLOW_FINANCE_DATE_POLICY'
+        && (!slip.receipt_date_ack_source || Boolean(slip.receipt_date_ack_by_user_id))));
+}
+
+export function canAcknowledgeReceiptDate(slip: ReceiptDateFields): boolean {
+  const slipMonth = slip.slip_date?.slice(0, 7);
+  const receiptMonth = slip.payment_date?.slice(0, 7);
+  return Boolean(slipMonth && receiptMonth && slipMonth !== receiptMonth
+    && !slip.posted_or_date && !slip.receipt_date_error && !slip.receipt_date_edit_requested
+    && !receiptDateAcknowledged(slip));
+}
+
 export default function PaymentReceiptDate({ slip, editable, index, onChange }: {
   slip: ReceiptDateFields; editable: boolean; index: number;
   onChange: (change: ReceiptDateFields) => void;
@@ -23,7 +42,7 @@ export default function PaymentReceiptDate({ slip, editable, index, onChange }: 
   const date = slip.payment_date || '';
   const different = Boolean(printed && date && printed !== date);
   const crossMonth = different && printed.slice(0, 7) !== date.slice(0, 7);
-  const key = [printed, date, slip.payment_date_evidence?.capture_event_id || ''].join('|');
+  const key = receiptDateReviewKey(slip);
   const disabled = !editable || Boolean(slip.posted_or_date);
   return <div className="min-w-[230px] space-y-2">
     <p className="text-xs text-[var(--muted-foreground)]">Slip / cheque date: {printed || 'Not recorded'}</p>
@@ -46,7 +65,7 @@ export default function PaymentReceiptDate({ slip, editable, index, onChange }: 
     {different && <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-950">
       {crossMonth ? 'Different accounting months — confirm the bank credit date before approving. ' : ''}The OR uses the bank receipt date, not the slip / cheque date.
       {crossMonth && !slip.posted_or_date && <label className="mt-2 flex items-start gap-2">
-        <input type="checkbox" disabled={!editable} checked={slip.receipt_date_ack === key && (slip.receipt_date_ack_requested === true || (slip.receipt_date_ack_source !== 'WORKFLOW_FINANCE_DATE_POLICY' && (!slip.receipt_date_ack_source || Boolean(slip.receipt_date_ack_by_user_id))))}
+        <input type="checkbox" disabled={!editable} checked={receiptDateAcknowledged(slip)}
           onChange={e => onChange({receipt_date_ack: e.target.checked ? key : '', receipt_date_ack_requested: e.target.checked})} />
         I checked the bank receipt date and the OR month.
       </label>}
