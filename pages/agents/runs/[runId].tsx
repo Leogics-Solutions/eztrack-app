@@ -36,6 +36,7 @@ import { PaymentSubmitProgress } from '@/components/automation/PaymentSubmitProg
 import { PaymentAutoKnockoff } from '@/components/automation/PaymentAutoKnockoff';
 
 import { submitPayment } from '@/services/AgentsService';
+import WeChatPaymentImagePicker from '@/components/automation/WeChatPaymentImagePicker';
 
 import { PaymentInvoiceFollowup } from '@/components/automation/PaymentInvoiceFollowup';
 
@@ -3454,6 +3455,23 @@ function PaymentEvidenceUploader({ run, busy, act }: { run: AgentRun; busy: bool
       </div>
 
 
+
+      {run.source_channel?.toLowerCase() === 'wechat_group'
+        && ['PENDING_REVIEW', 'DRAFT_GENERATED', 'FAILED'].includes(run.status)
+        && !run.output_refs?.sql_account_payment && !run.output_refs?.payment_resolution
+        && !(Array.isArray(run.output_refs?.payment_post_attempts) && run.output_refs.payment_post_attempts.length) && (
+        <WeChatPaymentImagePicker key={run.id} runId={run.id} busy={busy}
+          initialDay={String((run.output_refs?.source_context as PaymentSourceContext | undefined)?.last_received_at || '').slice(0, 10)}
+          onAttach={async (attach) => {
+            let attached = false;
+            await act(async () => {
+              const updated = await attach();
+              attached = true;
+              return updated;
+            }, 'Attaching the original WeChat image');
+            return attached;
+          }} />
+      )}
 
       <input
 

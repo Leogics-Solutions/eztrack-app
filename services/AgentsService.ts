@@ -743,6 +743,30 @@ export async function updatePaymentCaseTask(caseId:number,body:Record<string,unk
   return handle(await fetch(`${BASE_URL}/agents/payment-cases/${caseId}/follow-up`,{method:'POST',headers:getScopedHeaders(),body:JSON.stringify(body)}));
 }
 
+export type WeChatPaymentImage = {
+  capture_event_id: number;
+  attachment_index: number;
+  source_token: string;
+  filename: string;
+  sender?: string | null;
+  received_at: string;
+};
+
+export async function listWeChatPaymentImages(runId: number, day: string, beforeId?: number) {
+  const params = new URLSearchParams({ day });
+  if (beforeId) params.set('before_id', String(beforeId));
+  return handle<{ items: WeChatPaymentImage[]; next_before_id: number | null }>(
+    await fetch(`${BASE_URL}/agents/runs/${runId}/payment-source-images?${params}`, { headers: getScopedHeaders() }),
+  );
+}
+
+export async function attachWeChatPaymentImage(runId: number, image: WeChatPaymentImage): Promise<AgentRun> {
+  const { capture_event_id, attachment_index, source_token } = image;
+  return handle<AgentRun>(await fetch(`${BASE_URL}/agents/runs/${runId}/payment-source-images`, {
+    method: 'POST', headers: getScopedHeaders(), body: JSON.stringify({ capture_event_id, attachment_index, source_token }),
+  }));
+}
+
 export async function addPaymentEvidence(runId: number, files: File[]): Promise<AgentRun> {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
