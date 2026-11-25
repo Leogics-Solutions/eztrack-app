@@ -2664,6 +2664,12 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
   };
 
   const warnings = (Array.isArray(draft.warnings) ? draft.warnings : []) as string[];
+  const creditOffset = draft.payment_credit_offset as {
+    status: 'CONFLICT' | 'AWAITING_SQL' | 'EXISTING_OR' | 'REVIEW_REQUIRED';
+    credit_note?: string; debit_note?: string; or_no?: string; currency?: string;
+    existing_or_unapplied?: string | null; credit_to_apply?: string;
+    debit_after_credit?: string; or_to_apply?: string; debit_remaining?: string;
+  } | undefined;
 
   const source = (draft.source && typeof draft.source === 'object' ? draft.source : {}) as { files?: ExternalDocument[]; message?: string };
 
@@ -3091,6 +3097,34 @@ function PaymentWorkflowReview({ run, draft, setDraft, busy, loading, error, act
     {sqlJobNotice && !busy && <p role="status" className="rounded border border-cyan-300 bg-cyan-50 text-cyan-950 p-3">{sqlJobNotice}</p>}
 
     <PaymentResolutionActions run={run} busy={busy} act={act}/>
+
+    {creditOffset && <section aria-label="Credit-note knock-off first" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+      <h2 className="font-semibold">Credit-note knock-off first</h2>
+      {creditOffset.status === 'CONFLICT' ? (
+        <p className="mt-2">Confirm which credit note and debit note to use. The retained instructions conflict.</p>
+      ) : (
+        <>
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
+            <li>Apply {creditOffset.credit_note} to {creditOffset.debit_note}{creditOffset.credit_to_apply ? ` — ${creditOffset.currency} ${creditOffset.credit_to_apply}` : ''}.</li>
+            <li>Apply {creditOffset.or_no ? `existing OR ${creditOffset.or_no}` : 'the OR'} to the remaining balance on {creditOffset.debit_note}{creditOffset.or_to_apply ? ` — ${creditOffset.currency} ${creditOffset.or_to_apply}` : ''}.</li>
+          </ol>
+          {creditOffset.status === 'EXISTING_OR' && creditOffset.existing_or_unapplied != null && (
+            <p className="mt-2">Unapplied on the saved OR: {creditOffset.currency} {creditOffset.existing_or_unapplied}. Use the existing OR for any remaining allocation.</p>
+          )}
+          {creditOffset.status === 'REVIEW_REQUIRED' ? (
+            <p className="mt-2">Debit note after the credit: {creditOffset.currency} {creditOffset.debit_after_credit}. Balance after both allocations: {creditOffset.currency} {creditOffset.debit_remaining}.</p>
+          ) : (
+            <p className="mt-2">The split amounts are pending verification of both note balances in SQL.</p>
+          )}
+          <button type="button" disabled={busy}
+            onClick={() => void act(() => refreshPaymentPreview(run.id), 'Verifying note balances and existing allocations in SQL…')}
+            className="mt-3 rounded-md border border-amber-700 px-3 py-2 font-semibold disabled:opacity-50">
+            Check CN and DN balances in SQL
+          </button>
+        </>
+      )}
+    </section>}
+
 
     {Boolean(draft.allocation_instruction) && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
 
