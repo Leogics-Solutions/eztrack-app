@@ -435,6 +435,10 @@ export interface ManualCompliancePassResponse {
 }
 
 export type PartyRemarkOwner = 'samudra' | 'coey';
+export const PARTY_REMARK_COLUMNS = {
+  samudra: { field: 'samudra_remarks', label: 'Samudra Remarks' },
+  coey: { field: 'coey_remarks', label: 'Coey Remarks' },
+} as const;
 
 export interface UpdatePartyRemarkResponse {
   success: boolean;

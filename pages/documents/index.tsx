@@ -8,6 +8,8 @@ import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, Cir
 import {
   listInvoices,
   updateInvoice,
+  updateInvoicePartyRemark,
+  PARTY_REMARK_COLUMNS,
   deleteInvoice as deleteInvoiceApi,
   bulkDeleteInvoices,
   bulkVerifyInvoices,
@@ -35,9 +37,11 @@ import {
   type PushInvoicesResponse,
   type MatchInvoicesAcrossStatementsResponse,
   type TransactionInvoiceLink,
+  type PartyRemarkOwner,
 } from "@/services";
 import { useToast } from "@/lib/toast";
 import { useOrganization } from "@/lib/OrganizationContext";
+import { useAuth } from "@/lib/auth";
 import { canUseLocalConnectors } from "@/services/LocalConnectorService";
 
 // Types
@@ -116,11 +120,15 @@ export const DocumentsListing = ({
   const { t } = useLanguage();
   const { showToast } = useToast();
   const { selectedOrganizationId, organizations } = useOrganization();
+  const { user } = useAuth();
   const resolvedPageTitle = pageTitle || t.documents.title;
   const isSalesView = lockDirection && initialDirectionTab === 'sales';
-  const orgRole =
-    organizations.find((organization) => organization.id === selectedOrganizationId)?.role ?? 'member';
-  const canEditSharedInvoices = orgRole === 'admin';
+  const activeOrganization = organizations.find((organization) => organization.id === selectedOrganizationId);
+  const orgRole = activeOrganization?.role ?? 'member';
+  const protectedRemarks = activeOrganization?.protected_invoice_remarks === true;
+  const remarkColumns: Array<PartyRemarkOwner | null> = protectedRemarks ? ['samudra', 'coey'] : [null];
+  const canEditRemark = (owner: PartyRemarkOwner | null) =>
+    protectedRemarks ? owner !== null && user?.remark_party === owner : owner === null && orgRole === 'admin';
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -137,6 +145,7 @@ export const DocumentsListing = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
+  const [editingRemarkOwner, setEditingRemarkOwner] = useState<PartyRemarkOwner | null>(null);
   const [remarkDraft, setRemarkDraft] = useState('');
   const [savingRemarkId, setSavingRemarkId] = useState<number | null>(null);
   const [needsHorizontalScroll, setNeedsHorizontalScroll] = useState(false);
@@ -417,6 +426,8 @@ export const DocumentsListing = ({
           uniqueVendors[inv.vendor_id] = inv.vendor_name;
         }
         if (inv.remarks) remarkSet.add(inv.remarks);
+        if (protectedRemarks && inv.samudra_remarks) remarkSet.add(inv.samudra_remarks);
+        if (protectedRemarks && inv.coey_remarks) remarkSet.add(inv.coey_remarks);
       });
 
       setVendors(
@@ -490,20 +501,25 @@ export const DocumentsListing = ({
     });
   };
 
-  const startRemarkEdit = (invoice: Invoice) => {
-    if (!canEditSharedInvoices) return;
+  const startRemarkEdit = (invoice: Invoice, owner: PartyRemarkOwner | null) => {
+    if (!canEditRemark(owner)) return;
+    const field = owner ? PARTY_REMARK_COLUMNS[owner].field : 'remarks';
     setEditingRemarkId(invoice.id);
-    setRemarkDraft(invoice.remarks ?? '');
+    setEditingRemarkOwner(owner);
+    setRemarkDraft(invoice[field] ?? '');
   };
 
   const cancelRemarkEdit = () => {
     setEditingRemarkId(null);
+    setEditingRemarkOwner(null);
     setRemarkDraft('');
   };
 
-  const saveRemarkEdit = async (invoice: Invoice) => {
+  const saveRemarkEdit = async (invoice: Invoice, owner: PartyRemarkOwner | null) => {
+    if (!canEditRemark(owner)) return;
+    const field = owner ? PARTY_REMARK_COLUMNS[owner].field : 'remarks';
     const nextRemark = remarkDraft.trim();
-    const currentRemark = (invoice.remarks ?? '').trim();
+    const currentRemark = (invoice[field] ?? '').trim();
 
     if (nextRemark === currentRemark) {
       cancelRemarkEdit();
@@ -513,14 +529,18 @@ export const DocumentsListing = ({
     setSavingRemarkId(invoice.id);
 
     try {
-      await updateInvoice(invoice.id, { remarks: nextRemark });
+      if (owner) {
+        await updateInvoicePartyRemark(invoice.id, owner, nextRemark);
+      } else {
+        await updateInvoice(invoice.id, { remarks: nextRemark });
+      }
 
       setInvoices((currentInvoices) =>
         currentInvoices.map((currentInvoice) =>
           currentInvoice.id === invoice.id
             ? {
                 ...currentInvoice,
-                remarks: nextRemark,
+                [field]: nextRemark,
               }
             : currentInvoice
         )
@@ -549,9 +569,11 @@ export const DocumentsListing = ({
     }
   };
 
-  const renderRemarkCell = (invoice: Invoice) => {
-    const value = invoice.remarks ?? '';
-    const isEditing = editingRemarkId === invoice.id;
+  const renderRemarkCell = (invoice: Invoice, owner: PartyRemarkOwner | null) => {
+    const column = owner ? PARTY_REMARK_COLUMNS[owner] : null;
+    const value = invoice[column?.field ?? 'remarks'] ?? '';
+    const legacyRemark = owner === 'samudra' && !value ? invoice.remarks : null;
+    const isEditing = canEditRemark(owner) && editingRemarkId === invoice.id && editingRemarkOwner === owner;
 
     if (isEditing) {
       return (
@@ -566,12 +588,12 @@ export const DocumentsListing = ({
             rows={3}
             autoFocus
             className="w-full min-w-[200px] rounded-md border border-[var(--border)] bg-white px-2 py-1 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-60 dark:bg-[var(--card)]"
-            aria-label="Remark"
+            aria-label={column?.label ?? 'Remark'}
           />
           <div className="flex shrink-0 gap-1">
             <button
               type="button"
-              onClick={() => saveRemarkEdit(invoice)}
+              onClick={() => saveRemarkEdit(invoice, owner)}
               disabled={savingRemarkId === invoice.id}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--primary)] text-white transition-colors hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               title="Save remark"
@@ -600,16 +622,22 @@ export const DocumentsListing = ({
           <span className="inline-block max-w-[320px] whitespace-pre-wrap rounded-md bg-[var(--primary)] px-2 py-1 text-xs text-white">
             {value}
           </span>
+        ) : legacyRemark ? (
+          <span className="max-w-[320px] whitespace-pre-wrap text-xs text-[var(--muted-foreground)]">
+            <span className="font-semibold">Existing shared remark</span>
+            <br />
+            {legacyRemark}
+          </span>
         ) : (
           <span className="text-[var(--muted-foreground)]">-</span>
         )}
-        {canEditSharedInvoices ? (
+        {canEditRemark(owner) ? (
           <button
             type="button"
-            onClick={() => startRemarkEdit(invoice)}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] opacity-0 transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] group-hover:opacity-100 focus:opacity-100 dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)]"
-            title="Edit remark"
-            aria-label="Edit remark"
+            onClick={() => startRemarkEdit(invoice, owner)}
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--muted-foreground)] transition-colors hover:bg-[var(--hover-bg-lighter)] hover:text-[var(--foreground)] dark:bg-[var(--card)] dark:hover:bg-[var(--hover-bg)] ${owner ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+            title={column ? `Edit ${column.label}` : 'Edit remark'}
+            aria-label={column ? `Edit ${column.label}` : 'Edit remark'}
           >
             <Edit2 className="h-3.5 w-3.5" />
           </button>
@@ -2042,7 +2070,11 @@ export const DocumentsListing = ({
                 {sortableHeader(t.documents.table.createdDate, 'created_at')}
                 {sortableHeader(t.documents.table.currency, 'currency')}
                 {sortableHeader(t.documents.table.total, 'total')}
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Remark/Tag</th>
+                {remarkColumns.map((owner) => (
+                  <th key={owner ?? 'shared'} className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">
+                    {owner ? PARTY_REMARK_COLUMNS[owner].label : 'Remark/Tag'}
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">Handwriting</th>
                 {orgRole === 'admin' && (
                   <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--foreground)]">{t.documents.table.uploadedBy}</th>
@@ -2127,9 +2159,11 @@ export const DocumentsListing = ({
                   <td className="px-4 py-3 text-sm">{invoice.created_at ? formatDate(invoice.created_at) : '-'}</td>
                   <td className="px-4 py-3 text-sm">{invoice.currency || '-'}</td>
                   <td className="px-4 py-3 text-sm">{(invoice.total || 0).toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    {renderRemarkCell(invoice)}
-                  </td>
+                  {remarkColumns.map((owner) => (
+                    <td key={owner ?? 'shared'} className="px-4 py-3">
+                      {renderRemarkCell(invoice, owner)}
+                    </td>
+                  ))}
                   <td className="px-4 py-3">
                     {(() => {
                       if (invoice.is_handwritten === true) {

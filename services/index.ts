@@ -51,6 +51,7 @@ export {
   getInvoice,
   updateInvoice,
   updateInvoicePartyRemark,
+  PARTY_REMARK_COLUMNS,
   deleteInvoice,
   bulkDeleteInvoices,
   addLineItem,

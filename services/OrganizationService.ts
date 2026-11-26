@@ -22,6 +22,7 @@ export interface UserOrganization {
   industry?: string;
   is_primary: boolean;
   role: OrganizationRole;
+  protected_invoice_remarks?: boolean;
 }
 
 export interface GetUserOrganizationsResponse {
